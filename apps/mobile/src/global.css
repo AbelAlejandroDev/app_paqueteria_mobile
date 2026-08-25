@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tokens de marca portados de src/index.css del front web. */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 172 38% 56%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 210 24% 95%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 18% 43%;
+    --accent: 210 30% 95%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 172 38% 56%;
+
+    --surface-soft: 220 43% 97%;
+    --surface-strong: 224 54% 15%;
+    --brand-navy: 224 53% 13%;
+    --brand-navy-2: 227 50% 18%;
+    --brand-blue: 172 38% 56%;
+    --brand-blue-soft: 217 100% 97%;
+    --brand-green-soft: 145 63% 95%;
+    --brand-amber-soft: 46 100% 93%;
+    --brand-red-soft: 0 93% 96%;
+
+    --font-display:
+      Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
+      Segoe UI Symbol, Noto Color Emoji;
+    --font-mono:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+    --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
+    --font-serif: Georgia, 'Times New Roman', serif;
+  }
+}

@@ -1,0 +1,8 @@
+# Normaliza a LF en el repositorio: se desarrolla en Windows pero el backend
+# y los builds de EAS corren en Linux.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary

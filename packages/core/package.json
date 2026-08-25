@@ -1,0 +1,13 @@
+{
+  "name": "@paqueteria/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "peerDependencies": {
+    "axios": ">=1.7.0"
+  }
+}

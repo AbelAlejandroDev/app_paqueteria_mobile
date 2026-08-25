@@ -1,0 +1,33 @@
+node_modules/
+.expo/
+dist/
+build/
+web-build/
+*.log
+npm-debug.*
+yarn-error.*
+
+# Native build output (Expo prebuild / EAS)
+/apps/mobile/ios/
+/apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Ajustes locales de Claude Code (rutas y permisos de cada máquina)
+.claude/settings.local.json
+
+# Clones de consulta del proyecto web/backend (no forman parte del monorepo)
+.reference/
+
+# OS
+.DS_Store
+Thumbs.db

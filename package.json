@@ -1,0 +1,15 @@
+{
+  "name": "paqueteria-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace @paqueteria/mobile"
+  },
+  "engines": {
+    "node": ">=20.19.4"
+  }
+}
