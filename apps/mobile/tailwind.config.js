@@ -1,3 +1,10 @@
+const { getBrand } = require("./brands");
+const { getForegroundForColor } = require("./brands/color");
+
+// El color de marca se hornea aquí, en tiempo de build: cada marca genera su
+// propia app, así que no hace falta resolverlo en runtime como en la web.
+const brand = getBrand();
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
@@ -7,12 +14,12 @@ module.exports = {
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        ring: brand.primaryColor,
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: brand.primaryColor,
+          foreground: getForegroundForColor(brand.primaryColor),
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",

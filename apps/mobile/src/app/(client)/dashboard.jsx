@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, CheckCircle2, ExternalLink, Inbox, MapPin, UserRound, UsersRound } from "lucide-react-native";
+import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -132,7 +133,7 @@ export default function DashboardScreen() {
                 {getClientName(user)}
               </Text>
               <View className="mt-2 flex-row items-start gap-2">
-                <MapPin size={16} color="#65baaf" style={{ marginTop: 2 }} />
+                <MapPin size={16} color={brand.primaryColor} style={{ marginTop: 2 }} />
                 <Text className="flex-1 text-sm leading-5 text-muted-foreground">{getClientAddress(user)}</Text>
               </View>
             </View>

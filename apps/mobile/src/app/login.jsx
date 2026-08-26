@@ -17,6 +17,8 @@ import { z } from "zod";
 import { AlertCircle, Eye, EyeOff, Lock, Mail } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
+import BrandIdentity from "@/components/common/brand-identity";
+import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 const loginSchema = z.object({
@@ -109,9 +111,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View className="rounded-lg border border-border bg-card p-6">
-            <Text className="mb-1 text-center text-2xl font-bold text-foreground">
-              Client Portal
-            </Text>
+            <BrandIdentity centered className="mb-2" />
             <Text className="mb-8 text-center text-sm text-muted-foreground">
               Sign in to your mailbox
             </Text>
@@ -163,7 +163,7 @@ export default function LoginScreen() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#0f172a" />
+                  <ActivityIndicator color={brand.primaryForeground} />
                 ) : (
                   <Text className="text-base font-semibold text-primary-foreground">
                     Sign in

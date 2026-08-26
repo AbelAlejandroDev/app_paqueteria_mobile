@@ -14,6 +14,7 @@ import {
   Package2,
   Trash2,
 } from "lucide-react-native";
+import { brand } from "@/lib/brand";
 
 import { api } from "@/lib/api";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
@@ -110,7 +111,7 @@ function MailItemCard({ item }) {
         <View className="min-w-0 flex-1 gap-2 p-3">
           <View className="flex-row items-center gap-2">
             <View className="h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-              <TypeIcon size={16} color="#65baaf" />
+              <TypeIcon size={16} color={brand.primaryColor} />
             </View>
             <Text className="min-w-0 flex-1 text-base font-bold text-foreground" numberOfLines={1}>
               {item.itemCode || item.id}

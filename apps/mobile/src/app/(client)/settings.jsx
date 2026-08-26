@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { ChevronDown, LogOut, MapPin, ShieldCheck, UserRound } from "lucide-react-native";
+import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import PageTitle from "@/components/common/page-title";
@@ -47,7 +48,7 @@ function SettingsSection({ title, description, icon: Icon, children, defaultOpen
       >
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
           <View className="h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-            <Icon size={20} color="#65baaf" />
+            <Icon size={20} color={brand.primaryColor} />
           </View>
           <View className="min-w-0 flex-1">
             <Text className="text-base font-semibold text-foreground">{title}</Text>

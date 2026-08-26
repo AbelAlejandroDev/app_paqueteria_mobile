@@ -1,0 +1,51 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base-development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
+    },
+    "base-preview": {
+      "distribution": "internal",
+      "channel": "preview"
+    },
+    "base-production": {
+      "autoIncrement": true,
+      "channel": "production"
+    },
+
+    "worx-development": {
+      "extends": "base-development",
+      "env": { "APP_BRAND": "the_worx" }
+    },
+    "worx-preview": {
+      "extends": "base-preview",
+      "env": { "APP_BRAND": "the_worx" }
+    },
+    "worx-production": {
+      "extends": "base-production",
+      "env": { "APP_BRAND": "the_worx" }
+    },
+
+    "hdg-development": {
+      "extends": "base-development",
+      "env": { "APP_BRAND": "hdg" }
+    },
+    "hdg-preview": {
+      "extends": "base-preview",
+      "env": { "APP_BRAND": "hdg" }
+    },
+    "hdg-production": {
+      "extends": "base-production",
+      "env": { "APP_BRAND": "hdg" }
+    }
+  },
+  "submit": {
+    "worx-production": {},
+    "hdg-production": {}
+  }
+}

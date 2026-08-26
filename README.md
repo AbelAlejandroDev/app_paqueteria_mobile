@@ -16,6 +16,39 @@ en el arranque (`configureStorage`) y el redirect a login se recibe como
 callback (`onUnauthorized`). Eso permite que el mismo cliente HTTP con refresh
 automático de token sirva para React Native y para la web.
 
+## Marcas (white-label)
+
+Cada marca produce una **app independiente**: su propio identificador de
+paquete, nombre en la tienda, esquema de deep link y color. Eso resuelve el
+problema de qué branding mostrar *antes* del login, cuando el servidor todavía
+no sabe quién es el usuario.
+
+El catálogo está en [apps/mobile/brands/index.js](apps/mobile/brands/index.js) y
+es la única fuente de verdad: lo consumen `app.config.js` (identidad de la app),
+`tailwind.config.js` (color primario horneado en el tema) y `src/lib/brand.js`
+(lectura en runtime).
+
+| Marca | `APP_BRAND` | Bundle ID |
+| --- | --- | --- |
+| The Worx Offices | `the_worx` (por defecto) | `com.theworxoffices.clientportal` |
+| HDG Executive Suites | `hdg` | `com.hdgexecutivesuites.clientportal` |
+
+```bash
+npm start                 # The Worx (marca por defecto)
+npm run start:hdg         # HDG
+eas build --profile worx-production --platform android
+eas build --profile hdg-production --platform android
+```
+
+El **nombre y el color** van horneados en el build, así que se ven desde el
+primer arranque. El **logo** llega del servidor en `user.branding.logoUrl` una
+vez hay sesión, de modo que un cambio en el panel de admin se refleja sin
+republicar la app.
+
+Para añadir una marca: una entrada en `brands/index.js` y, opcionalmente, sus
+iconos en `apps/mobile/assets/brands/<id>/` (si no existen, se usan los
+compartidos).
+
 ## Requisitos
 
 - Node >= 20.19.4 (probado con 24.19.0)

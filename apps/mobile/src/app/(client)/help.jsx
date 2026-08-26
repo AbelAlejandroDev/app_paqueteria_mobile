@@ -1,6 +1,7 @@
 import { Linking, ScrollView, Text, View } from "react-native";
 import { Mail, Phone } from "lucide-react-native";
 import { getCurrentCenterName } from "@paqueteria/core";
+import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import PageTitle from "@/components/common/page-title";
@@ -59,7 +60,7 @@ function ContactRow({ title, value, icon: Icon, url, actionLabel, last = false }
     <View className={last ? "gap-3 py-5" : "gap-3 border-b border-border py-5"}>
       <View className="flex-row items-center gap-3">
         <View className="h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-          <Icon size={20} color="#65baaf" />
+          <Icon size={20} color={brand.primaryColor} />
         </View>
         <View className="min-w-0 flex-1">
           <Text className="text-sm font-semibold text-muted-foreground">{title}</Text>

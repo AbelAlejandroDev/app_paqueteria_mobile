@@ -1,10 +1,11 @@
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { CircleHelp, CreditCard, Home, Mail, Settings } from "lucide-react-native";
+import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 
-const ACTIVE_COLOR = "#65baaf";
+const ACTIVE_COLOR = brand.primaryColor;
 const INACTIVE_COLOR = "#64748b";
 
 /**

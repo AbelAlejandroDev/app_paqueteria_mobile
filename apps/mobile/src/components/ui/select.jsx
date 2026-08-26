@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { Check, ChevronDown } from "lucide-react-native";
+import { brand } from "@/lib/brand";
 
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,7 @@ export function Select({ value, onValueChange, options, placeholder = "Seleccion
                 className="flex-row items-center justify-between border-b border-border px-4 py-4 active:bg-muted"
               >
                 <Text className="text-base text-foreground">{code} - {label}</Text>
-                {code === value ? <Check size={18} color="#65baaf" /> : null}
+                {code === value ? <Check size={18} color={brand.primaryColor} /> : null}
               </Pressable>
             )}
           />
