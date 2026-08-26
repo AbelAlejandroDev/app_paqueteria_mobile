@@ -6,14 +6,13 @@ const { getForegroundForColor } = require("./brands/color");
 
 const brand = getBrand();
 
-/**
- * Devuelve el asset propio de la marca si existe, o el compartido si todavía
- * no se ha añadido. Permite arrancar una marca nueva sin bloquearse esperando
- * los ficheros de diseño.
- */
-function asset(relativePath, fallback) {
-  const branded = path.join("assets", "brands", brand.id, relativePath);
-  return fs.existsSync(path.join(__dirname, branded)) ? "./" + branded.split(path.sep).join("/") : fallback;
+const brandDir = "./assets/brands/" + brand.id;
+const generatedIcon = brandDir + "/generated/icon.png";
+
+if (!fs.existsSync(path.join(__dirname, generatedIcon))) {
+  throw new Error(
+    `Falta el icono generado de "${brand.id}". Ejecuta: npm run icons`
+  );
 }
 
 module.exports = {
@@ -22,7 +21,7 @@ module.exports = {
     slug: brand.slug,
     version: "1.0.0",
     orientation: "portrait",
-    icon: asset("icon.png", "./assets/images/icon.png"),
+    icon: generatedIcon,
     scheme: brand.scheme,
     userInterfaceStyle: "automatic",
     ios: {
@@ -31,17 +30,18 @@ module.exports = {
     },
     android: {
       package: brand.bundleId,
+      // El icono generado es cuadrado y a sangre; la máscara adaptativa lo
+      // recorta a círculo sobre el mismo color de fondo, así que no se nota
+      // el recorte.
       adaptiveIcon: {
         backgroundColor: brand.androidIconBackground,
-        foregroundImage: asset("android-icon-foreground.png", "./assets/images/android-icon-foreground.png"),
-        backgroundImage: asset("android-icon-background.png", "./assets/images/android-icon-background.png"),
-        monochromeImage: asset("android-icon-monochrome.png", "./assets/images/android-icon-monochrome.png"),
+        foregroundImage: generatedIcon,
       },
       predictiveBackGestureEnabled: false,
     },
     web: {
       output: "static",
-      favicon: "./assets/images/favicon.png",
+      favicon: generatedIcon,
     },
     plugins: [
       "expo-router",
@@ -49,8 +49,8 @@ module.exports = {
         "expo-splash-screen",
         {
           backgroundColor: brand.splashBackground,
-          image: asset("splash-icon.png", "./assets/images/splash-icon.png"),
-          imageWidth: 76,
+          image: generatedIcon,
+          imageWidth: 140,
         },
       ],
       "expo-secure-store",
@@ -67,6 +67,7 @@ module.exports = {
         name: brand.name,
         primaryColor: brand.primaryColor,
         primaryForeground: getForegroundForColor(brand.primaryColor),
+        markBackground: brand.markBackground,
       },
     },
   },

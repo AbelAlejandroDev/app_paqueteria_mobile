@@ -6,6 +6,7 @@ const FALLBACK = {
   name: "Client Portal",
   primaryColor: "#65baaf",
   primaryForeground: "#0f172a",
+  markBackground: "#0e0d13",
 };
 
 /** Marca horneada en el build, inyectada por app.config.js en `extra.brand`. */
