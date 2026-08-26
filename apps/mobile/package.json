@@ -9,8 +9,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "start:hdg": "cross-env-shell APP_BRAND=hdg expo start",
-    "lint": "expo lint",
-    "icons": "node scripts/generate-brand-icons.js"
+    "android:hdg": "cross-env-shell APP_BRAND=hdg expo start --android",
+    "ios:hdg": "cross-env-shell APP_BRAND=hdg expo start --ios",
+    "icons": "node scripts/generate-brand-icons.js",
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/ui": "~57.0.13",

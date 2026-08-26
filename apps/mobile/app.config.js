@@ -54,6 +54,16 @@ module.exports = {
         },
       ],
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          // iOS rechaza la app si estos textos faltan.
+          cameraPermission:
+            "Permite el acceso a la cámara para fotografiar tus documentos de verificación USPS.",
+          photosPermission:
+            "Permite el acceso a tus fotos para adjuntar tus documentos de verificación USPS.",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

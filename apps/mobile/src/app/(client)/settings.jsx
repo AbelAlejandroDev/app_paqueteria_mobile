@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
-import { ChevronDown, LogOut, MapPin, ShieldCheck, UserRound } from "lucide-react-native";
+import { ChevronDown, ChevronRight, FileCheck2, LogOut, MapPin, ShieldCheck, UserRound } from "lucide-react-native";
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
@@ -137,6 +137,27 @@ export default function SettingsScreen() {
       >
         <AuthorizedIndividualsPanel />
       </SettingsSection>
+
+      {/* La verificación USPS no tiene pestaña propia; este es su único acceso. */}
+      <Card>
+        <Pressable
+          onPress={() => router.push("/usps-verification")}
+          className="flex-row items-center justify-between gap-4 px-5 py-4 active:bg-muted"
+        >
+          <View className="min-w-0 flex-1 flex-row items-center gap-3">
+            <View className="h-10 w-10 items-center justify-center rounded-md bg-primary/10">
+              <FileCheck2 size={20} color={brand.primaryColor} />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-base font-semibold text-foreground">USPS Verification</Text>
+              <Text className="mt-1 text-sm text-muted-foreground">
+                Formulario 1583 y documentos de identidad.
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color="#64748b" />
+        </Pressable>
+      </Card>
 
       <SettingsSection title="Security" description="Sesión de este dispositivo." icon={ShieldCheck}>
         <View className="gap-4">
