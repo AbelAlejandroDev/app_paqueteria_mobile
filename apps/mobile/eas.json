@@ -9,10 +9,23 @@
       "distribution": "internal",
       "channel": "development"
     },
+
     "base-preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      }
     },
+
+    "base-simulator": {
+      "distribution": "internal",
+      "channel": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
+
     "base-production": {
       "autoIncrement": true,
       "channel": "production"
@@ -26,6 +39,10 @@
       "extends": "base-preview",
       "env": { "APP_BRAND": "the_worx" }
     },
+    "worx-simulator": {
+      "extends": "base-simulator",
+      "env": { "APP_BRAND": "the_worx" }
+    },
     "worx-production": {
       "extends": "base-production",
       "env": { "APP_BRAND": "the_worx" }
@@ -37,6 +54,10 @@
     },
     "hdg-preview": {
       "extends": "base-preview",
+      "env": { "APP_BRAND": "hdg" }
+    },
+    "hdg-simulator": {
+      "extends": "base-simulator",
       "env": { "APP_BRAND": "hdg" }
     },
     "hdg-production": {
