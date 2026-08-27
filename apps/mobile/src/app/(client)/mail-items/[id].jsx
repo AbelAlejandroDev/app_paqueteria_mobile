@@ -737,13 +737,33 @@ export default function MailItemDetailScreen() {
     () => findRequest(serviceRequests, (r) => r?.type === "FORWARD" && r?.status === "READY_TO_SHIP"),
     [serviceRequests]
   );
+  /**
+   * Reenvio pendiente de pago por el cliente.
+   *
+   * Solo ocurre con paquetes: ahi el cliente elige la tarifa y acepta el
+   * importe en el momento, porque el peso ya esta registrado. Una carta o un
+   * sobre se mandan como peticion sin cotizar, asi que nada mas crearla
+   * cumplia el filtro (OPEN + NOT_STARTED) y aparecia una tarjeta de pago con
+   * "Accepted quote: -" sin haber importe alguno.
+   *
+   * Se exige ademas un importe real: sin tarifa aceptada no hay nada que
+   * pagar, sea cual sea el tipo.
+   */
   const payableForwardRequest = useMemo(
     () =>
       findRequest(serviceRequests, (r) => {
+        if (r?.type !== "FORWARD" || item?.type !== "PACKAGE") return false;
+
         const paymentStatus = r?.forwardDetails?.paymentStatus || "NOT_STARTED";
-        return r?.type === "FORWARD" && ["OPEN", "PROCESSING"].includes(r?.status) && PAYABLE_PAYMENT_STATUSES.includes(paymentStatus);
+        const amount = Number(r?.forwardDetails?.quotedAmountCents || 0);
+
+        return (
+          ["OPEN", "PROCESSING"].includes(r?.status)
+          && PAYABLE_PAYMENT_STATUSES.includes(paymentStatus)
+          && amount > 0
+        );
       }),
-    [serviceRequests]
+    [serviceRequests, item?.type]
   );
 
   const lastAction = timeline.length > 0 ? timeline[timeline.length - 1] : null;
