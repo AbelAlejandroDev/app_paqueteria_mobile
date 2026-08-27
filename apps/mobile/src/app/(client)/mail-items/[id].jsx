@@ -360,7 +360,24 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           </Notice>
         ) : null}
 
-        {active.scan ? (
+        {/* Con un reenvio en marcha no queda ninguna accion posible: el centro
+            ya esta preparando el envio, asi que no se puede escanear, recoger,
+            descartar ni rechazar la asignacion. Va antes que el aviso de scan
+            porque es la situacion mas restrictiva. */}
+        {active.forward ? (
+          <View className="flex-row items-start gap-4 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-600">
+              <Truck size={20} color="#ffffff" />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="font-semibold text-emerald-950">Forwarding in progress</Text>
+              <Text className="mt-1 text-sm leading-5 text-emerald-800">
+                El centro está preparando tu envío. Mientras tanto no se pueden solicitar otras
+                operaciones sobre este item.
+              </Text>
+            </View>
+          </View>
+        ) : active.scan ? (
           <View className="flex-row items-start gap-4 rounded-lg border-2 border-sky-300 bg-sky-50 p-4">
             <View className="h-11 w-11 items-center justify-center rounded-full bg-sky-600">
               <ScanLine size={20} color="#ffffff" />
