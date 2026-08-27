@@ -77,9 +77,13 @@ npm start
 | Monorepo, NativeWind, tokens de marca | ✅ |
 | Cliente API con refresh de token | ✅ |
 | Login + guardas por rol | ✅ |
-| Navegación por tabs | ✅ estructura, pantallas pendientes |
-| Kit de UI base | ⬜ |
-| Pantallas del portal (11) | ⬜ marcadores en `src/app/(client)/` |
-| Stripe PaymentSheet nativo | ⬜ |
-| Subida de documentos USPS | ⬜ |
+| Navegación por tabs | ✅ |
+| Kit de UI base | ✅ |
+| Dashboard, Mail Items (lista y detalle) | ✅ |
+| Billing (Usage / Statement / Payment) | ✅ |
+| Settings, Help, Set Password | ✅ |
+| USPS Verification | ✅ interfaz; subida sin probar contra el backend |
+| Portal de pago de Stripe | ✅ vía navegador in-app, sin SDK nativo |
+| New Service Request | ⬜ marcador, inalcanzable igual que en el web |
 | Push (hoy es polling cada 15 s) | ⬜ |
+| TLS propio en el VPS (hoy túnel ngrok) | ⬜ |
