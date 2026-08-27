@@ -828,7 +828,9 @@ export default function MailItemDetailScreen() {
             <Text className="mb-1 text-lg font-semibold text-foreground">Item Details</Text>
             <DetailRow label="Mailbox" value={mailbox || "-"} />
             <DetailRow label="Type" value={formatStatusDisplay(item.type)} />
-            <DetailRow label="Weight" value={formatItemWeight(item)} />
+            {/* En cartas el peso no es del item: lo que se factura es el sobre
+                del centro, y ese peso lo pone el centro al prepararlo. */}
+            {item.type === "LETTER" ? null : <DetailRow label="Weight" value={formatItemWeight(item)} />}
             {/* Sin remitente no se pinta la fila: "Not provided" ocupa sitio
                 sin decir nada, igual que carrier y tracking. */}
             {hasDisplayValue(item.senderName) ? <DetailRow label="Sender" value={item.senderName} /> : null}
