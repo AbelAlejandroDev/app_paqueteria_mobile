@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
@@ -7,6 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Eye, ImageIcon, Package2, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
+import { brand } from "@/lib/brand";
+import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import { formatStatusDisplay, getCurrentStatusColor, getCurrentStatusLabel } from "@/lib/mail-item-display";
 import {
@@ -40,7 +42,19 @@ const EMPTY_FORWARD = {
   state: "",
   zip: "",
   phone: "",
+  trackingRequested: false,
+  insuranceRequested: false,
+  insuredValue: "",
 };
+
+/** Tope del backend: insuredValueCents como máximo 500000. */
+const MAX_INSURED_VALUE_USD = 5000;
+
+function toInsuredValueCents(form) {
+  const value = Number(form.insuredValue || 0);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value * 100);
+}
 
 function DetailRow({ label, value, last = false }) {
   return (
@@ -62,6 +76,23 @@ function SummaryLine({ label, value }) {
   );
 }
 
+function ToggleRow({ label, description, value, onValueChange }) {
+  return (
+    <View className="flex-row items-start justify-between gap-3 rounded-lg border border-border bg-card p-3">
+      <View className="min-w-0 flex-1">
+        <Text className="text-sm font-medium text-foreground">{label}</Text>
+        <Text className="mt-1 text-xs leading-4 text-muted-foreground">{description}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ true: brand.primaryColor, false: "#cbd5e1" }}
+        thumbColor="#ffffff"
+      />
+    </View>
+  );
+}
+
 function ActionsCard({ item, mailItemId, availableActions, serviceNotices, supportEmail, onRefresh }) {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [pickupOpen, setPickupOpen] = useState(false);
@@ -75,7 +106,46 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const [forwardRates, setForwardRates] = useState([]);
   const [selectedRateId, setSelectedRateId] = useState("");
 
-  const onField = (field) => (value) => setForwardForm((current) => ({ ...current, [field]: value }));
+  const { user } = useAuth();
+  const isLetter = item?.type === "LETTER";
+
+  const clearRates = () => {
+    // Se llama en cada pulsación, así que conviene no re-renderizar de balde.
+    if (!forwardQuoteId && forwardRates.length === 0 && !selectedRateId) return;
+
+    setForwardQuoteId("");
+    setForwardRates([]);
+    setSelectedRateId("");
+  };
+
+  /**
+   * El precio del tracking y del seguro va incluido en cada tarifa, así que
+   * cambiar cualquiera de los dos invalida las que ya estén cargadas: dejarlas
+   * en pantalla mostraría un importe que el backend ya no cobraría.
+   */
+  const onQuoteField = (field) => (value) => {
+    clearRates();
+    setForwardForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const defaultAddress = user?.clientProfile || null;
+  const hasDefaultAddress = Boolean(defaultAddress?.addressLine1 && defaultAddress?.city);
+
+  const useDefaultAddress = () => {
+    if (!hasDefaultAddress) return;
+
+    clearRates();
+    setForwardForm((current) => ({
+      ...current,
+      recipient: defaultAddress.fullName || current.recipient,
+      address1: defaultAddress.addressLine1 || "",
+      address2: defaultAddress.addressLine2 || "",
+      city: defaultAddress.city || "",
+      state: defaultAddress.state || "",
+      zip: defaultAddress.zip || "",
+      // El perfil del cliente no guarda teléfono; se conserva el escrito.
+    }));
+  };
 
   const createRequest = useMutation({
     mutationFn: async ({ type, payload }) => {
@@ -113,8 +183,15 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const quoteRates = useMutation({
     mutationFn: async () => {
+      const insuredValueCents = forwardForm.insuranceRequested ? toInsuredValueCents(forwardForm) : 0;
+
       const response = await api.post("/client/forwarding/quotes", {
         mailItemId,
+        shippingOptions: {
+          trackingRequested: Boolean(forwardForm.trackingRequested),
+          insuranceRequested: Boolean(forwardForm.insuranceRequested),
+          insuredValueCents,
+        },
         destinationAddress: {
           name: forwardForm.recipient,
           addressLine1: forwardForm.address1,
@@ -138,6 +215,46 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       setForwardRates([]);
       setSelectedRateId("");
       Alert.alert("Sin tarifas", formatErrorMessage(error, "Failed to load shipping rates"));
+    },
+  });
+
+  /**
+   * Reenvío de una carta.
+   *
+   * A diferencia de un paquete, el cliente no cotiza ni elige transportista:
+   * solo manda la petición con su dirección y si quiere seguimiento o seguro.
+   * El centro la tarifica después, y entonces el cliente aprueba el importe
+   * por el flujo de AWAITING_CLIENT_APPROVAL que ya existe.
+   */
+  const requestLetterForward = useMutation({
+    mutationFn: async () => {
+      const response = await api.post("/client/service-requests", {
+        mailItemId,
+        type: "FORWARD",
+        destinationName: forwardForm.recipient,
+        address1: forwardForm.address1,
+        address2: forwardForm.address2 || undefined,
+        city: forwardForm.city,
+        state: forwardForm.state,
+        zip: forwardForm.zip,
+        country: "US",
+        phone: forwardForm.phone || undefined,
+        shippingOptions: {
+          trackingRequested: Boolean(forwardForm.trackingRequested),
+          insuranceRequested: Boolean(forwardForm.insuranceRequested),
+          insuredValueCents: forwardForm.insuranceRequested ? toInsuredValueCents(forwardForm) : 0,
+        },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      Alert.alert("Solicitud enviada", "El centro preparará tu envío y te avisará del importe.");
+      setForwardOpen(false);
+      setForwardForm(EMPTY_FORWARD);
+      onRefresh?.();
+    },
+    onError: (error) => {
+      Alert.alert("No se pudo enviar", formatErrorMessage(error, "Failed to request forwarding"));
     },
   });
 
@@ -184,12 +301,38 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     createRequest.mutate({ type: "DISCARD", payload: {} });
   };
 
-  const getRates = () => {
+  /** Validación común a las dos vías; devuelve false y avisa si algo falta. */
+  const forwardFormIsValid = () => {
     if (!forwardFieldsFilled) {
       Alert.alert("Faltan datos", "Rellena los campos obligatorios de reenvío.");
-      return;
+      return false;
     }
+
+    if (forwardForm.insuranceRequested) {
+      const value = Number(forwardForm.insuredValue || 0);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        Alert.alert("Falta el valor asegurado", "Indica cuánto quieres asegurar.");
+        return false;
+      }
+
+      if (value > MAX_INSURED_VALUE_USD) {
+        Alert.alert("Valor demasiado alto", "El seguro admite hasta $" + MAX_INSURED_VALUE_USD + ".");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const getRates = () => {
+    if (!forwardFormIsValid()) return;
     quoteRates.mutate();
+  };
+
+  const submitLetterForward = () => {
+    if (!forwardFormIsValid()) return;
+    requestLetterForward.mutate();
   };
 
   const continueWithRate = () => {
@@ -302,41 +445,88 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           visible={forwardOpen}
           onClose={() => setForwardOpen(false)}
           title="Request Forward"
-          description="Indica la dirección de destino y elige una tarifa."
+          description={
+            isLetter
+              ? "Indica la dirección de destino. El centro tarificará el envío y te avisará."
+              : "Indica la dirección de destino y elige una tarifa."
+          }
           footer={
             <Button variant="outline" onPress={() => setForwardOpen(false)}>
               Cancelar
             </Button>
           }
         >
+          {hasDefaultAddress ? (
+            <Button variant="outline" size="sm" onPress={useDefaultAddress}>
+              Use my default address
+            </Button>
+          ) : null}
+
           <Field label="Recipient">
-            <Input value={forwardForm.recipient} onChangeText={onField("recipient")} />
+            <Input value={forwardForm.recipient} onChangeText={onQuoteField("recipient")} />
           </Field>
           <Field label="Address line 1">
-            <Input value={forwardForm.address1} onChangeText={onField("address1")} />
+            <Input value={forwardForm.address1} onChangeText={onQuoteField("address1")} />
           </Field>
           <Field label="Address line 2 (optional)">
-            <Input value={forwardForm.address2} onChangeText={onField("address2")} />
+            <Input value={forwardForm.address2} onChangeText={onQuoteField("address2")} />
           </Field>
           <Field label="City">
-            <Input value={forwardForm.city} onChangeText={onField("city")} />
+            <Input value={forwardForm.city} onChangeText={onQuoteField("city")} />
           </Field>
           <Field label="State">
             <Select
               value={forwardForm.state}
-              onValueChange={onField("state")}
+              onValueChange={onQuoteField("state")}
               options={US_STATES}
               placeholder="Select state"
               title="Estado"
             />
           </Field>
           <Field label="ZIP">
-            <Input value={forwardForm.zip} onChangeText={onField("zip")} keyboardType="number-pad" />
+            <Input value={forwardForm.zip} onChangeText={onQuoteField("zip")} keyboardType="number-pad" />
           </Field>
           <Field label="Recipient phone">
-            <Input value={forwardForm.phone} onChangeText={onField("phone")} keyboardType="phone-pad" />
+            <Input value={forwardForm.phone} onChangeText={onQuoteField("phone")} keyboardType="phone-pad" />
           </Field>
 
+          <View className="gap-3">
+            <ToggleRow
+              label="Add tracking"
+              description="Para First-Class se añade Certified Mail; Priority Mail usa Delivery Confirmation."
+              value={forwardForm.trackingRequested}
+              onValueChange={onQuoteField("trackingRequested")}
+            />
+            <ToggleRow
+              label="Add insurance"
+              description="Cubre el valor declarado si el envío se pierde o llega dañado. Incluye seguimiento."
+              value={forwardForm.insuranceRequested}
+              onValueChange={onQuoteField("insuranceRequested")}
+            />
+            {forwardForm.insuranceRequested ? (
+              <Field label={"Insured value (USD, máx. $" + MAX_INSURED_VALUE_USD + ")"}>
+                <Input
+                  value={forwardForm.insuredValue}
+                  onChangeText={onQuoteField("insuredValue")}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                />
+              </Field>
+            ) : null}
+            <Text className="text-xs leading-4 text-muted-foreground">
+              {isLetter
+                ? "El centro incluirá estos extras al preparar tu envío."
+                : "El coste de estos extras ya viene sumado en cada tarifa de abajo."}
+            </Text>
+          </View>
+
+          {/* En cartas el cliente no cotiza ni elige transportista: manda la
+              petición y el centro la tarifica después. */}
+          {isLetter ? (
+            <Button loading={requestLetterForward.isPending} onPress={submitLetterForward}>
+              Send forwarding request
+            </Button>
+          ) : (
           <View className="gap-3 rounded-lg border border-border bg-background p-3">
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
@@ -372,6 +562,18 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                             ? "Delivery estimate unavailable"
                             : rate.estimatedDeliveryDays + " day(s)"}
                         </Text>
+                        {rate.trackingIncluded || rate.insuranceRequested ? (
+                          <Text className="mt-1 text-xs text-muted-foreground">
+                            {[
+                              rate.trackingIncluded ? "Tracking incluido" : null,
+                              rate.insuranceRequested
+                                ? "Asegurado " + formatMoneyFromCents(rate.insuredValueCents)
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </Text>
+                        ) : null}
                       </View>
                       <Text className="font-semibold text-foreground">
                         {formatMoneyFromCents(rate.totalAmount?.amount)}
@@ -388,6 +590,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               <Text className="text-xs text-muted-foreground">No rates loaded yet.</Text>
             )}
           </View>
+          )}
 
           <Notice tone="sky">
             Para envíos fuera de Estados Unidos, contacta con tu centro
@@ -626,7 +829,9 @@ export default function MailItemDetailScreen() {
             <DetailRow label="Mailbox" value={mailbox || "-"} />
             <DetailRow label="Type" value={formatStatusDisplay(item.type)} />
             <DetailRow label="Weight" value={formatItemWeight(item)} />
-            <DetailRow label="Sender" value={item.senderName || "Not provided"} />
+            {/* Sin remitente no se pinta la fila: "Not provided" ocupa sitio
+                sin decir nada, igual que carrier y tracking. */}
+            {hasDisplayValue(item.senderName) ? <DetailRow label="Sender" value={item.senderName} /> : null}
             {hasDisplayValue(item.carrier) ? <DetailRow label="Carrier" value={item.carrier} /> : null}
             {hasDisplayValue(item.trackingNumber) ? <DetailRow label="Tracking" value={item.trackingNumber} /> : null}
             <DetailRow label="Last action" value={lastAction?.title || formatStatusDisplay(item.status || "Received")} />
