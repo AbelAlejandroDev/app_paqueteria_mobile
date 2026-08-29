@@ -6,24 +6,11 @@ import { ChevronDown, ChevronRight, FileCheck2, LogOut, MapPin, ShieldCheck, Use
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
+import { getClientAddress, hasClientAddress } from "@/lib/client-address";
 import PageTitle from "@/components/common/page-title";
 import AuthorizedIndividualsPanel from "@/components/common/authorized-individuals-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-function getProfileAddress(user) {
-  const address = user?.clientProfile?.forwardingAddress || user?.forwardingAddress || user?.address || {};
-
-  return {
-    name: address.name || user?.name || "",
-    address1: address.address1 || address.line1 || "",
-    address2: address.address2 || address.line2 || "",
-    city: address.city || "",
-    state: address.state || "",
-    zip: address.zip || address.postalCode || "",
-    country: address.country || "US",
-  };
-}
 
 function getUserLabel(user) {
   return user?.name || user?.fullName || user?.email || "Client account";
@@ -77,9 +64,9 @@ function AddressLine({ label, value }) {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
-  const address = useMemo(() => getProfileAddress(user), [user]);
+  const address = useMemo(() => getClientAddress(user), [user]);
   const timeZone = useMemo(getTimeZone, []);
-  const hasAddress = Boolean(address.address1 || address.city);
+  const hasAddress = hasClientAddress(user);
 
   const accountDetails = [
     { label: "Site ID", value: user?.siteId || user?.centerId || "Not assigned" },

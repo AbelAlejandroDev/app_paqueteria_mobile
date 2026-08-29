@@ -8,10 +8,9 @@ import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { ACTION_STATUSES, COMPLETED_STATUSES, getMailItems } from "@/lib/mail-item-display";
+import { formatClientAddress } from "@/lib/client-address";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const CONFERENCE_ROOM_URL = "https://orlando.theworxoffices.com/conference-room/";
 
@@ -19,35 +18,6 @@ function getClientName(user) {
   return user?.name || user?.fullName || user?.clientProfile?.name || user?.email || "Client";
 }
 
-function getClientAddress(user) {
-  const address = user?.clientProfile?.forwardingAddress || user?.forwardingAddress || user?.address || {};
-  const parts = [
-    address.address1 || address.line1,
-    address.address2 || address.line2,
-    address.city,
-    address.state,
-    address.zip || address.postalCode,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(", ") : "No forwarding address on file";
-}
-
-function itemDate(item) {
-  return item.completedAt || item.updatedAt || item.receivedAt || item.createdAt;
-}
-
-function StatTile({ value, label, loading }) {
-  return (
-    <View className="flex-1 items-center justify-center rounded-md border border-white/10 bg-black/20 px-2 py-4">
-      {loading ? (
-        <Skeleton className="h-9 w-10 bg-white/20" />
-      ) : (
-        <Text className="text-4xl font-light leading-none text-white">{value}</Text>
-      )}
-      <Text className="mt-2 text-xs font-medium text-white">{label}</Text>
-    </View>
-  );
-}
 
 function AccessCard({ title, icon: Icon, onPress, tone = "default", notificationCount = 0, external = false }) {
   const badgeCount = Number(notificationCount || 0);
@@ -93,23 +63,8 @@ export default function DashboardScreen() {
     },
   });
 
-  const mailItems = useMemo(() => getMailItems(query.data), [query.data]);
   const folders = useMemo(() => (Array.isArray(query.data?.folders) ? query.data.folders : []), [query.data]);
   const folderNotificationCount = (key) => Number(folders.find((folder) => folder.key === key)?.notificationCount || 0);
-
-  const inboxItems = useMemo(() => mailItems.filter((item) => item.status !== "PICKED_UP").slice(0, 6), [mailItems]);
-  const actionItems = useMemo(
-    () => mailItems.filter((item) => ACTION_STATUSES.includes(item.status)).slice(0, 6),
-    [mailItems]
-  );
-  const completedItems = useMemo(
-    () =>
-      mailItems
-        .filter((item) => COMPLETED_STATUSES.includes(item.status))
-        .sort((a, b) => new Date(itemDate(b) || 0).getTime() - new Date(itemDate(a) || 0).getTime())
-        .slice(0, 6),
-    [mailItems]
-  );
 
   const openFolder = (folder) => () => router.push({ pathname: "/mail-items", params: { folder } });
 
@@ -134,15 +89,9 @@ export default function DashboardScreen() {
               </Text>
               <View className="mt-2 flex-row items-start gap-2">
                 <MapPin size={16} color={brand.primaryColor} style={{ marginTop: 2 }} />
-                <Text className="flex-1 text-sm leading-5 text-muted-foreground">{getClientAddress(user)}</Text>
+                <Text className="flex-1 text-sm leading-5 text-muted-foreground">{formatClientAddress(user)}</Text>
               </View>
             </View>
-          </View>
-
-          <View className="flex-row gap-3 rounded-lg bg-slate-800 p-3">
-            <StatTile value={inboxItems.length} label="Inbox" loading={query.isLoading} />
-            <StatTile value={actionItems.length} label="Actions" loading={query.isLoading} />
-            <StatTile value={completedItems.length} label="Complete" loading={query.isLoading} />
           </View>
         </View>
       </View>
