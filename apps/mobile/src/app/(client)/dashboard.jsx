@@ -1,23 +1,21 @@
 import { useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, CheckCircle2, ExternalLink, Inbox, MapPin, UserRound, UsersRound } from "lucide-react-native";
+import { Bell, CheckCircle2, ExternalLink, Inbox, MapPin, UsersRound } from "lucide-react-native";
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { formatClientAddress } from "@/lib/client-address";
+import { formatClientAddress, getClientName } from "@/lib/client-profile";
+import { brandWordmarkOnLight } from "@/lib/brand-assets";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 
 const CONFERENCE_ROOM_URL = "https://orlando.theworxoffices.com/conference-room/";
-
-function getClientName(user) {
-  return user?.name || user?.fullName || user?.clientProfile?.name || user?.email || "Client";
-}
-
 
 function AccessCard({ title, icon: Icon, onPress, tone = "default", notificationCount = 0, external = false }) {
   const badgeCount = Number(notificationCount || 0);
@@ -54,6 +52,7 @@ function AccessCard({ title, icon: Icon, onPress, tone = "default", notification
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const query = useQuery({
     queryKey: ["client-mail-items"],
@@ -72,25 +71,36 @@ export default function DashboardScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentContainerClassName="gap-6 p-4 pb-24"
+      // Sin barra de titulo no hay nada que aparte el contenido de la hora y
+      // la bateria, asi que el margen superior lo pone la propia pantalla.
+      contentContainerStyle={{ paddingTop: insets.top + 16 }}
       refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={query.refetch} />}
     >
       <View className="overflow-hidden rounded-lg border border-border bg-card">
-        <View className="gap-5 p-5">
-          <View className="flex-row items-start gap-4">
-            <View className="h-12 w-12 items-center justify-center rounded-lg bg-primary">
-              <UserRound size={24} color="#0f172a" />
-            </View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Client Dashboard
-              </Text>
-              <Text className="mt-1 text-2xl font-semibold tracking-tight text-foreground" numberOfLines={1}>
-                {getClientName(user)}
-              </Text>
-              <View className="mt-2 flex-row items-start gap-2">
-                <MapPin size={16} color={brand.primaryColor} style={{ marginTop: 2 }} />
-                <Text className="flex-1 text-sm leading-5 text-muted-foreground">{formatClientAddress(user)}</Text>
-              </View>
+        <View className="items-center gap-4 p-5">
+          {/* El logotipo sustituye al rotulo "Client Dashboard": la app ya es
+              de una sola marca, asi que la cabecera la identifica mejor. */}
+          {brandWordmarkOnLight ? (
+            <Image
+              source={brandWordmarkOnLight}
+              style={{ width: "70%", height: 56 }}
+              contentFit="contain"
+              accessibilityLabel={brand.name}
+            />
+          ) : (
+            <Text className="text-xl font-semibold text-foreground">{brand.name}</Text>
+          )}
+
+          <View className="items-center gap-2">
+            <Text className="text-center text-2xl font-semibold tracking-tight text-foreground">
+              {getClientName(user)}
+            </Text>
+            {/* `flex-1` en el texto estiraba la fila a todo el ancho y dejaba
+                el icono pegado al borde; con `shrink` el bloque se queda del
+                tamaño del contenido y el centrado se nota. */}
+            <View className="flex-row items-start justify-center gap-2">
+              <MapPin size={16} color={brand.primaryColor} style={{ marginTop: 2 }} />
+              <Text className="shrink text-sm leading-5 text-muted-foreground">{formatClientAddress(user)}</Text>
             </View>
           </View>
         </View>

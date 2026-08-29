@@ -43,6 +43,10 @@ export default function ClientLayout() {
         name="dashboard"
         options={{
           title: "Home",
+          // El panel abre con el logotipo de la marca, asi que una barra de
+          // titulo encima solo repetiria la navegacion. La pantalla se ocupa
+          // de su propio margen superior.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
         }}
       />
@@ -65,6 +69,8 @@ export default function ClientLayout() {
         name="settings"
         options={{
           title: "Settings",
+          // Settings tiene su propio Stack para las subsecciones.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
         }}
       />

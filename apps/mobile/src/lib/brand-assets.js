@@ -12,3 +12,15 @@ const MARKS = {
 };
 
 export const brandMark = MARKS[brand.id] || null;
+
+/**
+ * Logotipo completo para fondo claro. El icono cuadrado (`mark`) se sigue
+ * usando para el icono de la app; esto es la versión con el nombre, para
+ * pintarla dentro de tarjetas blancas.
+ */
+const WORDMARKS_ON_LIGHT = {
+  the_worx: require("../../assets/brands/the_worx/the-worx-black-transparent.png"),
+  hdg: require("../../assets/brands/hdg/logo-horizontal-transparent.png"),
+};
+
+export const brandWordmarkOnLight = WORDMARKS_ON_LIGHT[brand.id] || null;

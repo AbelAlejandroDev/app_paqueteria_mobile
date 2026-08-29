@@ -71,6 +71,9 @@ module.exports = {
     },
     // Lo lee src/lib/brand.js en runtime a través de expo-constants.
     extra: {
+      // Se evalua al compilar, asi que queda congelada la fecha real del build
+      // que el usuario tiene instalado. En desarrollo es la de cada arranque.
+      buildDate: new Date().toISOString(),
       brand: {
         id: brand.id,
         tenantSlug: brand.tenantSlug,

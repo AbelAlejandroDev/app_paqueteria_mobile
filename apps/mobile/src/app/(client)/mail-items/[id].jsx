@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Eye, ImageIcon, Package2, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
@@ -152,12 +152,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       const response = await api.post("/client/service-requests", { mailItemId, type, ...(payload || {}) });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       Alert.alert("Solicitud creada", "Tu solicitud se envió al centro.");
       setForwardOpen(false);
       setPickupOpen(false);
       setDiscardOpen(false);
-      onRefresh?.();
+      await onRefresh?.();
     },
     onError: (error) => {
       Alert.alert("No se pudo crear", formatErrorMessage(error, "Failed to create request"));
@@ -170,10 +170,10 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       const response = await api.post("/client/mail-items/" + mailItemId + "/reject-assignment", {});
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       Alert.alert("Enviado", "El centro revisará la asignación.");
       setRejectOpen(false);
-      onRefresh?.();
+      await onRefresh?.();
     },
     onError: (error) => {
       Alert.alert("No se pudo enviar", formatErrorMessage(error, "Failed to send assignment review"));
@@ -247,11 +247,11 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       Alert.alert("Solicitud enviada", "El centro preparará tu envío y te avisará del importe.");
       setForwardOpen(false);
       setForwardForm(EMPTY_FORWARD);
-      onRefresh?.();
+      await onRefresh?.();
     },
     onError: (error) => {
       Alert.alert("No se pudo enviar", formatErrorMessage(error, "Failed to request forwarding"));
@@ -267,10 +267,10 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       Alert.alert("Tarifa seleccionada", "Se creó la solicitud de reenvío.");
       setForwardOpen(false);
-      onRefresh?.();
+      await onRefresh?.();
     },
     onError: (error) => {
       Alert.alert("No se pudo seleccionar", formatErrorMessage(error, "Unable to select forwarding rate"));
@@ -685,6 +685,10 @@ export default function MailItemDetailScreen() {
   const { id } = useLocalSearchParams();
   const queryClient = useQueryClient();
   const markedRef = useRef(null);
+  // Cuenta las mutaciones en vuelo sin tener que subir estado desde
+  // ActionsCard, que es donde viven. Va aqui arriba porque mas abajo hay
+  // returns condicionales y un hook no puede quedar detras de ellos.
+  const isBusy = useIsMutating() > 0;
 
   const query = useQuery({
     queryKey: ["client-mail-item", id],
@@ -824,6 +828,19 @@ export default function MailItemDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: "Item " + (item.itemCode || item.id) }} />
+
+      {/* Al enviar una solicitud el estado del item cambia, pero los datos
+          tardan en llegar. Sin esto la pantalla se quedaba igual y parecia que
+          no habia pasado nada. `onSuccess` espera al refetch, asi que la capa
+          se retira cuando los datos ya estan actualizados. */}
+      {isBusy ? (
+        <View className="absolute inset-0 z-50 items-center justify-center bg-background/70">
+          <View className="items-center gap-3 rounded-lg border border-border bg-card px-6 py-5">
+            <ActivityIndicator size="large" color={brand.primaryColor} />
+            <Text className="text-sm font-medium text-foreground">Actualizando…</Text>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView
         className="flex-1 bg-background"

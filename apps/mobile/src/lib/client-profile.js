@@ -1,4 +1,18 @@
 /**
+ * Nombre del cliente.
+ *
+ * La API manda `clientProfile.fullName` y, sueltos, `firstName` y `lastName`.
+ * Buscar `user.name` o `clientProfile.name` no encuentra nada y acaba
+ * cayendo al correo, que es lo que se veia en el panel.
+ */
+export function getClientName(user, fallback = "Client") {
+  const profile = user?.clientProfile || {};
+  const composed = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
+
+  return profile.fullName || user?.name || user?.fullName || composed || user?.email || fallback;
+}
+
+/**
  * Direccion del cliente tal y como la envia la API.
  *
  * `serializeAuthUser` devuelve el perfil con los campos planos addressLine1,

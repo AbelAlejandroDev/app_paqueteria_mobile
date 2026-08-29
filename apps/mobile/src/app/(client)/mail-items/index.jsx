@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -29,9 +29,7 @@ import {
   normalizeFolders,
 } from "@/lib/mail-item-display";
 import EmptyState from "@/components/common/empty-state";
-import PageTitle from "@/components/common/page-title";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -153,9 +151,7 @@ export default function MailItemsScreen() {
   });
 
   const mailItems = query.data?.items || [];
-  const mailbox = query.data?.mailbox || "";
   const folders = useMemo(() => normalizeFolders(query.data?.folders), [query.data?.folders]);
-  const currentFolder = query.data?.currentFolder || folders.find((folder) => folder.key === selectedFolder);
 
   const isFolderLanding = !selectedFolder;
   const refreshControl = (
@@ -164,34 +160,6 @@ export default function MailItemsScreen() {
 
   const header = (
     <View className="gap-4 pb-4">
-      {selectedFolder ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start"
-          icon={<ArrowLeft size={16} color="#0f172a" />}
-          onPress={() => router.setParams({ folder: "" })}
-        >
-          Back to folders
-        </Button>
-      ) : null}
-
-      <PageTitle
-        title={currentFolder?.label || "Mail"}
-        subtitle={
-          selectedFolder
-            ? "Track what has arrived, what is ready, and what has already been handled."
-            : "Choose a mailbox section."
-        }
-        actions={
-          mailbox ? (
-            <Badge className="border-primary/20 bg-primary/10 px-3 py-1.5" labelClassName="text-sm text-primary">
-              {mailbox}
-            </Badge>
-          ) : null
-        }
-      />
-
       {query.isLoading ? (
         <View className="gap-3">
           <Skeleton className="h-20 w-full" />
@@ -208,34 +176,69 @@ export default function MailItemsScreen() {
 
   const isBusy = query.isLoading || query.isError;
 
+  /**
+   * Cabecera nativa de la pantalla.
+   *
+   * Carpeta y listado comparten ruta (el `folder` es un parametro), asi que la
+   * flecha no puede venir del Stack: se pinta aqui solo cuando hay carpeta
+   * abierta y lo unico que hace es limpiar el parametro.
+   */
+  const screenHeader = (
+    <Stack.Screen
+      options={{
+        title: "Mail",
+        headerTitleAlign: "center",
+        headerLeft: selectedFolder
+          ? () => (
+              <Pressable
+                onPress={() => router.setParams({ folder: "" })}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Volver a las carpetas"
+                className="pr-3"
+              >
+                <ArrowLeft size={24} color="#0f172a" />
+              </Pressable>
+            )
+          : undefined,
+      }}
+    />
+  );
+
   if (isFolderLanding) {
     return (
-      <FlatList
-        className="flex-1 bg-background"
-        contentContainerClassName="p-4 pb-24"
-        data={isBusy ? [] : folders}
-        keyExtractor={(folder) => folder.key}
-        renderItem={({ item }) => <FolderCard folder={item} />}
-        ListHeaderComponent={header}
-        refreshControl={refreshControl}
-      />
+      <>
+        {screenHeader}
+        <FlatList
+          className="flex-1 bg-background"
+          contentContainerClassName="p-4 pb-24"
+          data={isBusy ? [] : folders}
+          keyExtractor={(folder) => folder.key}
+          renderItem={({ item }) => <FolderCard folder={item} />}
+          ListHeaderComponent={header}
+          refreshControl={refreshControl}
+        />
+      </>
     );
   }
 
   return (
-    <FlatList
-      className="flex-1 bg-background"
-      contentContainerClassName="p-4 pb-24"
-      data={isBusy ? [] : mailItems}
-      keyExtractor={(item) => String(item.id)}
-      renderItem={({ item }) => <MailItemCard item={item} />}
-      ListHeaderComponent={header}
-      ListEmptyComponent={
-        isBusy ? null : (
-          <EmptyState title="No mail items yet" description="New deliveries will appear here. Check back soon." />
-        )
-      }
-      refreshControl={refreshControl}
-    />
+    <>
+      {screenHeader}
+      <FlatList
+        className="flex-1 bg-background"
+        contentContainerClassName="p-4 pb-24"
+        data={isBusy ? [] : mailItems}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => <MailItemCard item={item} />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          isBusy ? null : (
+            <EmptyState title="No mail items yet" description="New deliveries will appear here. Check back soon." />
+          )
+        }
+        refreshControl={refreshControl}
+      />
+    </>
   );
 }
