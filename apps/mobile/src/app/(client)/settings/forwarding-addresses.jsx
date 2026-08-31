@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Plus, Trash2 } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
 import { US_STATES } from "@/lib/us-states";
 import EmptyState from "@/components/common/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
@@ -43,6 +42,33 @@ function toForm(address) {
   };
 }
 
+/** "+13055551234" se lee mejor como "+1 (305) 555 1234". */
+function formatPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (national.length !== 10) return value || "";
+
+  return "+1 (" + national.slice(0, 3) + ") " + national.slice(3, 6) + " " + national.slice(6);
+}
+
+/** Accion en texto, sin icono, para no competir con el selector. */
+function TextAction({ label, onPress, disabled, tone = "default" }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={8} className="py-1">
+      <Text
+        className={
+          tone === "danger"
+            ? "text-sm font-medium text-rose-700"
+            : "text-sm font-medium text-foreground"
+        }
+        style={disabled ? { opacity: 0.5 } : null}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function AddressCard({ address, onEdit, onDelete, onMakeDefault, busy }) {
   const lines = [address.addressLine1, address.addressLine2, `${address.city}, ${address.state} ${address.zip}`]
     .filter(Boolean);
@@ -50,71 +76,61 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, busy }) {
   return (
     <Card>
       <CardContent className="gap-3 p-4">
-        <View className="flex-row items-start justify-between gap-3">
-          <View className="min-w-0 flex-1">
-            <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="text-base font-semibold text-foreground">
-                {address.label || address.name}
-              </Text>
-              {address.isDefault ? (
-                <Badge
-                  variant="outline"
-                  className="border-emerald-200 bg-emerald-100"
-                  labelClassName="text-emerald-800"
-                >
-                  Principal
-                </Badge>
-              ) : null}
-            </View>
-            {address.label ? (
-              <Text className="mt-1 text-sm text-muted-foreground">{address.name}</Text>
-            ) : null}
-          </View>
-        </View>
+        {/* La etiqueta primero: es como el cliente reconoce la direccion. */}
+        <Text className="text-base font-semibold text-foreground">
+          {address.label || address.name}
+        </Text>
+
+        {address.phone ? (
+          <Text className="text-sm font-medium text-foreground">{formatPhone(address.phone)}</Text>
+        ) : null}
 
         <View>
+          {address.label ? (
+            <Text className="text-sm leading-5 text-muted-foreground">{address.name}</Text>
+          ) : null}
           {lines.map((line) => (
             <Text key={line} className="text-sm leading-5 text-muted-foreground">
               {line}
             </Text>
           ))}
-          {address.phone ? (
-            <Text className="text-sm leading-5 text-muted-foreground">{address.phone}</Text>
-          ) : null}
         </View>
 
-        <View className="flex-row flex-wrap gap-2">
-          {!address.isDefault ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              icon={<Check size={16} color={brand.primaryColor} />}
-              onPress={() => onMakeDefault(address)}
+        <View className="flex-row items-center justify-between gap-3 border-t border-border pt-3">
+          {/* Marcar la principal es elegir entre varias, asi que se comporta
+              como un radio: se enciende, no se apaga. */}
+          <Pressable
+            onPress={() => (address.isDefault ? null : onMakeDefault(address))}
+            disabled={busy || address.isDefault}
+            hitSlop={8}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: address.isDefault }}
+            className="min-w-0 flex-1 flex-row items-center gap-2"
+          >
+            <View
+              className={
+                address.isDefault
+                  ? "h-5 w-5 items-center justify-center rounded-full border-2 border-primary"
+                  : "h-5 w-5 rounded-full border-2 border-slate-300"
+              }
             >
-              Usar como principal
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            icon={<Pencil size={16} color="#334155" />}
-            onPress={() => onEdit(address)}
-          >
-            Editar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-rose-200"
-            labelClassName="text-rose-700"
-            disabled={busy}
-            icon={<Trash2 size={16} color="#be123c" />}
-            onPress={() => onDelete(address)}
-          >
-            Borrar
-          </Button>
+              {address.isDefault ? <View className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
+            </View>
+            <Text
+              className={
+                address.isDefault
+                  ? "text-sm font-medium text-foreground"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              Predeterminado
+            </Text>
+          </Pressable>
+
+          <View className="flex-row items-center gap-4">
+            <TextAction label="Editar" disabled={busy} onPress={() => onEdit(address)} />
+            <TextAction label="Eliminar" tone="danger" disabled={busy} onPress={() => onDelete(address)} />
+          </View>
         </View>
       </CardContent>
     </Card>
