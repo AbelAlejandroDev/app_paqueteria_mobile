@@ -134,7 +134,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user) return;
 
-    registerForPush().catch(() => {});
+    // Se registra el resultado aunque no se muestre: sin esto, un fallo al
+    // obtener o guardar el token es invisible y solo se nota porque las
+    // notificaciones no llegan, que es un sintoma muy lejano de la causa.
+    registerForPush()
+      .then(({ token, reason }) => {
+        if (token) console.log("[push] dispositivo registrado");
+        else console.warn("[push] sin registrar:", reason);
+      })
+      .catch((error) => console.warn("[push] error inesperado:", error?.message || error));
   }, [user?.id]);
 
   useEffect(() => {
