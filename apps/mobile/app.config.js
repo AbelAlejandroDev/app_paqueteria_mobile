@@ -55,6 +55,13 @@ module.exports = {
       ],
       "expo-secure-store",
       [
+        "expo-local-authentication",
+        {
+          // iOS rechaza la app en revision si falta este texto.
+          faceIDPermission: "Permite Face ID para desbloquear tu buzón sin escribir la contraseña.",
+        },
+      ],
+      [
         "expo-image-picker",
         {
           // iOS rechaza la app si estos textos faltan.

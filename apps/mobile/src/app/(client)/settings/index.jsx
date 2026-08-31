@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronRight, LogOut } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
@@ -36,8 +36,22 @@ function SectionRow({ label, href, last }) {
 }
 
 export default function SettingsScreen() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const timeZone = useMemo(() => formatTimeZone(), []);
+
+  const confirmLogout = () => {
+    Alert.alert("Cerrar sesión", "¿Seguro que quieres salir de tu cuenta?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar sesión",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/login");
+        },
+      },
+    ]);
+  };
 
   const accountDetails = [
     // Antes se llamaba RTID, que no dice nada al cliente. Es su numero de
@@ -64,6 +78,18 @@ export default function SettingsScreen() {
               last={index === SECTIONS.length - 1}
             />
           ))}
+        </Card>
+
+        {/* Cerrar sesion vivia en Security, que ahora solo guarda ajustes.
+            Va aparte porque es una accion, no una preferencia. */}
+        <Card>
+          <Pressable
+            onPress={confirmLogout}
+            className="flex-row items-center justify-between gap-4 px-5 py-4 active:bg-muted"
+          >
+            <Text className="text-base font-medium text-rose-700">Cerrar sesión</Text>
+            <LogOut size={20} color="#be123c" />
+          </Pressable>
         </Card>
 
         <Card>
