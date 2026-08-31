@@ -14,6 +14,7 @@ import {
   setTokens,
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
+import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
 
 const AuthContext = createContext(null);
 
@@ -106,6 +107,10 @@ export function AuthProvider({ children }) {
   );
 
   const logout = useCallback(async () => {
+    // Antes de cerrar sesion, mientras el token todavia vale: si no, el
+    // siguiente que entre en este telefono recibiria los avisos del anterior.
+    await unregisterFromPush();
+
     try {
       await api.post("/auth/logout");
     } catch (error) {
@@ -117,6 +122,20 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   }, []);
+
+  /**
+   * Registra el dispositivo en cuanto hay sesion, no solo al iniciarla.
+   *
+   * Asi tambien se cubre a quien ya venia con la sesion guardada, y se refresca
+   * el token cuando el sistema lo rota. Si falla no se avisa: el cliente no ha
+   * pedido nada aqui, y un error tapando la pantalla de inicio seria peor que
+   * quedarse sin notificaciones.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    registerForPush().catch(() => {});
+  }, [user?.id]);
 
   useEffect(() => {
     return on(AUTH_USER_UPDATED_EVENT, (nextUser) => {

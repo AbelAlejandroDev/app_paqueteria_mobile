@@ -1,5 +1,69 @@
 # Mejoras pendientes
 
+> **Lo más urgente:** [notificaciones push](#0-notificaciones-push-implementadas-sin-verificar)
+> está implementado pero **nunca se ha probado**, y no puede probarse sin un
+> development build de EAS. Ver también [TLS del VPS](#4-tls-propio-en-el-vps),
+> que bloquea repartir la app.
+
+---
+
+## 0. Notificaciones push: implementadas, sin verificar
+
+**Estado:** código completo en ambos lados, cero verificación real.
+
+El cliente debería recibir un aviso en el móvil cuando llega correspondencia,
+sin tener que abrir la app. Antes de esto, un paquete registrado solo se veía
+si el cliente entraba por su cuenta.
+
+### Qué está hecho
+
+| Pieza | Dónde |
+|---|---|
+| Tabla de dispositivos | `PushDevice` + migración |
+| Envío vía Expo Push | `src/lib/push.js` |
+| Disparo automático | `createNotification` |
+| Alta y baja del token | `POST /client/push-devices` y `/unregister` |
+| Registro en la app | `src/lib/push-notifications.js` |
+
+El push sale **fuera de la transacción y sin `await`**: una llamada a un
+servicio externo no debe mantener filas bloqueadas, y si falla, el aviso sigue
+guardado y visible dentro de la app.
+
+Solo se envían los tipos de la lista blanca de `push.js`. Quedan fuera a
+propósito `FORWARD_LABEL_READY`, que es un paso interno del centro, y
+`CLIENT_FORWARDING_ADDRESS_CHANGED`, que va dirigido al staff.
+
+### Por qué no se ha podido probar
+
+**Falta el `projectId` de EAS.** `getExpoPushTokenAsync` lo exige y el proyecto
+todavía no está enlazado: hace falta `eas init`. Sin él la app detecta la
+situación y no registra nada, en vez de fallar.
+
+**Android no admite push remoto en Expo Go** desde el SDK 53. Hace falta un
+development build, que es lo mismo que bloquea repartir la app a clientes.
+
+**iOS necesita la cuenta de Apple Developer** para generar las credenciales de
+push. En Android no hay coste.
+
+### Para cerrarlo
+
+1. `eas init` para obtener el `projectId`
+2. Development build de Android
+3. Registrar un dispositivo real y comprobar que llega el aviso al registrar
+   correspondencia
+4. Comprobar que al cerrar sesión el dispositivo deja de recibir avisos
+
+### Lo que falta aunque funcione
+
+**Limpieza de tokens viejos.** Se borran los que Expo marca como
+`DeviceNotRegistered`, pero nadie descarta los que llevan meses sin abrir la
+app. `lastSeenAt` está en la tabla justo para eso.
+
+**Sin registro de envíos.** No se guarda qué se envió ni qué respondió Expo, así
+que un "no me llegó" no se puede diagnosticar.
+
+---
+
 Decisiones que se tomaron a propósito para no bloquear el avance, con lo que
 costaría cerrarlas bien. No son bugs: son deudas conocidas.
 
