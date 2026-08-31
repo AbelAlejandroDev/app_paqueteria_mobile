@@ -69,10 +69,12 @@ export const FOLDER_LABELS = {
   pending: "Pendiente",
   action_required: "Accion requerida",
   completed: "Completada",
+  // Se conserva la etiqueta por si llega en una respuesta antigua, aunque el
+  // backend ya no ofrezca la carpeta: lo descartado vive en Completada.
   trash: "Papelera",
 };
 
-export const FOLDER_ORDER = ["inbox", "pending", "action_required", "completed", "trash"];
+export const FOLDER_ORDER = ["inbox", "pending", "action_required", "completed"];
 
 export function normalizeFolders(folders = []) {
   const byKey = new Map((folders || []).map((folder) => [folder.key, folder]));

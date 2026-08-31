@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -32,6 +32,17 @@ import EmptyState from "@/components/common/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+
+// Coinciden con COMPLETED_FILTERS del backend. Se solapan a proposito: un item
+// recogido que antes se escaneo sale en varios.
+const COMPLETED_FILTERS = [
+  { key: "all", label: "Todo" },
+  { key: "scanned", label: "Abierto y escaneado" },
+  { key: "forwarding", label: "Reenviado" },
+  { key: "shipments", label: "Envíos" },
+  { key: "picked-up", label: "Recogido" },
+  { key: "deleted", label: "Eliminado" },
+];
 
 const FOLDER_ICONS = {
   inbox: Inbox,
@@ -140,11 +151,22 @@ export default function MailItemsScreen() {
   const params = useLocalSearchParams();
   const selectedFolder = typeof params.folder === "string" && params.folder ? params.folder : "";
 
+  // El filtro solo aplica dentro de Completada; va en la ruta para que se
+  // conserve al volver atras.
+  const selectedFilter =
+    typeof params.filter === "string" && params.filter ? params.filter : "all";
+  const showsFilters = selectedFolder === "completed";
+
   const query = useQuery({
-    queryKey: ["client-mail-items", selectedFolder || "folders"],
+    queryKey: ["client-mail-items", selectedFolder || "folders", showsFilters ? selectedFilter : ""],
     queryFn: async () => {
       const response = selectedFolder
-        ? await api.get("/client/mail-items", { params: { folder: selectedFolder } })
+        ? await api.get("/client/mail-items", {
+            params: {
+              folder: selectedFolder,
+              ...(showsFilters ? { filter: selectedFilter } : {}),
+            },
+          })
         : await api.get("/client/mail-items/folders");
       return response.data;
     },
@@ -160,6 +182,44 @@ export default function MailItemsScreen() {
 
   const header = (
     <View className="gap-4 pb-4">
+      {/* Seis filtros no caben en un segmentado, asi que van como fila
+          desplazable; el activo queda relleno para verse de un vistazo. */}
+      {showsFilters ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-2 pr-4"
+        >
+          {COMPLETED_FILTERS.map((filter) => {
+            const active = filter.key === selectedFilter;
+
+            return (
+              <Pressable
+                key={filter.key}
+                onPress={() => router.setParams({ folder: "completed", filter: filter.key })}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                className={
+                  active
+                    ? "rounded-full border border-primary bg-primary px-3.5 py-2"
+                    : "rounded-full border border-border bg-card px-3.5 py-2 active:bg-muted"
+                }
+              >
+                <Text
+                  className={
+                    active
+                      ? "text-sm font-semibold text-primary-foreground"
+                      : "text-sm font-medium text-muted-foreground"
+                  }
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
       {query.isLoading ? (
         <View className="gap-3">
           <Skeleton className="h-20 w-full" />
@@ -191,7 +251,9 @@ export default function MailItemsScreen() {
         headerLeft: selectedFolder
           ? () => (
               <Pressable
-                onPress={() => router.setParams({ folder: "" })}
+                // Se limpia tambien el filtro: si no, volver a entrar en
+                // Completada abriria con el ultimo que se dejo puesto.
+                onPress={() => router.setParams({ folder: "", filter: "" })}
                 hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel="Volver a las carpetas"
