@@ -12,6 +12,11 @@
  *   - tailwind.config.js  color primario horneado en el tema
  *   - src/lib/brand.js    lectura en runtime vía expo-constants
  *
+ * `easProjectId` es el proyecto de expo.dev de cada marca. Va aquí y no en
+ * app.config.js porque cada marca es una app distinta y necesita el suyo: con
+ * uno solo, las notificaciones de una llegarían a los clientes de la otra.
+ * Sin él, la app no puede pedir el token push y no registra el dispositivo.
+ *
  * `tenantSlug` debe coincidir con la clave de BRAND_EMAIL_CONFIG del backend
  * (src/config/brandEmailConfig.js), que es lo que decide el remitente de los
  * correos de alta.
@@ -34,6 +39,7 @@ const BRANDS = {
     slug: "worx-client",
     scheme: "worxclient",
     bundleId: "com.theworxoffices.clientportal",
+    easProjectId: "0a24a678-892e-46e5-ad6a-421bceb8803e",
     primaryColor: "#65baaf",
     splashBackground: "#0e0d13",
     androidIconBackground: "#0e0d13",
@@ -51,6 +57,7 @@ const BRANDS = {
     slug: "hdg-client",
     scheme: "hdgclient",
     bundleId: "com.hdgexecutivesuites.clientportal",
+    easProjectId: "76e45578-661f-43a5-96fa-bb1089a92586",
     primaryColor: "#5f5971",
     splashBackground: "#ffffff",
     androidIconBackground: "#ffffff",

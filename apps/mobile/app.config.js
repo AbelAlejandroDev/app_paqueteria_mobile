@@ -78,6 +78,9 @@ module.exports = {
     },
     // Lo lee src/lib/brand.js en runtime a través de expo-constants.
     extra: {
+      // Proyecto de expo.dev de esta marca. Lo lee getExpoPushTokenAsync; sin
+      // el, la app detecta que no puede registrarse y no lo intenta.
+      eas: { projectId: brand.easProjectId || null },
       // Se evalua al compilar, asi que queda congelada la fecha real del build
       // que el usuario tiene instalado. En desarrollo es la de cada arranque.
       buildDate: new Date().toISOString(),
