@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,10 @@ import {
   Inbox,
   Mail,
   Package2,
+  ScanLine,
+  Store,
   Trash2,
+  Truck,
 } from "lucide-react-native";
 import { brand } from "@/lib/brand";
 
@@ -33,15 +36,16 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Coinciden con COMPLETED_FILTERS del backend. Se solapan a proposito: un item
-// recogido que antes se escaneo sale en varios.
-const COMPLETED_FILTERS = [
-  { key: "all", label: "Todo" },
-  { key: "scanned", label: "Abierto y escaneado" },
-  { key: "forwarding", label: "Reenviado" },
-  { key: "shipments", label: "Envíos" },
-  { key: "picked-up", label: "Recogido" },
-  { key: "deleted", label: "Eliminado" },
+// Coinciden con COMPLETED_FILTERS del backend. Se navegan como carpetas, igual
+// que el primer nivel, y se solapan a proposito: un item recogido que antes se
+// escaneo sale en varias.
+const COMPLETED_FOLDERS = [
+  { key: "all", label: "All Completed", icon: CheckCircle2 },
+  { key: "scanned", label: "Opened & Scanned", icon: ScanLine },
+  { key: "forwarding", label: "Forwarded", icon: Truck },
+  { key: "shipments", label: "Shipments", icon: Package2 },
+  { key: "picked-up", label: "Picked Up", icon: Store },
+  { key: "deleted", label: "Deleted", icon: Trash2 },
 ];
 
 const FOLDER_ICONS = {
@@ -51,6 +55,31 @@ const FOLDER_ICONS = {
   completed: CheckCircle2,
   trash: Trash2,
 };
+
+/**
+ * Subcarpeta de Completada.
+ *
+ * Se pinta como las de primer nivel para que se lean igual, pero sin contador:
+ * el backend devuelve el total de la carpeta, no el de cada tipo de cierre, y
+ * poner un cero fijo diria algo falso.
+ */
+function CompletedFolderCard({ folder }) {
+  const Icon = folder.icon;
+
+  return (
+    <Pressable
+      onPress={() => router.setParams({ folder: "completed", filter: folder.key })}
+      className="mb-3 flex-row items-center gap-3 rounded-lg border border-border bg-card p-3 active:bg-muted"
+    >
+      <View className="h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
+        <Icon size={22} color="#334155" />
+      </View>
+      <Text className="min-w-0 flex-1 text-base font-semibold text-foreground" numberOfLines={1}>
+        {folder.label}
+      </Text>
+    </Pressable>
+  );
+}
 
 function FolderCard({ folder }) {
   const Icon = FOLDER_ICONS[folder.key] || Inbox;
@@ -151,24 +180,27 @@ export default function MailItemsScreen() {
   const params = useLocalSearchParams();
   const selectedFolder = typeof params.folder === "string" && params.folder ? params.folder : "";
 
-  // El filtro solo aplica dentro de Completada; va en la ruta para que se
-  // conserve al volver atras.
-  const selectedFilter =
-    typeof params.filter === "string" && params.filter ? params.filter : "all";
-  const showsFilters = selectedFolder === "completed";
+  const selectedFilter = typeof params.filter === "string" && params.filter ? params.filter : "";
+
+  // Tres niveles: carpetas, subcarpetas de Completada, y la lista de items.
+  // Completada sin subcarpeta elegida no pide items todavia.
+  const isCompletedLanding = selectedFolder === "completed" && !selectedFilter;
 
   const query = useQuery({
-    queryKey: ["client-mail-items", selectedFolder || "folders", showsFilters ? selectedFilter : ""],
+    queryKey: ["client-mail-items", selectedFolder || "folders", selectedFilter],
     queryFn: async () => {
-      const response = selectedFolder
-        ? await api.get("/client/mail-items", {
-            params: {
-              folder: selectedFolder,
-              ...(showsFilters ? { filter: selectedFilter } : {}),
-            },
-          })
-        : await api.get("/client/mail-items/folders");
-      return response.data;
+      if (!selectedFolder || isCompletedLanding) {
+        return (await api.get("/client/mail-items/folders")).data;
+      }
+
+      return (
+        await api.get("/client/mail-items", {
+          params: {
+            folder: selectedFolder,
+            ...(selectedFilter ? { filter: selectedFilter } : {}),
+          },
+        })
+      ).data;
     },
   });
 
@@ -182,44 +214,6 @@ export default function MailItemsScreen() {
 
   const header = (
     <View className="gap-4 pb-4">
-      {/* Seis filtros no caben en un segmentado, asi que van como fila
-          desplazable; el activo queda relleno para verse de un vistazo. */}
-      {showsFilters ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="gap-2 pr-4"
-        >
-          {COMPLETED_FILTERS.map((filter) => {
-            const active = filter.key === selectedFilter;
-
-            return (
-              <Pressable
-                key={filter.key}
-                onPress={() => router.setParams({ folder: "completed", filter: filter.key })}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                className={
-                  active
-                    ? "rounded-full border border-primary bg-primary px-3.5 py-2"
-                    : "rounded-full border border-border bg-card px-3.5 py-2 active:bg-muted"
-                }
-              >
-                <Text
-                  className={
-                    active
-                      ? "text-sm font-semibold text-primary-foreground"
-                      : "text-sm font-medium text-muted-foreground"
-                  }
-                >
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
       {query.isLoading ? (
         <View className="gap-3">
           <Skeleton className="h-20 w-full" />
@@ -251,9 +245,14 @@ export default function MailItemsScreen() {
         headerLeft: selectedFolder
           ? () => (
               <Pressable
-                // Se limpia tambien el filtro: si no, volver a entrar en
-                // Completada abriria con el ultimo que se dejo puesto.
-                onPress={() => router.setParams({ folder: "", filter: "" })}
+                // Sube un solo nivel: de una subcarpeta a Completada, y de una
+                // carpeta a la raiz. Volver del todo de golpe obligaria a
+                // rehacer el camino para ver otro tipo de cierre.
+                onPress={() =>
+                  selectedFilter
+                    ? router.setParams({ folder: "completed", filter: "" })
+                    : router.setParams({ folder: "", filter: "" })
+                }
                 hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel="Volver a las carpetas"
@@ -266,6 +265,23 @@ export default function MailItemsScreen() {
       }}
     />
   );
+
+  if (isCompletedLanding) {
+    return (
+      <>
+        {screenHeader}
+        <FlatList
+          className="flex-1 bg-background"
+          contentContainerClassName="p-4 pb-24"
+          data={isBusy ? [] : COMPLETED_FOLDERS}
+          keyExtractor={(folder) => folder.key}
+          renderItem={({ item }) => <CompletedFolderCard folder={item} />}
+          ListHeaderComponent={header}
+          refreshControl={refreshControl}
+        />
+      </>
+    );
+  }
 
   if (isFolderLanding) {
     return (
