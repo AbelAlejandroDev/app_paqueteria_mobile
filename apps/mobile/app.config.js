@@ -26,6 +26,18 @@ module.exports = {
     orientation: "portrait",
     icon: generatedIcon,
     scheme: brand.scheme,
+    // Actualizaciones OTA. La URL lleva dentro el proyecto, asi que se deriva
+    // de la marca: escrita fija, los builds de HDG buscarian las
+    // actualizaciones de The Worx.
+    ...(brand.easProjectId
+      ? {
+          updates: { url: "https://u.expo.dev/" + brand.easProjectId },
+          // Una actualizacion solo llega a los builds con la misma version de
+          // la app, que es lo que evita servir JS nuevo a un binario viejo que
+          // no trae el codigo nativo que ese JS necesita.
+          runtimeVersion: { policy: "appVersion" },
+        }
+      : {}),
     userInterfaceStyle: "automatic",
     ios: {
       bundleIdentifier: brand.bundleId,
