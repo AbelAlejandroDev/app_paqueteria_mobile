@@ -19,6 +19,9 @@ module.exports = {
   expo: {
     name: brand.name,
     slug: brand.slug,
+    // Los proyectos viven en la organizacion, no en la cuenta personal. Sin
+    // esto EAS los busca donde no estan y falla el build.
+    owner: "ab-estrategia-360",
     version: "1.0.0",
     orientation: "portrait",
     icon: generatedIcon,
