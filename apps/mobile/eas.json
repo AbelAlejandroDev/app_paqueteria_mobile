@@ -7,7 +7,10 @@
     "base-development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://snooper-directory-ambitious.ngrok-free.dev/api/v1"
+      }
     },
 
     "base-preview": {
