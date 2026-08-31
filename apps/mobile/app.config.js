@@ -7,6 +7,9 @@ const { getForegroundForColor } = require("./brands/color");
 const brand = getBrand();
 
 const brandDir = "./assets/brands/" + brand.id;
+// Identificadores publicos de Firebase; se versiona. La clave privada de la
+// cuenta de servicio NO va aqui: esa se sube a EAS y queda fuera del repo.
+const googleServicesFile = brandDir + "/google-services.json";
 const generatedIcon = brandDir + "/generated/icon.png";
 
 if (!fs.existsSync(path.join(__dirname, generatedIcon))) {
@@ -53,6 +56,12 @@ module.exports = {
         foregroundImage: generatedIcon,
       },
       predictiveBackGestureEnabled: false,
+      // Registra la app ante Firebase y sin el no hay notificaciones en
+      // Android. Es por marca porque cada una tiene su propio paquete y por
+      // tanto su propio proyecto de Firebase.
+      ...(fs.existsSync(path.join(__dirname, googleServicesFile))
+        ? { googleServicesFile }
+        : {}),
     },
     web: {
       output: "static",
