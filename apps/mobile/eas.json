@@ -16,6 +16,9 @@
     "base-preview": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://snooper-directory-ambitious.ngrok-free.dev/api/v1"
+      },
       "android": {
         "buildType": "apk"
       }
