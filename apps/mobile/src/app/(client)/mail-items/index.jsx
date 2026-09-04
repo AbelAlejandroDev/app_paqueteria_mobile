@@ -255,7 +255,7 @@ export default function MailItemsScreen() {
                 }
                 hitSlop={12}
                 accessibilityRole="button"
-                accessibilityLabel="Volver a las carpetas"
+                accessibilityLabel="Back to folders"
                 className="pr-3"
               >
                 <ArrowLeft size={24} color="#0f172a" />

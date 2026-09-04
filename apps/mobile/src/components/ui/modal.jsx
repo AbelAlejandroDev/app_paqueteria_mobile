@@ -33,7 +33,7 @@ export function Modal({ visible, onClose, title, description, children, footer }
                   <Text className="mt-1 text-sm leading-5 text-muted-foreground">{description}</Text>
                 ) : null}
               </View>
-              <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Cerrar">
+              <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Close">
                 <X size={22} color="#64748b" />
               </Pressable>
             </View>

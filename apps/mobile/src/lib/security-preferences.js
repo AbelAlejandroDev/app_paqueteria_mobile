@@ -32,11 +32,11 @@ export async function setSecurityPreferences(next) {
 export async function getBiometricSupport() {
   try {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    if (!hasHardware) return { available: false, reason: "Este dispositivo no tiene lector biométrico." };
+    if (!hasHardware) return { available: false, reason: "This device has no biometric reader." };
 
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     if (!isEnrolled) {
-      return { available: false, reason: "No hay huella ni rostro registrados en el dispositivo." };
+      return { available: false, reason: "No fingerprint or face is enrolled on this device." };
     }
 
     const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
@@ -45,19 +45,19 @@ export async function getBiometricSupport() {
 
     return {
       available: true,
-      label: hasFace && !hasFingerprint ? "Reconocimiento facial" : hasFace ? "Huella o rostro" : "Huella",
+      label: hasFace && !hasFingerprint ? "Face recognition" : hasFace ? "Fingerprint or face" : "Fingerprint",
     };
   } catch (error) {
-    return { available: false, reason: "No se pudo consultar el lector biométrico." };
+    return { available: false, reason: "The biometric reader could not be checked." };
   }
 }
 
 /** Pide la comprobacion; devuelve true solo si el dispositivo la valida. */
-export async function authenticate(promptMessage = "Confirma tu identidad") {
+export async function authenticate(promptMessage = "Confirm your identity") {
   try {
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage,
-      cancelLabel: "Cancelar",
+      cancelLabel: "Cancel",
       // Sin esto, Android ofrece el PIN como alternativa y el interruptor
       // dejaria de significar "biometria".
       disableDeviceFallback: false,

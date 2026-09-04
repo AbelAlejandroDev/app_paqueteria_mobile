@@ -100,14 +100,14 @@ export default function HelpScreen() {
             value={contact.supportEmail}
             icon={Mail}
             url={"mailto:" + contact.supportEmail}
-            actionLabel="Enviar correo"
+            actionLabel="Send email"
           />
           <ContactRow
             title="Support Phone"
             value={contact.supportPhone}
             icon={Phone}
             url={"tel:" + contact.supportPhone}
-            actionLabel="Llamar"
+            actionLabel="Call"
             last
           />
         </CardContent>

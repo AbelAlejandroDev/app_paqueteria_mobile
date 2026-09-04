@@ -123,13 +123,13 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, busy }) {
                   : "text-sm text-muted-foreground"
               }
             >
-              Predeterminado
+              Default
             </Text>
           </Pressable>
 
           <View className="flex-row items-center gap-4">
-            <TextAction label="Editar" disabled={busy} onPress={() => onEdit(address)} />
-            <TextAction label="Eliminar" tone="danger" disabled={busy} onPress={() => onDelete(address)} />
+            <TextAction label="Edit" disabled={busy} onPress={() => onEdit(address)} />
+            <TextAction label="Delete" tone="danger" disabled={busy} onPress={() => onDelete(address)} />
           </View>
         </View>
       </CardContent>
@@ -181,7 +181,7 @@ export default function ForwardingAddressesScreen() {
       refresh();
     },
     onError: (error) => {
-      Alert.alert("No se pudo guardar", formatErrorMessage(error, "Unable to save the address"));
+      Alert.alert("Could not save", formatErrorMessage(error, "Unable to save the address"));
     },
   });
 
@@ -190,7 +190,7 @@ export default function ForwardingAddressesScreen() {
       (await api.patch(`${ENDPOINT}/${address.id}`, { isDefault: true })).data,
     onSuccess: refresh,
     onError: (error) => {
-      Alert.alert("No se pudo cambiar", formatErrorMessage(error));
+      Alert.alert("Could not change the default", formatErrorMessage(error));
     },
   });
 
@@ -198,7 +198,7 @@ export default function ForwardingAddressesScreen() {
     mutationFn: async (address) => api.delete(`${ENDPOINT}/${address.id}`),
     onSuccess: refresh,
     onError: (error) => {
-      Alert.alert("No se pudo borrar", formatErrorMessage(error));
+      Alert.alert("Could not delete", formatErrorMessage(error));
     },
   });
 
@@ -217,9 +217,9 @@ export default function ForwardingAddressesScreen() {
   };
 
   const confirmDelete = (address) => {
-    Alert.alert("Borrar dirección", "¿Seguro que quieres eliminarla?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: () => remove.mutate(address) },
+    Alert.alert("Delete address", "Are you sure you want to remove it?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => remove.mutate(address) },
     ]);
   };
 
@@ -238,9 +238,9 @@ export default function ForwardingAddressesScreen() {
   if (query.isError) {
     return (
       <View className="flex-1 gap-4 bg-background p-4">
-        <EmptyState title="No se pudieron cargar las direcciones" description={formatErrorMessage(query.error)} />
+        <EmptyState title="Unable to load addresses" description={formatErrorMessage(query.error)} />
         <Button variant="outline" onPress={() => query.refetch()}>
-          Reintentar
+          Retry
         </Button>
       </View>
     );
@@ -253,8 +253,8 @@ export default function ForwardingAddressesScreen() {
       <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-24">
         {items.length === 0 ? (
           <EmptyState
-            title="Sin direcciones de reenvío"
-            description="Añade una para poder reenviar tu correspondencia."
+            title="No forwarding addresses"
+            description="Add one so your mail can be forwarded."
           />
         ) : (
           items.map((address) => (
@@ -270,59 +270,59 @@ export default function ForwardingAddressesScreen() {
         )}
 
         <Button icon={<Plus size={18} color={brand.primaryForeground} />} onPress={startCreate}>
-          Añadir dirección
+          Add address
         </Button>
 
         <Text className="px-1 text-xs leading-4 text-muted-foreground">
-          Tu centro recibe un aviso cuando cambias estos datos, por si tiene correspondencia
-          preparada con la dirección anterior.
+          Your center is notified when you change these details, in case it has mail already
+          prepared with the previous address.
         </Text>
       </ScrollView>
 
       <Modal
         visible={open}
         onClose={closeForm}
-        title={editing ? "Editar dirección" : "Nueva dirección"}
-        description="La marcada como principal es la que se usa al reenviar."
+        title={editing ? "Edit address" : "New address"}
+        description="The one marked as default is the address used for forwarding."
         footer={
           <>
             <Button variant="outline" onPress={closeForm}>
-              Cancelar
+              Cancel
             </Button>
             <Button loading={save.isPending} disabled={!canSave} onPress={() => save.mutate()}>
-              Guardar
+              Save
             </Button>
           </>
         }
       >
-        <Field label="Etiqueta (opcional)">
-          <Input value={form.label} onChangeText={onField("label")} placeholder="Casa, Oficina..." />
+        <Field label="Label (optional)">
+          <Input value={form.label} onChangeText={onField("label")} placeholder="Home, Office..." />
         </Field>
-        <Field label="Destinatario">
+        <Field label="Recipient">
           <Input value={form.name} onChangeText={onField("name")} />
         </Field>
-        <Field label="Dirección">
+        <Field label="Address">
           <Input value={form.addressLine1} onChangeText={onField("addressLine1")} />
         </Field>
-        <Field label="Línea 2 (opcional)">
+        <Field label="Address line 2 (optional)">
           <Input value={form.addressLine2} onChangeText={onField("addressLine2")} />
         </Field>
-        <Field label="Ciudad">
+        <Field label="City">
           <Input value={form.city} onChangeText={onField("city")} />
         </Field>
-        <Field label="Estado">
+        <Field label="State">
           <Select
             value={form.state}
             onValueChange={onField("state")}
             options={US_STATES}
-            placeholder="Selecciona estado"
-            title="Estado"
+            placeholder="Select state"
+            title="State"
           />
         </Field>
         <Field label="ZIP">
           <Input value={form.zip} onChangeText={onField("zip")} keyboardType="number-pad" />
         </Field>
-        <Field label="Teléfono (opcional)">
+        <Field label="Phone (optional)">
           <Input value={form.phone} onChangeText={onField("phone")} keyboardType="phone-pad" />
         </Field>
       </Modal>

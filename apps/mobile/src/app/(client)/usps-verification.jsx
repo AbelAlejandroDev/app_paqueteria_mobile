@@ -38,7 +38,7 @@ export default function UspsVerificationScreen() {
   const submit = useMutation({
     mutationFn: async () => {
       if (!form1583 || !photoId || !addressId) {
-        throw new Error("Adjunta el Formulario 1583 y los dos documentos de identificación.");
+        throw new Error("Attach Form 1583 and both identification documents.");
       }
 
       // React Native construye el multipart a partir de {uri, name, type};
@@ -55,7 +55,7 @@ export default function UspsVerificationScreen() {
       });
     },
     onSuccess: () => {
-      Alert.alert("Documentos enviados", "Tu documentación USPS quedó en revisión.");
+      Alert.alert("Documents submitted", "Your USPS paperwork is now under review.");
       setForm1583(null);
       setPhotoId(null);
       setAddressId(null);
@@ -64,7 +64,7 @@ export default function UspsVerificationScreen() {
       queryClient.invalidateQueries({ queryKey: ["client-usps-compliance"] });
     },
     onError: (error) => {
-      Alert.alert("No se pudo enviar", formatErrorMessage(error));
+      Alert.alert("Could not submit", formatErrorMessage(error));
     },
   });
 
@@ -98,8 +98,8 @@ export default function UspsVerificationScreen() {
             <View className="min-w-0 flex-1">
               <CardTitle>USPS Form 1583 Verification</CardTitle>
               <CardDescription>
-                Envía tu Formulario 1583 notarizado, un documento de identidad oficial con foto y
-                un documento que confirme tu domicilio.
+                Submit your notarized Form 1583, a government-issued photo ID, and a document
+                confirming your home address.
               </CardDescription>
             </View>
           </View>
@@ -112,16 +112,16 @@ export default function UspsVerificationScreen() {
                 {status}
               </Badge>
               {record?.submittedAt ? (
-                <Text className="text-sm text-muted-foreground">Enviado {formatDate(record.submittedAt)}</Text>
+                <Text className="text-sm text-muted-foreground">Submitted {formatDate(record.submittedAt)}</Text>
               ) : null}
             </View>
             {record?.reviewNotes ? (
-              <Text className="text-sm text-muted-foreground">Nota del centro: {record.reviewNotes}</Text>
+              <Text className="text-sm text-muted-foreground">Note from the center: {record.reviewNotes}</Text>
             ) : null}
           </View>
 
           <DocumentPickerField
-            label="Formulario USPS 1583 notarizado"
+            label="Notarized USPS Form 1583"
             required
             value={form1583}
             onChange={setForm1583}
@@ -129,39 +129,39 @@ export default function UspsVerificationScreen() {
 
           <View className="gap-2">
             <DocumentPickerField
-              label="Identificación oficial con foto"
+              label="Government-issued photo ID"
               required
               value={photoId}
               onChange={setPhotoId}
             />
-            <Field label="Tipo de documento">
+            <Field label="Document type">
               <Input
                 value={photoIdType}
                 onChangeText={setPhotoIdType}
-                placeholder="Licencia de conducir, pasaporte..."
+                placeholder="Driver's license, passport..."
               />
             </Field>
           </View>
 
           <View className="gap-2">
             <DocumentPickerField
-              label="Comprobante de domicilio"
+              label="Proof of address"
               required
               value={addressId}
               onChange={setAddressId}
             />
-            <Field label="Tipo de documento">
+            <Field label="Document type">
               <Input
                 value={addressIdType}
                 onChangeText={setAddressIdType}
-                placeholder="Contrato de alquiler, póliza de seguro..."
+                placeholder="Lease agreement, insurance policy..."
               />
             </Field>
           </View>
 
           <Text className="text-sm leading-5 text-muted-foreground">
-            PDF, JPG, PNG o WEBP. Volver a enviar reemplaza la documentación actual y la devuelve
-            a revisión del centro.
+            PDF, JPG, PNG or WEBP. Submitting again replaces the current paperwork and sends it
+            back to the center for review.
           </Text>
 
           <Button
@@ -169,7 +169,7 @@ export default function UspsVerificationScreen() {
             loading={submit.isPending}
             onPress={() => submit.mutate()}
           >
-            Enviar documentos USPS
+            Submit USPS documents
           </Button>
         </CardContent>
       </Card>

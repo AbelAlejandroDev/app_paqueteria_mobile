@@ -153,14 +153,14 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       return response.data;
     },
     onSuccess: async () => {
-      Alert.alert("Solicitud creada", "Tu solicitud se envió al centro.");
+      Alert.alert("Request created", "Your request was sent to the center.");
       setForwardOpen(false);
       setPickupOpen(false);
       setDiscardOpen(false);
       await onRefresh?.();
     },
     onError: (error) => {
-      Alert.alert("No se pudo crear", formatErrorMessage(error, "Failed to create request"));
+      Alert.alert("Could not create request", formatErrorMessage(error, "Failed to create request"));
       onRefresh?.();
     },
   });
@@ -171,12 +171,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       return response.data;
     },
     onSuccess: async () => {
-      Alert.alert("Enviado", "El centro revisará la asignación.");
+      Alert.alert("Sent", "The center will review this assignment.");
       setRejectOpen(false);
       await onRefresh?.();
     },
     onError: (error) => {
-      Alert.alert("No se pudo enviar", formatErrorMessage(error, "Failed to send assignment review"));
+      Alert.alert("Could not send", formatErrorMessage(error, "Failed to send assignment review"));
       onRefresh?.();
     },
   });
@@ -214,7 +214,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       setForwardQuoteId("");
       setForwardRates([]);
       setSelectedRateId("");
-      Alert.alert("Sin tarifas", formatErrorMessage(error, "Failed to load shipping rates"));
+      Alert.alert("No rates available", formatErrorMessage(error, "Failed to load shipping rates"));
     },
   });
 
@@ -248,13 +248,13 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       return response.data;
     },
     onSuccess: async () => {
-      Alert.alert("Solicitud enviada", "El centro preparará tu envío y te avisará del importe.");
+      Alert.alert("Request sent", "The center will prepare your shipment and let you know the cost.");
       setForwardOpen(false);
       setForwardForm(EMPTY_FORWARD);
       await onRefresh?.();
     },
     onError: (error) => {
-      Alert.alert("No se pudo enviar", formatErrorMessage(error, "Failed to request forwarding"));
+      Alert.alert("Could not send request", formatErrorMessage(error, "Failed to request forwarding"));
     },
   });
 
@@ -268,12 +268,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       return response.data;
     },
     onSuccess: async () => {
-      Alert.alert("Tarifa seleccionada", "Se creó la solicitud de reenvío.");
+      Alert.alert("Rate selected", "Your forwarding request was created.");
       setForwardOpen(false);
       await onRefresh?.();
     },
     onError: (error) => {
-      Alert.alert("No se pudo seleccionar", formatErrorMessage(error, "Unable to select forwarding rate"));
+      Alert.alert("Could not select rate", formatErrorMessage(error, "Unable to select forwarding rate"));
     },
   });
 
@@ -304,7 +304,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   /** Validación común a las dos vías; devuelve false y avisa si algo falta. */
   const forwardFormIsValid = () => {
     if (!forwardFieldsFilled) {
-      Alert.alert("Faltan datos", "Rellena los campos obligatorios de reenvío.");
+      Alert.alert("Missing details", "Fill in the required forwarding fields.");
       return false;
     }
 
@@ -312,12 +312,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       const value = Number(forwardForm.insuredValue || 0);
 
       if (!Number.isFinite(value) || value <= 0) {
-        Alert.alert("Falta el valor asegurado", "Indica cuánto quieres asegurar.");
+        Alert.alert("Insured value missing", "Enter the amount you want to insure.");
         return false;
       }
 
       if (value > MAX_INSURED_VALUE_USD) {
-        Alert.alert("Valor demasiado alto", "El seguro admite hasta $" + MAX_INSURED_VALUE_USD + ".");
+        Alert.alert("Value too high", "Insurance covers up to $" + MAX_INSURED_VALUE_USD + ".");
         return false;
       }
     }
@@ -337,7 +337,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const continueWithRate = () => {
     if (!forwardQuoteId || !selectedRateId) {
-      Alert.alert("Elige una tarifa", "Selecciona primero una tarifa de envío.");
+      Alert.alert("Choose a rate", "Select a shipping rate first.");
       return;
     }
     selectRate.mutate();
@@ -350,7 +350,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     <Card>
       <CardHeader>
         <CardTitle>Available actions</CardTitle>
-        <CardDescription>Solicita operaciones sobre este item</CardDescription>
+        <CardDescription>Request services for this item</CardDescription>
       </CardHeader>
 
       <CardContent className="gap-3 p-5 pt-0">
@@ -372,8 +372,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="min-w-0 flex-1">
               <Text className="font-semibold text-emerald-950">Forwarding in progress</Text>
               <Text className="mt-1 text-sm leading-5 text-emerald-800">
-                El centro está preparando tu envío. Mientras tanto no se pueden solicitar otras
-                operaciones sobre este item.
+                The center is preparing your shipment. No other services can be requested for
+                this item in the meantime.
               </Text>
             </View>
           </View>
@@ -385,7 +385,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="min-w-0 flex-1">
               <Text className="font-semibold text-sky-950">Scan request in progress</Text>
               <Text className="mt-1 text-sm leading-5 text-sky-800">
-                Tu item se está procesando. El escaneo aparecerá aquí cuando esté listo.
+                Your item is being processed. The scan will appear here once it is ready.
               </Text>
             </View>
           </View>
@@ -448,13 +448,13 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                 {activeNotice?.confirmLabel || "Continue"}
               </Button>
               <Button variant="outline" onPress={() => setNoticeService(null)}>
-                Cancelar
+                Cancel
               </Button>
             </>
           }
         >
           <Notice tone="amber">
-            Tu solicitud será revisada y cualquier cargo aplicable se te mostrará antes de completar el servicio.
+            Your request will be reviewed, and any applicable charge will be shown before the service is completed.
           </Notice>
         </Modal>
 
@@ -464,12 +464,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           title="Request Forward"
           description={
             isLetter
-              ? "Indica la dirección de destino. El centro tarificará el envío y te avisará."
-              : "Indica la dirección de destino y elige una tarifa."
+              ? "Enter the destination address. The center will price the shipment and notify you."
+              : "Enter the destination address and choose a rate."
           }
           footer={
             <Button variant="outline" onPress={() => setForwardOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
           }
         >
@@ -497,7 +497,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               onValueChange={onQuoteField("state")}
               options={US_STATES}
               placeholder="Select state"
-              title="Estado"
+              title="State"
             />
           </Field>
           <Field label="ZIP">
@@ -510,18 +510,18 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           <View className="gap-3">
             <ToggleRow
               label="Add tracking"
-              description="Para First-Class se añade Certified Mail; Priority Mail usa Delivery Confirmation."
+              description="First-Class adds Certified Mail; Priority Mail uses Delivery Confirmation."
               value={forwardForm.trackingRequested}
               onValueChange={onQuoteField("trackingRequested")}
             />
             <ToggleRow
               label="Add insurance"
-              description="Cubre el valor declarado si el envío se pierde o llega dañado. Incluye seguimiento."
+              description="Covers the declared value if the shipment is lost or damaged. Tracking included."
               value={forwardForm.insuranceRequested}
               onValueChange={onQuoteField("insuranceRequested")}
             />
             {forwardForm.insuranceRequested ? (
-              <Field label={"Insured value (USD, máx. $" + MAX_INSURED_VALUE_USD + ")"}>
+              <Field label={"Insured value (USD, max $" + MAX_INSURED_VALUE_USD + ")"}>
                 <Input
                   value={forwardForm.insuredValue}
                   onChangeText={onQuoteField("insuredValue")}
@@ -532,8 +532,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             ) : null}
             <Text className="text-xs leading-4 text-muted-foreground">
               {isLetter
-                ? "El centro incluirá estos extras al preparar tu envío."
-                : "El coste de estos extras ya viene sumado en cada tarifa de abajo."}
+                ? "The center will add these extras when preparing your shipment."
+                : "The cost of these extras is already included in every rate below."}
             </Text>
           </View>
 
@@ -548,7 +548,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-foreground">Shipping rates</Text>
-                <Text className="text-xs text-muted-foreground">Tarifas de sandbox. Aún no se compran etiquetas.</Text>
+                <Text className="text-xs text-muted-foreground">Sandbox rates. Labels are not purchased yet.</Text>
               </View>
               <Button variant="outline" size="sm" loading={quoteRates.isPending} onPress={getRates}>
                 Get Rates
@@ -582,9 +582,9 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                         {rate.trackingIncluded || rate.insuranceRequested ? (
                           <Text className="mt-1 text-xs text-muted-foreground">
                             {[
-                              rate.trackingIncluded ? "Tracking incluido" : null,
+                              rate.trackingIncluded ? "Tracking included" : null,
                               rate.insuranceRequested
-                                ? "Asegurado " + formatMoneyFromCents(rate.insuredValueCents)
+                                ? "Insured " + formatMoneyFromCents(rate.insuredValueCents)
                                 : null,
                             ]
                               .filter(Boolean)
@@ -610,8 +610,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           )}
 
           <Notice tone="sky">
-            Para envíos fuera de Estados Unidos, contacta con tu centro
-            {supportEmail ? " en " + supportEmail : ""}.
+            For shipments outside the United States, contact your center
+            {supportEmail ? " at " + supportEmail : ""}.
           </Notice>
         </Modal>
 
@@ -625,55 +625,55 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                 Submit
               </Button>
               <Button variant="outline" onPress={() => setPickupOpen(false)}>
-                Cancelar
+                Cancel
               </Button>
             </>
           }
         >
           <Field label="Pickup window (optional)">
-            <Input placeholder="p. ej. 9:00-11:00" value={pickupWindow} onChangeText={setPickupWindow} />
+            <Input placeholder="e.g. 9:00-11:00" value={pickupWindow} onChangeText={setPickupWindow} />
           </Field>
         </Modal>
 
         <Modal
           visible={discardOpen}
           onClose={() => setDiscardOpen(false)}
-          title="¿Descartar este item?"
-          description="Se envía una solicitud al centro confirmando que puede destruirse de forma segura."
+          title="Discard this item?"
+          description="A request is sent to the center confirming it can be safely destroyed."
           footer={
             <>
               <Button variant="destructive" loading={createRequest.isPending} onPress={submitDiscard}>
                 Confirm Discard
               </Button>
               <Button variant="outline" onPress={() => setDiscardOpen(false)}>
-                Cancelar
+                Cancel
               </Button>
             </>
           }
         >
           <Notice tone="rose">
-            El item no se elimina de inmediato. El personal debe revisar y completar la solicitud.
+            The item is not deleted right away. Staff must review and complete the request.
           </Notice>
         </Modal>
 
         <Modal
           visible={rejectOpen}
           onClose={() => setRejectOpen(false)}
-          title="¿Este item no es tuyo?"
-          description="El personal revisará la foto y la asignación. El item queda auditable mientras deciden reasignarlo o descartarlo."
+          title="This item is not yours?"
+          description="Staff will review the photo and the assignment. The item stays auditable while they decide whether to reassign or discard it."
           footer={
             <>
               <Button loading={rejectAssignment.isPending} onPress={() => rejectAssignment.mutate()}>
                 Send to Staff
               </Button>
               <Button variant="outline" onPress={() => setRejectOpen(false)}>
-                Cancelar
+                Cancel
               </Button>
             </>
           }
         >
           <Notice tone="amber">
-            Usa esto solo si el item pertenece a otro inquilino o se asignó a tu buzón por error.
+            Use this only if the item belongs to another tenant or was assigned to your mailbox by mistake.
           </Notice>
         </Modal>
       </CardContent>
@@ -837,7 +837,7 @@ export default function MailItemDetailScreen() {
         <View className="absolute inset-0 z-50 items-center justify-center bg-background/70">
           <View className="items-center gap-3 rounded-lg border border-border bg-card px-6 py-5">
             <ActivityIndicator size="large" color={brand.primaryColor} />
-            <Text className="text-sm font-medium text-foreground">Actualizando…</Text>
+            <Text className="text-sm font-medium text-foreground">Updating…</Text>
           </View>
         </View>
       ) : null}
@@ -910,7 +910,7 @@ export default function MailItemDetailScreen() {
           <Card className="border-emerald-200 bg-emerald-50">
             <CardHeader>
               <CardTitle className="text-base">Scan Completed</CardTitle>
-              <CardDescription>Tu escaneo está listo para consultar.</CardDescription>
+              <CardDescription>Your scan is ready to view.</CardDescription>
             </CardHeader>
             <CardContent className="gap-1.5 p-5 pt-0">
               <SummaryLine label="Pages" value={completedScanRequest.scanDetails.pageCount || 0} />
@@ -929,7 +929,7 @@ export default function MailItemDetailScreen() {
           <Card className="border-amber-200 bg-amber-50">
             <CardHeader>
               <CardTitle className="text-base">Forward Payment</CardTitle>
-              <CardDescription>Tarifa de reenvío seleccionada, pendiente de pago.</CardDescription>
+              <CardDescription>Forwarding rate selected, payment pending.</CardDescription>
             </CardHeader>
             <CardContent className="gap-1.5 p-5 pt-0">
               <SummaryLine label="Carrier" value={payableForwardRequest.forwardDetails.quotedCarrier} />
@@ -937,7 +937,7 @@ export default function MailItemDetailScreen() {
               <SummaryLine label="Accepted quote" value={formatMoneyFromCents(payableForwardRequest.forwardDetails.quotedAmountCents)} />
               <SummaryLine label="Payment" value={formatStatusDisplay(payableForwardRequest.forwardDetails.paymentStatus)} />
               <Notice tone="amber" className="mt-2">
-                El pago con tarjeta todavía no está disponible en la app. Complétalo desde el portal web.
+                Card payment is not available in the app yet. Complete it from the web portal.
               </Notice>
             </CardContent>
           </Card>
@@ -961,7 +961,7 @@ export default function MailItemDetailScreen() {
           <Card className="border-emerald-200 bg-emerald-50">
             <CardHeader>
               <CardTitle className="text-base">Forward Approved</CardTitle>
-              <CardDescription>Pagado. El centro puede enviarlo.</CardDescription>
+              <CardDescription>Paid. The center can ship it.</CardDescription>
             </CardHeader>
             <CardContent className="gap-1.5 p-5 pt-0">
               <SummaryLine label="Carrier" value={readyToShipForwardRequest.forwardDetails.quotedCarrier} />
@@ -1011,7 +1011,7 @@ export default function MailItemDetailScreen() {
         <Card>
           <CardHeader>
             <CardTitle>History</CardTitle>
-            <CardDescription>Qué ha pasado con este item</CardDescription>
+            <CardDescription>What has happened with this item</CardDescription>
           </CardHeader>
           <CardContent className="p-5 pt-0">
             {timeline.length === 0 ? (

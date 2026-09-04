@@ -45,7 +45,7 @@ export function Select({ value, onValueChange, options, placeholder = "Seleccion
             <Text className="text-lg font-semibold text-foreground">{title || placeholder}</Text>
             <TextInput
               className="h-11 rounded-lg border border-input bg-background px-3 text-base text-foreground"
-              placeholder="Buscar..."
+              placeholder="Search..."
               placeholderTextColor="#94a3b8"
               value={search}
               onChangeText={setSearch}
@@ -68,7 +68,7 @@ export function Select({ value, onValueChange, options, placeholder = "Seleccion
           />
 
           <Pressable onPress={() => setOpen(false)} className="border-t border-border bg-card p-4">
-            <Text className="text-center text-base font-semibold text-foreground">Cancelar</Text>
+            <Text className="text-center text-base font-semibold text-foreground">Cancel</Text>
           </Pressable>
         </View>
       </Modal>

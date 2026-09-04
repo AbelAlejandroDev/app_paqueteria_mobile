@@ -41,14 +41,14 @@ export default function DocumentPickerField({ label, value, onChange, required =
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Sin permiso de cámara", "Actívalo en los ajustes del sistema para poder fotografiar el documento.");
+      Alert.alert("Camera permission needed", "Turn it on in system settings to photograph the document.");
       return;
     }
 
     setBusy(true);
     try {
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
-      if (!result.canceled) applyAsset(result.assets[0], "documento.jpg");
+      if (!result.canceled) applyAsset(result.assets[0], "document.jpg");
     } finally {
       setBusy(false);
     }
@@ -58,14 +58,14 @@ export default function DocumentPickerField({ label, value, onChange, required =
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Sin permiso de fotos", "Actívalo en los ajustes del sistema para poder adjuntar una imagen.");
+      Alert.alert("Photos permission needed", "Turn it on in system settings to attach an image.");
       return;
     }
 
     setBusy(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-      if (!result.canceled) applyAsset(result.assets[0], "documento.jpg");
+      if (!result.canceled) applyAsset(result.assets[0], "document.jpg");
     } finally {
       setBusy(false);
     }
@@ -79,7 +79,7 @@ export default function DocumentPickerField({ label, value, onChange, required =
         const asset = result.assets[0];
         onChange({
           uri: asset.uri,
-          name: asset.name || "documento",
+          name: asset.name || "document",
           type: asset.mimeType || "application/octet-stream",
           size: asset.size,
         });
@@ -114,15 +114,15 @@ export default function DocumentPickerField({ label, value, onChange, required =
             </Text>
             {value.size ? <Text className="text-xs text-muted-foreground">{niceSize(value.size)}</Text> : null}
           </View>
-          <Pressable onPress={() => onChange(null)} hitSlop={10} accessibilityLabel={"Quitar " + label}>
+          <Pressable onPress={() => onChange(null)} hitSlop={10} accessibilityLabel={"Remove " + label}>
             <X size={18} color="#be123c" />
           </Pressable>
         </View>
       ) : (
         <View className="flex-row gap-2" pointerEvents={busy ? "none" : "auto"}>
-          <Choice icon={Camera} label="Cámara" onPress={pickFromCamera} />
-          <Choice icon={ImageIcon} label="Galería" onPress={pickFromLibrary} />
-          <Choice icon={FileText} label="Archivo" onPress={pickFromFiles} />
+          <Choice icon={Camera} label="Camera" onPress={pickFromCamera} />
+          <Choice icon={ImageIcon} label="Gallery" onPress={pickFromLibrary} />
+          <Choice icon={FileText} label="File" onPress={pickFromFiles} />
         </View>
       )}
     </View>

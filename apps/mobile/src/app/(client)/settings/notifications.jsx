@@ -57,7 +57,7 @@ export default function NotificationsScreen() {
       setPhone(formatForDisplay(data?.phone));
     },
     onError: (error) => {
-      Alert.alert("No se pudo guardar", formatErrorMessage(error, "Unable to save notification settings"));
+      Alert.alert("Could not save", formatErrorMessage(error, "Unable to save notification settings"));
     },
   });
 
@@ -73,9 +73,9 @@ export default function NotificationsScreen() {
   if (query.isError) {
     return (
       <View className="flex-1 gap-4 bg-background p-4">
-        <EmptyState title="No se pudieron cargar las notificaciones" description={formatErrorMessage(query.error)} />
+        <EmptyState title="Unable to load notification settings" description={formatErrorMessage(query.error)} />
         <Button variant="outline" onPress={() => query.refetch()}>
-          Reintentar
+          Retry
         </Button>
       </View>
     );
@@ -87,7 +87,7 @@ export default function NotificationsScreen() {
 
   const toggleAlerts = (next) => {
     if (next && !phoneIsValid) {
-      Alert.alert("Falta el teléfono", "Añade y guarda un número válido antes de activar los avisos por SMS.");
+      Alert.alert("Phone number missing", "Add and save a valid number before turning on text alerts.");
       return;
     }
 
@@ -102,7 +102,7 @@ export default function NotificationsScreen() {
             <View className="min-w-0 flex-1">
               <Text className="text-base font-medium text-foreground">Text Alerts</Text>
               <Text className="mt-1 text-sm leading-5 text-muted-foreground">
-                Avisos por SMS cuando llegue correspondencia nueva.
+                Text message alerts when new mail arrives.
               </Text>
             </View>
             <Switch
@@ -117,7 +117,7 @@ export default function NotificationsScreen() {
 
           {!phoneIsValid ? (
             <Text className="text-sm leading-5 text-amber-800">
-              Añade un número de teléfono válido para poder activarlos.
+              Add a valid phone number to turn these on.
             </Text>
           ) : null}
         </CardContent>
@@ -142,11 +142,11 @@ export default function NotificationsScreen() {
             disabled={!dirty || (phone.trim() !== "" && !phoneIsValid)}
             onPress={() => save.mutate({ phone: phone.trim() === "" ? null : phone })}
           >
-            Guardar teléfono
+            Save phone number
           </Button>
 
           <Text className="text-xs leading-4 text-muted-foreground">
-            Se guarda en formato internacional. Desactivar los avisos no borra el número.
+            Saved in international format. Turning alerts off does not delete the number.
           </Text>
         </CardContent>
       </Card>
@@ -156,8 +156,8 @@ export default function NotificationsScreen() {
           <CardContent className="p-5">
             <Text className="text-sm leading-5 text-amber-900">
               {query.data?.channels?.sms?.reason
-                || "El envío de SMS todavía no está configurado."}{" "}
-              Tu preferencia queda guardada y se aplicará cuando el centro lo active.
+                || "Text message delivery is not set up yet."}{" "}
+              Your preference is saved and will apply once your center enables it.
             </Text>
           </CardContent>
         </Card>

@@ -40,10 +40,10 @@ export default function SettingsScreen() {
   const timeZone = useMemo(() => formatTimeZone(), []);
 
   const confirmLogout = () => {
-    Alert.alert("Cerrar sesión", "¿Seguro que quieres salir de tu cuenta?", [
-      { text: "Cancelar", style: "cancel" },
+    Alert.alert("Sign out", "Are you sure you want to leave your account?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: "Cerrar sesión",
+        text: "Sign out",
         style: "destructive",
         onPress: async () => {
           await logout();
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
             onPress={confirmLogout}
             className="flex-row items-center justify-between gap-4 px-5 py-4 active:bg-muted"
           >
-            <Text className="text-base font-medium text-rose-700">Cerrar sesión</Text>
+            <Text className="text-base font-medium text-rose-700">Sign out</Text>
             <LogOut size={20} color="#be123c" />
           </Pressable>
         </Card>

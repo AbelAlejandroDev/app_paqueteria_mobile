@@ -72,9 +72,9 @@ export default function SecurityScreen() {
 
     // Se exige superar la comprobacion antes de activarla: si el lector no
     // funciona, activarla dejaria al cliente fuera de su propia app.
-    const ok = await authenticate("Confirma para activar el bloqueo");
+    const ok = await authenticate("Confirm to turn on the lock");
     if (!ok) {
-      Alert.alert("No se pudo activar", "No se completó la comprobación biométrica.");
+      Alert.alert("Could not turn it on", "The biometric check was not completed.");
       return;
     }
 
@@ -87,7 +87,7 @@ export default function SecurityScreen() {
         <CardContent className="gap-5 p-5">
           <SettingRow
             title="Keep me logged in"
-            description="Mantiene tu sesión al cerrar la app. Si lo apagas, tendrás que entrar cada vez."
+            description="Keeps your session when you close the app. If you turn it off, you will have to sign in every time."
             value={prefs.keepLoggedIn}
             onValueChange={(value) => update({ keepLoggedIn: value })}
           />
@@ -95,10 +95,10 @@ export default function SecurityScreen() {
           <View className="h-px bg-border" />
 
           <SettingRow
-            title={biometrics.available ? biometrics.label : "Bloqueo biométrico"}
+            title={biometrics.available ? biometrics.label : "Biometric lock"}
             description={
               biometrics.available
-                ? "Pide tu huella o rostro al abrir la app."
+                ? "Asks for your fingerprint or face when you open the app."
                 : biometrics.reason
             }
             value={prefs.requireBiometrics}

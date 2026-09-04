@@ -414,8 +414,8 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
 
           <Text className="text-sm leading-5 text-muted-foreground">
             {portal.available
-              ? "Se abre el portal seguro de Stripe. Al terminar vuelves aquí solo."
-              : portal.unavailableReason || "El portal de pago no está disponible para esta cuenta."}
+              ? "Opens the secure Stripe portal. You will come back here when you are done."
+              : portal.unavailableReason || "The payment portal is not available for this account."}
           </Text>
         </CardContent>
       </Card>
@@ -423,7 +423,7 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
       <Card>
         <CardHeader className="border-b border-border">
           <CardTitle className="text-lg">Subscription</CardTitle>
-          <CardDescription>Suscripción y estado de pago vinculados a esta cuenta.</CardDescription>
+          <CardDescription>Subscription and payment status linked to this account.</CardDescription>
         </CardHeader>
         <CardContent className="gap-3 p-4 pt-4">
           <View className="rounded-lg border border-border bg-background p-4">
@@ -490,7 +490,7 @@ export default function BillingScreen() {
       const url = response.data?.url;
 
       if (!url) {
-        throw new Error("Stripe no devolvió una URL del portal de facturación.");
+        throw new Error("Stripe did not return a billing portal URL.");
       }
 
       return WebBrowser.openAuthSessionAsync(url, returnUrl);
@@ -500,7 +500,7 @@ export default function BillingScreen() {
       queryClient.invalidateQueries({ queryKey: ["client-billing-payment"] });
     },
     onError: (error) => {
-      Alert.alert("No se pudo abrir el portal", formatErrorMessage(error, "Unable to open billing portal."));
+      Alert.alert("Could not open the portal", formatErrorMessage(error, "Unable to open billing portal."));
     },
   });
 
@@ -516,12 +516,12 @@ export default function BillingScreen() {
   }, [usageQuery, statementsQuery, paymentQuery]);
 
   const subtitle = useMemo(() => {
-    if (usageQuery.isLoading) return "Cargando plan, uso, extracto y método de pago.";
+    if (usageQuery.isLoading) return "Loading plan, usage, statement and payment method.";
 
     const planName = usageQuery.data?.plan?.name;
     const cycle = usageQuery.data?.billingCycle;
 
-    if (!planName || !cycle) return "Tu plan, el uso del ciclo, el extracto y el método de pago.";
+    if (!planName || !cycle) return "Your plan, cycle usage, statement and payment method.";
     return planName + " plan · " + formatCycle(cycle);
   }, [usageQuery.data, usageQuery.isLoading]);
 

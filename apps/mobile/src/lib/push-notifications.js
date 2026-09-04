@@ -63,20 +63,20 @@ function getProjectId() {
  */
 export async function getPushSupport() {
   if (isExpoGo) {
-    return { available: false, reason: "Las notificaciones necesitan un development build, no Expo Go." };
+    return { available: false, reason: "Notifications require a development build, not Expo Go." };
   }
 
   if (!loadNotifications()) {
-    return { available: false, reason: "El módulo de notificaciones no está disponible." };
+    return { available: false, reason: "The notifications module is not available." };
   }
 
   // El simulador no tiene servicio de notificaciones al que registrarse.
   if (!Device.isDevice) {
-    return { available: false, reason: "Las notificaciones necesitan un dispositivo real." };
+    return { available: false, reason: "Notifications require a physical device." };
   }
 
   if (!getProjectId()) {
-    return { available: false, reason: "El proyecto todavía no está enlazado con EAS." };
+    return { available: false, reason: "This project is not linked to EAS yet." };
   }
 
   return { available: true };
@@ -99,7 +99,7 @@ export async function registerForPush() {
     // Android necesita un canal declarado o el aviso no se muestra.
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
-        name: "Avisos del buzón",
+        name: "Mailbox alerts",
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     }
@@ -114,14 +114,14 @@ export async function registerForPush() {
       granted = requested.granted;
     }
 
-    if (!granted) return { token: null, reason: "Permiso de notificaciones denegado." };
+    if (!granted) return { token: null, reason: "Notification permission denied." };
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() });
     await api.post("/client/push-devices", { token, platform: Platform.OS });
 
     return { token, reason: null };
   } catch (error) {
-    return { token: null, reason: error?.message || "No se pudo registrar el dispositivo." };
+    return { token: null, reason: error?.message || "The device could not be registered." };
   }
 }
 

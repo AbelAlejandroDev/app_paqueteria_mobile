@@ -107,7 +107,7 @@ export default function DashboardScreen() {
       </View>
 
       {query.isError ? (
-        <EmptyState title="Unable to load mailbox summary." description="Desliza hacia abajo para reintentar." />
+        <EmptyState title="Unable to load mailbox summary." description="Pull down to try again." />
       ) : null}
 
       <View className="gap-4">

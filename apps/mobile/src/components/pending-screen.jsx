@@ -10,7 +10,7 @@ export default function PendingScreen({ title, source }) {
       <Text className="text-2xl font-semibold text-foreground">{title}</Text>
       <View className="mt-4 rounded-lg border border-border bg-card p-4">
         <Text className="text-sm leading-5 text-muted-foreground">
-          Pendiente de portar desde el front web.
+          Not available in the app yet.
         </Text>
         <Text className="mt-2 font-mono text-xs text-muted-foreground">{source}</Text>
       </View>

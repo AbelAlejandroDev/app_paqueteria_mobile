@@ -65,13 +65,13 @@ export function getMailItems(payload) {
 }
 
 export const FOLDER_LABELS = {
-  inbox: "Bandeja de entrada",
-  pending: "Pendiente",
-  action_required: "Accion requerida",
-  completed: "Completada",
+  inbox: "Inbox",
+  pending: "Pending",
+  action_required: "Action Required",
+  completed: "Completed",
   // Se conserva la etiqueta por si llega en una respuesta antigua, aunque el
   // backend ya no ofrezca la carpeta: lo descartado vive en Completada.
-  trash: "Papelera",
+  trash: "Trash",
 };
 
 export const FOLDER_ORDER = ["inbox", "pending", "action_required", "completed"];

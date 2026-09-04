@@ -54,7 +54,7 @@ export default function AuthorizedIndividualsPanel() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
     onError: (error) => {
-      Alert.alert("No se pudo guardar", formatErrorMessage(error, "Unable to save authorized individual"));
+      Alert.alert("Could not save", formatErrorMessage(error, "Unable to save authorized individual"));
     },
   });
 
@@ -65,14 +65,14 @@ export default function AuthorizedIndividualsPanel() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
     onError: (error) => {
-      Alert.alert("No se pudo eliminar", formatErrorMessage(error, "Unable to remove authorized individual"));
+      Alert.alert("Could not remove", formatErrorMessage(error, "Unable to remove authorized individual"));
     },
   });
 
   const confirmRemove = (item) => {
-    Alert.alert("Eliminar autorizado", "¿Quitar a " + item.fullName + " de la lista?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar", style: "destructive", onPress: () => removeMutation.mutate(item.id) },
+    Alert.alert("Remove authorized person", "Remove " + item.fullName + " from the list?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => removeMutation.mutate(item.id) },
     ]);
   };
 
@@ -87,10 +87,10 @@ export default function AuthorizedIndividualsPanel() {
         <View className="min-w-0 flex-1">
           <View className="flex-row items-center gap-2">
             <UserCheck size={16} color="#64748b" />
-            <Text className="text-base font-semibold text-foreground">Personas autorizadas</Text>
+            <Text className="text-base font-semibold text-foreground">Authorized individuals</Text>
           </View>
           <Text className="mt-1 text-sm leading-5 text-muted-foreground">
-            Quién puede recibir o recoger correo en tu nombre.
+            Who can receive or pick up mail on your behalf.
           </Text>
         </View>
         <Button
@@ -99,23 +99,23 @@ export default function AuthorizedIndividualsPanel() {
           icon={isAdding ? <X size={16} color="#0f172a" /> : <Plus size={16} color="#0f172a" />}
           onPress={() => setIsAdding((value) => !value)}
         >
-          {isAdding ? "Cancelar" : "Añadir"}
+          {isAdding ? "Cancel" : "Add"}
         </Button>
       </View>
 
       {isAdding ? (
         <View className="gap-3 rounded-lg border border-border bg-card p-4">
-          <Field label="Nombre completo">
+          <Field label="Full name">
             <Input value={form.fullName} onChangeText={onChange("fullName")} />
           </Field>
-          <Field label="Relación">
+          <Field label="Relationship">
             <Input
               value={form.relationship}
               onChangeText={onChange("relationship")}
-              placeholder="Familiar, asistente, pareja"
+              placeholder="Relative, assistant, partner"
             />
           </Field>
-          <Field label="Teléfono">
+          <Field label="Phone">
             <Input value={form.phone} onChangeText={onChange("phone")} keyboardType="phone-pad" />
           </Field>
           <Field label="Email">
@@ -126,22 +126,22 @@ export default function AuthorizedIndividualsPanel() {
               autoCapitalize="none"
             />
           </Field>
-          <Field label="Notas">
+          <Field label="Notes">
             <Textarea
               value={form.notes}
               onChangeText={onChange("notes")}
-              placeholder="Nota interna o instrucción de recogida"
+              placeholder="Internal note or pickup instruction"
             />
           </Field>
           <Button loading={createMutation.isPending} onPress={() => createMutation.mutate()}>
-            Guardar
+            Save
           </Button>
         </View>
       ) : null}
 
       {query.isLoading ? (
         <View className="rounded-lg border border-border bg-card p-4">
-          <Text className="text-sm text-muted-foreground">Cargando personas autorizadas...</Text>
+          <Text className="text-sm text-muted-foreground">Loading authorized individuals...</Text>
         </View>
       ) : query.isError ? (
         <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
@@ -151,7 +151,7 @@ export default function AuthorizedIndividualsPanel() {
         </View>
       ) : activeItems.length === 0 ? (
         <View className="rounded-lg border border-dashed border-slate-300 bg-card p-4">
-          <Text className="text-sm text-muted-foreground">No hay ninguna persona autorizada.</Text>
+          <Text className="text-sm text-muted-foreground">No authorized individuals yet.</Text>
         </View>
       ) : (
         <View className="gap-2">
@@ -160,7 +160,7 @@ export default function AuthorizedIndividualsPanel() {
               <View className="flex-row flex-wrap items-center gap-2">
                 <Text className="font-semibold text-foreground">{item.fullName}</Text>
                 <Badge variant="outline" className="border-emerald-200 bg-emerald-50" labelClassName="text-emerald-700">
-                  Activo
+                  Active
                 </Badge>
               </View>
 
@@ -181,7 +181,7 @@ export default function AuthorizedIndividualsPanel() {
                 disabled={removeMutation.isPending}
                 onPress={() => confirmRemove(item)}
               >
-                Eliminar
+                Remove
               </Button>
             </View>
           ))}
