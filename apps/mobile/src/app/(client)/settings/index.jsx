@@ -5,6 +5,7 @@ import { ChevronRight, LogOut } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
+import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { Card } from "@/components/ui/card";
 
 /**
@@ -60,6 +61,14 @@ export default function SettingsScreen() {
     // "User" es la cuenta con la que entra, asi que el correo identifica mejor
     // que el nombre, que ya sale en el panel.
     { label: "User", value: user?.email || "Not assigned" },
+    // El plan sale de /auth/me, que Settings ya tiene cargado: no hace falta
+    // consultar facturacion para decir algo que el cliente pregunta aqui.
+    {
+      label: "Plan",
+      value: user?.clientContext?.servicePlan
+        ? formatStatusDisplay(user.clientContext.servicePlan)
+        : "Not assigned",
+    },
     { label: "App Version", value: formatAppVersion() },
     { label: "Time Zone", value: timeZone },
   ];
