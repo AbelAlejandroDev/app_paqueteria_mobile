@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -11,6 +11,8 @@ import { getClientName, getOrganizationName } from "@/lib/client-profile";
 import { formatErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal, Notice } from "@/components/ui/modal";
+import ConnectionError from "@/components/common/connection-error";
+import { hasPassedTerms, markTermsPassed } from "@/lib/terms-state";
 
 const QUERY_KEY = ["auth-terms-current"];
 
@@ -117,6 +119,9 @@ function TermsScreen({ terms, organizationName, onAccept, accepting, error }) {
 export default function TermsGate({ children }) {
   const { user } = useAuth();
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  // null mientras no se sabe: hasta entonces no se puede decidir si un fallo
+  // de red debe frenar o dejar pasar.
+  const [passedBefore, setPassedBefore] = useState(null);
 
   const query = useQuery({
     queryKey: QUERY_KEY,
@@ -127,12 +132,34 @@ export default function TermsGate({ children }) {
   const accept = useMutation({
     mutationFn: async () => (await api.post("/auth/terms/current/accept")).data,
     onSuccess: async () => {
+      await markTermsPassed(user?.id);
+      setPassedBefore(true);
       setWelcomeOpen(true);
       await query.refetch();
     },
   });
 
-  if (query.isLoading) {
+  useEffect(() => {
+    let active = true;
+
+    hasPassedTerms(user?.id).then((passed) => {
+      if (active) setPassedBefore(passed);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  // Que el servidor diga que no hace falta aceptar tambien cuenta: la proxima
+  // vez que no haya red, este ya no es alguien que entre por primera vez. Solo
+  // se persiste; el estado en memoria no hace falta tocarlo, porque teniendo
+  // respuesta las ramas de abajo ya no dependen de el.
+  useEffect(() => {
+    if (query.data && !query.data.needsAcceptance) markTermsPassed(user?.id);
+  }, [query.data, user?.id]);
+
+  if (query.isLoading || passedBefore === null) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator color={brand.primaryColor} />
@@ -140,9 +167,8 @@ export default function TermsGate({ children }) {
     );
   }
 
-  // Un fallo de red no puede dejar al cliente fuera de su buzon. Se le deja
-  // pasar y la puerta vuelve a intentarlo en el siguiente arranque, que es
-  // preferible a bloquear a alguien por algo que no depende de el.
+  // Va antes que el error: si ya se sabe que hay terminos por aceptar, un
+  // refresco fallido en segundo plano no debe cambiar lo que se muestra.
   if (query.data?.needsAcceptance && query.data?.terms) {
     return (
       <TermsScreen
@@ -151,6 +177,31 @@ export default function TermsGate({ children }) {
         accepting={accept.isPending}
         error={accept.isError ? formatErrorMessage(accept.error, "Unable to accept the terms.") : ""}
         onAccept={() => accept.mutate()}
+      />
+    );
+  }
+
+  /**
+   * Sin respuesta del servidor no se sabe que hay que aceptar.
+   *
+   * A quien ya paso la puerta se le deja entrar: dejarle fuera de su buzon por
+   * un corte de red seria castigarle por algo que no depende de el. A quien
+   * entra por primera vez no, porque colarle sin aceptar nada es justo lo que
+   * la puerta existe para impedir.
+   */
+  if (query.isError && !passedBefore) {
+    const offline = !query.error?.response;
+
+    return (
+      <ConnectionError
+        title={offline ? "No internet connection" : "We could not load the terms"}
+        description={
+          offline
+            ? "You need a connection the first time you sign in, to review and accept the terms."
+            : formatErrorMessage(query.error, "Please try again in a moment.")
+        }
+        retrying={query.isFetching}
+        onRetry={() => query.refetch()}
       />
     );
   }
