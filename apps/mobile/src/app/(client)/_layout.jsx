@@ -4,6 +4,7 @@ import { CircleHelp, CreditCard, Home, Mail, Settings } from "lucide-react-nativ
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
+import PaymentAlerts from "@/components/common/payment-alerts";
 
 const ACTIVE_COLOR = brand.primaryColor;
 const INACTIVE_COLOR = "#64748b";
@@ -33,58 +34,64 @@ export default function ClientLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: ACTIVE_COLOR,
-        tabBarInactiveTintColor: INACTIVE_COLOR,
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Home",
-          // El panel abre con el logotipo de la marca, asi que una barra de
-          // titulo encima solo repetiria la navegacion. La pantalla se ocupa
-          // de su propio margen superior.
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="mail-items"
-        options={{
-          title: "Mail",
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => <Mail color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="billing"
-        options={{
-          title: "Billing",
-          tabBarIcon: ({ color, size }) => <CreditCard color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          // Settings tiene su propio Stack para las subsecciones.
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="help"
-        options={{
-          title: "Help",
-          tabBarIcon: ({ color, size }) => <CircleHelp color={color} size={size} />,
-        }}
-      />
+    <>
+      {/* Cubre todas las pantallas del cliente, no solo el panel: el aviso
+          debe salir entre por donde entre. */}
+      <PaymentAlerts />
 
-      {/* Rutas accesibles pero sin pestaña propia. */}
-      <Tabs.Screen name="usps-verification" options={{ href: null, title: "USPS Verification" }} />
-      <Tabs.Screen name="service-requests/new" options={{ href: null, title: "New Request" }} />
-    </Tabs>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: ACTIVE_COLOR,
+          tabBarInactiveTintColor: INACTIVE_COLOR,
+        }}
+      >
+        <Tabs.Screen
+          name="dashboard"
+          options={{
+            title: "Home",
+            // El panel abre con el logotipo de la marca, asi que una barra de
+            // titulo encima solo repetiria la navegacion. La pantalla se ocupa
+            // de su propio margen superior.
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="mail-items"
+          options={{
+            title: "Mail",
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => <Mail color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="billing"
+          options={{
+            title: "Billing",
+            tabBarIcon: ({ color, size }) => <CreditCard color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            // Settings tiene su propio Stack para las subsecciones.
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="help"
+          options={{
+            title: "Help",
+            tabBarIcon: ({ color, size }) => <CircleHelp color={color} size={size} />,
+          }}
+        />
+
+        {/* Rutas accesibles pero sin pestaña propia. */}
+        <Tabs.Screen name="usps-verification" options={{ href: null, title: "USPS Verification" }} />
+        <Tabs.Screen name="service-requests/new" options={{ href: null, title: "New Request" }} />
+      </Tabs>
+    </>
   );
 }

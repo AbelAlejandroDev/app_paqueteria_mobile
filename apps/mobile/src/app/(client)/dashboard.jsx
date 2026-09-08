@@ -10,7 +10,7 @@ import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { formatClientAddress, getClientName } from "@/lib/client-profile";
+import { formatClientAddress, getCenterLabel, getClientName, getOrganizationName } from "@/lib/client-profile";
 import { brandWordmarkOnLight } from "@/lib/brand-assets";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
@@ -53,6 +53,8 @@ function AccessCard({ title, icon: Icon, onPress, tone = "default", notification
 export default function DashboardScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const organizationName = getOrganizationName(user);
+  const centerLabel = getCenterLabel(user);
 
   const query = useQuery({
     queryKey: ["client-mail-items"],
@@ -90,6 +92,21 @@ export default function DashboardScreen() {
           ) : (
             <Text className="text-xl font-semibold text-foreground">{brand.name}</Text>
           )}
+
+          {/* Organizacion arriba y centro debajo, nunca en la misma linea: el
+              nombre del tenant ya no lleva el centro dentro, que era de cuando
+              solo habia uno. Cada linea se omite si no viene, en vez de dejar
+              un hueco. */}
+          {organizationName || centerLabel ? (
+            <View className="items-center gap-0.5">
+              {organizationName ? (
+                <Text className="text-center text-base font-semibold text-foreground">{organizationName}</Text>
+              ) : null}
+              {centerLabel ? (
+                <Text className="text-center text-sm text-muted-foreground">{centerLabel}</Text>
+              ) : null}
+            </View>
+          ) : null}
 
           <View className="items-center gap-2">
             <Text className="text-center text-2xl font-semibold tracking-tight text-foreground">

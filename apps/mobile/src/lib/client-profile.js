@@ -56,3 +56,25 @@ export function hasClientAddress(user) {
   const address = getClientAddress(user);
   return Boolean(address.address1 || address.city);
 }
+
+/**
+ * Organizacion y centro, para las dos lineas bajo el logo.
+ *
+ * Van separadas a proposito: "The Worx Offices" es la organizacion y
+ * "Sandlake Orlando" el centro, y juntarlas reproduciria el nombre viejo del
+ * tenant, que llevaba el centro dentro cuando solo habia uno.
+ *
+ * El centro sale del usuario autenticado, nunca de un ajuste del dispositivo:
+ * el cliente pertenece al centro de su buzon, y dejar elegirlo en el telefono
+ * solo mostraria algo que no es cierto.
+ */
+export function getOrganizationName(user) {
+  return user?.branding?.brandingName || user?.branding?.name || "";
+}
+
+/** `displayName` es la forma corta; `name` la larga, como respaldo. */
+export function getCenterLabel(user) {
+  const center = user?.center;
+  if (!center) return "";
+  return center.displayName || center.name || "";
+}
