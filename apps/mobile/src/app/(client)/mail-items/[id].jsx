@@ -849,6 +849,11 @@ export default function MailItemDetailScreen() {
     if (!item?.id || markedRef.current === item.id) return;
     markedRef.current = item.id;
 
+    // Abrir el item ya lo marca como visto en el servidor, pero las listas
+    // siguen con la respuesta anterior: sin esto el aviso de la carpeta se
+    // quedaba puesto hasta que el cliente tiraba de la lista para recargar.
+    queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
+
     (async () => {
       try {
         const response = await api.get("/client/notifications", { params: { unreadOnly: true } });

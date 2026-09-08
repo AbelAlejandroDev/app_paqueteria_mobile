@@ -56,15 +56,27 @@ const FOLDER_ICONS = {
   trash: Trash2,
 };
 
+/** Aviso de elementos sin ver, igual en carpetas y subcarpetas. */
+function UnreadBadge({ count }) {
+  if (!count) return null;
+
+  return (
+    <View className="h-7 min-w-[28px] items-center justify-center rounded-full bg-rose-500 px-2">
+      <Text className="text-xs font-semibold text-white">{count > 99 ? "99+" : count}</Text>
+    </View>
+  );
+}
+
 /**
  * Subcarpeta de Completada.
  *
- * Se pinta como las de primer nivel para que se lean igual, pero sin contador:
- * el backend devuelve el total de la carpeta, no el de cada tipo de cierre, y
- * poner un cero fijo diria algo falso.
+ * Se pinta como las de primer nivel para que se lean igual, contador incluido:
+ * el aviso de la carpeta dice cuantos hay sin ver, y sin repartirlo aqui el
+ * cliente entraba y no sabia cual de los seis tipos mirar.
  */
 function CompletedFolderCard({ folder }) {
   const Icon = folder.icon;
+  const count = Number(folder.count || 0);
 
   return (
     <Pressable
@@ -74,9 +86,15 @@ function CompletedFolderCard({ folder }) {
       <View className="h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
         <Icon size={22} color="#334155" />
       </View>
-      <Text className="min-w-0 flex-1 text-base font-semibold text-foreground" numberOfLines={1}>
-        {folder.label}
-      </Text>
+      <View className="min-w-0 flex-1">
+        <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+          {folder.label}
+        </Text>
+        <Text className="mt-0.5 text-sm text-muted-foreground">
+          {count} item{count === 1 ? "" : "s"}
+        </Text>
+      </View>
+      <UnreadBadge count={folder.notificationCount} />
     </Pressable>
   );
 }
@@ -102,13 +120,7 @@ function FolderCard({ folder }) {
           {count} item{count === 1 ? "" : "s"}
         </Text>
       </View>
-      {notificationCount > 0 ? (
-        <View className="h-7 min-w-[28px] items-center justify-center rounded-full bg-rose-500 px-2">
-          <Text className="text-xs font-semibold text-white">
-            {notificationCount > 99 ? "99+" : notificationCount}
-          </Text>
-        </View>
-      ) : null}
+      <UnreadBadge count={notificationCount} />
     </Pressable>
   );
 }
@@ -134,6 +146,8 @@ function MailItemCard({ item }) {
   const TypeIcon = item.type === "PACKAGE" ? Package2 : Mail;
   const statusColor = getStatusColor(item.status);
   const currentColor = getCurrentStatusColor(item);
+  // Mismo criterio que usa el backend para contar los avisos de la carpeta.
+  const isUnread = item.viewStatus !== "VIEWED" && !item.viewedAt;
 
   return (
     <Card className="mb-4">
@@ -154,6 +168,9 @@ function MailItemCard({ item }) {
             <Text className="min-w-0 flex-1 text-base font-bold text-foreground" numberOfLines={1}>
               {item.itemCode || item.id}
             </Text>
+            {/* El mismo punto rojo del aviso de la carpeta, para que al entrar
+                se vea de un vistazo cual es el que lo provocaba. */}
+            {isUnread ? <View className="h-2.5 w-2.5 rounded-full bg-rose-500" /> : null}
           </View>
 
           <Text className="text-xs font-medium text-muted-foreground" numberOfLines={1}>
@@ -205,6 +222,12 @@ export default function MailItemsScreen() {
   });
 
   const mailItems = query.data?.items || [];
+  // El backend manda los contadores por tipo de cierre; aqui solo se cruzan
+  // con la etiqueta y el icono, que son cosa de la app.
+  const completedFolders = useMemo(() => {
+    const byKey = new Map((query.data?.completedFilterCounts || []).map((entry) => [entry.key, entry]));
+    return COMPLETED_FOLDERS.map((folder) => ({ ...folder, ...byKey.get(folder.key) }));
+  }, [query.data?.completedFilterCounts]);
   const folders = useMemo(() => normalizeFolders(query.data?.folders), [query.data?.folders]);
 
   const isFolderLanding = !selectedFolder;
@@ -273,7 +296,7 @@ export default function MailItemsScreen() {
         <FlatList
           className="flex-1 bg-background"
           contentContainerClassName="p-4 pb-24"
-          data={isBusy ? [] : COMPLETED_FOLDERS}
+          data={isBusy ? [] : completedFolders}
           keyExtractor={(folder) => folder.key}
           renderItem={({ item }) => <CompletedFolderCard folder={item} />}
           ListHeaderComponent={header}
