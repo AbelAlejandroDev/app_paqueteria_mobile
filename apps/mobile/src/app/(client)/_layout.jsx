@@ -5,6 +5,7 @@ import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import PaymentAlerts from "@/components/common/payment-alerts";
+import TermsGate from "@/components/common/terms-gate";
 
 const ACTIVE_COLOR = brand.primaryColor;
 const INACTIVE_COLOR = "#64748b";
@@ -34,7 +35,7 @@ export default function ClientLayout() {
   }
 
   return (
-    <>
+    <TermsGate>
       {/* Cubre todas las pantallas del cliente, no solo el panel: el aviso
           debe salir entre por donde entre. */}
       <PaymentAlerts />
@@ -92,6 +93,6 @@ export default function ClientLayout() {
         <Tabs.Screen name="usps-verification" options={{ href: null, title: "USPS Verification" }} />
         <Tabs.Screen name="service-requests/new" options={{ href: null, title: "New Request" }} />
       </Tabs>
-    </>
+    </TermsGate>
   );
 }
