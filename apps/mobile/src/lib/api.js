@@ -11,11 +11,6 @@ if (!API_BASE_URL) {
 
 export const api = createApiClient({
   baseURL: API_BASE_URL,
-  headers: {
-    // Solo hace falta mientras la API se sirva por el túnel de ngrok.
-    // Se puede quitar en cuanto api.theworxoffices.com esté con TLS propio.
-    "ngrok-skip-browser-warning": "true",
-  },
   onUnauthorized: () => {
     // Equivalente nativo del window.location.assign("/login") del front web.
     router.replace("/login");
