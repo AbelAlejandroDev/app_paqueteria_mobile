@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "57624075140",
-    "project_id": "the-worx-34827",
-    "storage_bucket": "the-worx-34827.firebasestorage.app"
+    "project_number": "904741189325",
+    "project_id": "the-worx-client",
+    "storage_bucket": "the-worx-client.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:57624075140:android:1942e347af23cd74e9dbd1",
+        "mobilesdk_app_id": "1:904741189325:android:1313f37020c91978cb1b84",
         "android_client_info": {
           "package_name": "com.theworxoffices.clientportal"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBC9emYcXI4L4papszKvPAkEjGhbvM1kCU"
+          "current_key": "AIzaSyCXRgY_YlGdcCU9JwVHeWTJPBSywNkBMhc"
         }
       ],
       "services": {
