@@ -137,4 +137,7 @@ export const PAYABLE_PAYMENT_STATUSES = [
   "PAYMENT_PENDING",
   "RECONFIRMATION_REQUIRED",
   "FAILED",
+  // El banco pidio autenticacion al cobrar la tarjeta guardada. Se paga igual,
+  // pero abriendo el pago para responder al reto.
+  "AUTHENTICATION_REQUIRED",
 ];

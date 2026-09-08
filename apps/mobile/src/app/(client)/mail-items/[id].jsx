@@ -3,6 +3,9 @@ import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollVie
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
+// Con nombre propio porque `Linking` de react-native ya esta importado arriba
+// y aqui se usan los dos: aquel abre URLs, este construye el deep link.
+import * as ExpoLinking from "expo-linking";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Eye, ImageIcon, Package2, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
@@ -90,6 +93,75 @@ function ToggleRow({ label, description, value, onValueChange }) {
         thumbColor="#ffffff"
       />
     </View>
+  );
+}
+
+/**
+ * Cobro del reenvio de un paquete.
+ *
+ * El pago lo aloja Stripe y se abre en el navegador: asi el reto 3DS del banco
+ * se resuelve donde Stripe sabe hacerlo, sin meter su SDK nativo en la app.
+ * Al volver solo se recarga; quien da el pago por bueno es el webhook, no esta
+ * pantalla, que no puede saber si el cargo cuajo.
+ */
+function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
+  const details = request.forwardDetails || {};
+  const needsAuthentication = details.paymentStatus === "AUTHENTICATION_REQUIRED";
+
+  const pay = useMutation({
+    mutationFn: async () => {
+      // La misma URL para las dos salidas: la app no distingue entre pagar y
+      // desistir, y en ambos casos hay que volver al item y recargar.
+      const returnUrl = ExpoLinking.createURL("/mail-items/" + mailItemId);
+      const response = await api.post("/client/forwarding/" + request.id + "/checkout-session", {
+        successUrl: returnUrl,
+        cancelUrl: returnUrl,
+      });
+
+      const url = response.data?.url;
+      if (!url) throw new Error("Stripe did not return a payment URL.");
+
+      return WebBrowser.openAuthSessionAsync(url, returnUrl);
+    },
+    onSuccess: async () => {
+      await onRefresh?.();
+    },
+    onError: (error) => {
+      Alert.alert("Could not open payment", formatErrorMessage(error, "Unable to start the payment."));
+    },
+  });
+
+  return (
+    <Card className="border-amber-200 bg-amber-50">
+      <CardHeader>
+        <CardTitle className="text-base">Forward Payment</CardTitle>
+        <CardDescription>
+          {needsAuthentication
+            ? "Your bank asked to verify this payment."
+            : "Forwarding rate selected, payment pending."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="gap-1.5 p-5 pt-0">
+        <SummaryLine label="Carrier" value={details.quotedCarrier} />
+        <SummaryLine label="Service" value={details.quotedService} />
+        <SummaryLine label="Accepted quote" value={formatMoneyFromCents(details.quotedAmountCents)} />
+        <SummaryLine label="Payment" value={formatStatusDisplay(details.paymentStatus)} />
+
+        {needsAuthentication ? (
+          <Notice tone="amber" className="mt-2">
+            Your card is fine, but the bank needs you to confirm this charge. Tap below to finish it.
+          </Notice>
+        ) : null}
+
+        <Button className="mt-3" loading={pay.isPending} onPress={() => pay.mutate()}>
+          {needsAuthentication ? "Verify and pay" : "Pay now"}
+        </Button>
+
+        <Text className="mt-1 text-xs leading-4 text-muted-foreground">
+          Payment opens in a secure Stripe page. It can take a moment to show as paid here.
+        </Text>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -926,21 +998,11 @@ export default function MailItemDetailScreen() {
         ) : null}
 
         {payableForwardRequest?.forwardDetails ? (
-          <Card className="border-amber-200 bg-amber-50">
-            <CardHeader>
-              <CardTitle className="text-base">Forward Payment</CardTitle>
-              <CardDescription>Forwarding rate selected, payment pending.</CardDescription>
-            </CardHeader>
-            <CardContent className="gap-1.5 p-5 pt-0">
-              <SummaryLine label="Carrier" value={payableForwardRequest.forwardDetails.quotedCarrier} />
-              <SummaryLine label="Service" value={payableForwardRequest.forwardDetails.quotedService} />
-              <SummaryLine label="Accepted quote" value={formatMoneyFromCents(payableForwardRequest.forwardDetails.quotedAmountCents)} />
-              <SummaryLine label="Payment" value={formatStatusDisplay(payableForwardRequest.forwardDetails.paymentStatus)} />
-              <Notice tone="amber" className="mt-2">
-                Card payment is not available in the app yet. Complete it from the web portal.
-              </Notice>
-            </CardContent>
-          </Card>
+          <ForwardPaymentCard
+            request={payableForwardRequest}
+            mailItemId={item.id}
+            onRefresh={() => query.refetch()}
+          />
         ) : null}
 
         {!payableForwardRequest && approvableForwardRequest?.forwardDetails ? (
