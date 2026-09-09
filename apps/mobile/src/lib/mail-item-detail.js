@@ -106,6 +106,19 @@ export function buildTimeline(item) {
         sr,
       });
     }
+
+    // El centro puede explicar por que rechaza. Sin esto el cliente veia la
+    // solicitud rechazada y ningun motivo, que es lo que le hace volver a
+    // pedir lo mismo o llamar al centro para preguntar.
+    if (sr.rejectedAt) {
+      events.push({
+        at: sr.rejectedAt,
+        title: "Service request rejected: " + sr.type,
+        description: sr.rejectionReason || "No reason was given.",
+        kind: "SR_REJECTED",
+        sr,
+      });
+    }
   }
 
   // El modelo no guarda pickedUpAt/forwardedAt, así que el evento final se

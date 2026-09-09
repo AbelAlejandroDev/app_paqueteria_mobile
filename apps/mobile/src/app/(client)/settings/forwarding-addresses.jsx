@@ -11,7 +11,7 @@ import EmptyState from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, Notice } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -155,6 +155,9 @@ export default function ForwardingAddressesScreen() {
     setOpen(false);
     setEditing(null);
     setForm(EMPTY_FORM);
+    // El resultado es de la direccion que habia escrita; dejarlo puesto lo
+    // mostraria sobre otra distinta.
+    verify.reset();
   };
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
@@ -207,12 +210,14 @@ export default function ForwardingAddressesScreen() {
   const startCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    verify.reset();
     setOpen(true);
   };
 
   const startEdit = (address) => {
     setEditing(address);
     setForm(toForm(address));
+    verify.reset();
     setOpen(true);
   };
 
@@ -225,6 +230,51 @@ export default function ForwardingAddressesScreen() {
 
   const canSave =
     form.name.trim() && form.addressLine1.trim() && form.city.trim() && form.state && form.zip.trim();
+
+  /**
+   * Comprobar la direccion con el transportista antes de guardarla.
+   *
+   * Sin esto, una direccion mal escrita se guarda, se cotiza y se cobra, y solo
+   * al comprar la etiqueta el transportista la rechaza: dinero cobrado y
+   * ningun envio. Preguntar mientras el cliente la escribe no cuesta nada y la
+   * arregla en el momento.
+   *
+   * Que el transportista no la reconozca no es un fallo de la peticion: llega
+   * como respuesta normal y se enseña junto al formulario.
+   */
+  const verify = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`${ENDPOINT}/verify`, {
+        recipient: form.name.trim(),
+        addressLine1: form.addressLine1.trim(),
+        addressLine2: form.addressLine2.trim() || null,
+        city: form.city.trim(),
+        state: form.state,
+        zip: form.zip.trim(),
+        phone: form.phone.trim() || null,
+      });
+      return response.data;
+    },
+    onError: (error) => {
+      Alert.alert("Could not check the address", formatErrorMessage(error, "Try again in a moment."));
+    },
+  });
+
+  const applySuggested = () => {
+    const suggested = verify.data?.suggested;
+    if (!suggested) return;
+
+    setForm((current) => ({
+      ...current,
+      name: suggested.recipient || current.name,
+      addressLine1: suggested.addressLine1 || current.addressLine1,
+      addressLine2: suggested.addressLine2 || "",
+      city: suggested.city || current.city,
+      state: suggested.state || current.state,
+      zip: suggested.zip || current.zip,
+    }));
+    verify.reset();
+  };
 
   if (query.isLoading) {
     return (
@@ -286,15 +336,51 @@ export default function ForwardingAddressesScreen() {
         description="The one marked as default is the address used for forwarding."
         footer={
           <>
-            <Button variant="outline" onPress={closeForm}>
-              Cancel
+            <Button
+              variant="outline"
+              loading={verify.isPending}
+              disabled={!canSave}
+              onPress={() => verify.mutate()}
+            >
+              Check address
             </Button>
             <Button loading={save.isPending} disabled={!canSave} onPress={() => save.mutate()}>
               Save
             </Button>
+            <Button variant="outline" onPress={closeForm}>
+              Cancel
+            </Button>
           </>
         }
       >
+        {/* El resultado va arriba, pegado a los campos que hay que corregir. */}
+        {verify.data?.verified === false ? (
+          <Notice tone="amber">{verify.data.reason}</Notice>
+        ) : null}
+
+        {verify.data?.verified ? (
+          verify.data.suggested ? (
+            <View className="gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <Text className="text-sm font-medium text-emerald-900">
+                The carrier suggests this address
+              </Text>
+              <Text className="text-sm leading-5 text-emerald-800">
+                {[
+                  verify.data.suggested.addressLine1,
+                  verify.data.suggested.addressLine2,
+                  `${verify.data.suggested.city}, ${verify.data.suggested.state} ${verify.data.suggested.zip}`,
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              </Text>
+              <Button variant="outline" size="sm" onPress={applySuggested}>
+                Use this version
+              </Button>
+            </View>
+          ) : (
+            <Notice tone="emerald">The carrier recognises this address.</Notice>
+          )
+        ) : null}
         <Field label="Label (optional)">
           <Input value={form.label} onChangeText={onField("label")} placeholder="Home, Office..." />
         </Field>

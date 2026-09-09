@@ -983,6 +983,22 @@ export default function MailItemDetailScreen() {
           />
         ) : null}
 
+        {/* Solo si el rechazo es lo ultimo que paso: si el cliente ya volvio a
+            pedirlo, ensenar el rechazo viejo confunde sobre el estado actual. */}
+        {lastAction?.kind === "SR_REJECTED" ? (
+          <Card className="border-rose-200 bg-rose-50">
+            <CardHeader>
+              <CardTitle className="text-base">
+                {formatStatusDisplay(lastAction.sr?.type || "Request")} request declined
+              </CardTitle>
+              <CardDescription>{formatDate(lastAction.at)}</CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <Text className="text-sm leading-6 text-foreground">{lastAction.description}</Text>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {completedScanRequest?.scanDetails ? (
           <Card className="border-emerald-200 bg-emerald-50">
             <CardHeader>
