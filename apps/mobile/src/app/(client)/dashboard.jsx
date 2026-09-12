@@ -14,6 +14,7 @@ import { formatClientAddress, getCenterLabel, getClientName, getOrganizationName
 import { brandWordmarkOnLight } from "@/lib/brand-assets";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
+import AccountAlerts from "@/components/common/account-alerts";
 
 const CONFERENCE_ROOM_URL = "https://orlando.theworxoffices.com/conference-room/";
 
@@ -122,6 +123,8 @@ export default function DashboardScreen() {
           </View>
         </View>
       </View>
+
+      <AccountAlerts />
 
       {query.isError ? (
         <EmptyState title="Unable to load mailbox summary." description="Pull down to try again." />

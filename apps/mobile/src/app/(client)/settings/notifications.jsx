@@ -101,8 +101,13 @@ export default function NotificationsScreen() {
           <View className="flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-base font-medium text-foreground">Text Alerts</Text>
+              {/* No es "cuando llega correo": por SMS solo salen los tres
+                  avisos que le cuestan dinero si no reacciona. Prometer un
+                  mensaje por cada cosa acabaria con el numero silenciado, y
+                  entonces no llegaria tampoco el que importa. */}
               <Text className="mt-1 text-sm leading-5 text-muted-foreground">
-                Text message alerts when new mail arrives.
+                A text message when a payment fails, when your membership falls behind, or before
+                storage fees start. New mail and completed services stay in the app.
               </Text>
             </View>
             <Switch
@@ -120,6 +125,16 @@ export default function NotificationsScreen() {
               Add a valid phone number to turn these on.
             </Text>
           ) : null}
+
+          {/* Encender el interruptor es el consentimiento, y el registro A2P
+              10DLC exige que quede dicho a que se accede: que son automaticos,
+              cuantos llegan, quien paga el mensaje y como pararlos. Va siempre
+              a la vista, tambien apagado: leerlo despues de aceptar no vale. */}
+          <Text className="text-xs leading-5 text-muted-foreground">
+            By turning this on you agree to receive automated text messages about your mailbox at the
+            number below. Message frequency depends on your mail activity. Message and data rates may
+            apply. Reply STOP to any message to cancel, or turn this off here.
+          </Text>
         </CardContent>
       </Card>
 
