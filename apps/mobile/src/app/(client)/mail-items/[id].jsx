@@ -165,6 +165,89 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   );
 }
 
+/** "13" y "13.5 oz", sin decimales de adorno. */
+function formatOunces(value) {
+  const ounces = Number(value);
+  if (!Number.isFinite(ounces) || ounces <= 0) return null;
+  return (Number.isInteger(ounces) ? ounces : ounces.toFixed(1)) + " oz";
+}
+
+/**
+ * El sobre pesa mas de lo que USPS admite sin seguimiento.
+ *
+ * First-Class es el unico servicio sin seguimiento y corta en 13 oz, asi que un
+ * reenvio pedido sin el se queda parado hasta que el cliente acepte pagarlo o
+ * renuncie al envio. Es la unica espera que queda en AWAITING_CLIENT_APPROVAL:
+ * la aprobacion antigua la retiro el backend porque daba el envio por pagado
+ * sin cobrarlo.
+ */
+function TrackingApprovalCard({ request, onRefresh }) {
+  const details = request.forwardDetails || {};
+  const weight = formatOunces(details.trackingApprovalWeightOunces);
+  const limit = formatOunces(details.trackingApprovalLimitOunces);
+
+  const respond = useMutation({
+    mutationFn: async (decision) =>
+      (await api.post("/client/service-requests/" + request.id + "/tracking-approval", { decision })).data,
+    onSuccess: async () => {
+      await onRefresh?.();
+    },
+    onError: (error) => {
+      // Aceptar acaba en un cobro, asi que el backend lo rechaza con la cuenta
+      // en mora. Rechazar no mueve dinero y siempre se puede.
+      Alert.alert("Could not send your answer", formatErrorMessage(error, "Please try again in a moment."));
+    },
+  });
+
+  const confirmDecline = () => {
+    Alert.alert(
+      "Decline tracking?",
+      "Your forwarding request will be cancelled and the mail stays at the center.",
+      [
+        { text: "Keep waiting", style: "cancel" },
+        { text: "Decline", style: "destructive", onPress: () => respond.mutate("DECLINE") },
+      ]
+    );
+  };
+
+  return (
+    <Card className="border-amber-200 bg-amber-50">
+      <CardHeader>
+        <CardTitle className="text-base">Tracking needed to forward this</CardTitle>
+        <CardDescription>
+          {weight && limit
+            ? `Your mail weighs ${weight}, over the ${limit} that USPS allows without tracking.`
+            : "This shipment is over the weight USPS allows without tracking."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="gap-1.5 p-5 pt-0">
+        <SummaryLine label="Service" value={details.trackingApprovalEstimateService} />
+        <SummaryLine
+          label="Estimated cost"
+          value={
+            details.trackingApprovalEstimateCents != null
+              ? formatMoneyFromCents(details.trackingApprovalEstimateCents)
+              : null
+          }
+        />
+
+        <Text className="mt-2 text-sm leading-6 text-foreground">
+          {details.trackingApprovalEstimateCents != null
+            ? "This is an estimate. You will see the final price before paying."
+            : "The center will price it and show you the final amount before you pay."}
+        </Text>
+
+        <Button className="mt-3" loading={respond.isPending} onPress={() => respond.mutate("APPROVE")}>
+          Approve tracking
+        </Button>
+        <Button variant="outline" disabled={respond.isPending} onPress={confirmDecline}>
+          Decline
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ActionsCard({ item, mailItemId, availableActions, serviceNotices, supportEmail, onRefresh }) {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [pickupOpen, setPickupOpen] = useState(false);
@@ -177,6 +260,10 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const [forwardQuoteId, setForwardQuoteId] = useState("");
   const [forwardRates, setForwardRates] = useState([]);
   const [selectedRateId, setSelectedRateId] = useState("");
+  // Recargo por no esperar al envio del mes. Va aparte de las tarifas --que ya
+  // traen dentro la gestion-- y se cobra igual, asi que sin sumarlo aqui el
+  // cliente elegiria viendo menos de lo que se le va a cobrar.
+  const [immediateFeeCents, setImmediateFeeCents] = useState(0);
 
   const { user } = useAuth();
   const isLetter = item?.type === "LETTER";
@@ -188,6 +275,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     setForwardQuoteId("");
     setForwardRates([]);
     setSelectedRateId("");
+    setImmediateFeeCents(0);
   };
 
   /**
@@ -281,11 +369,13 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       setForwardQuoteId(data?.quoteId || "");
       setForwardRates(data?.rates || []);
       setSelectedRateId(data?.rates?.[0]?.optionId || "");
+      setImmediateFeeCents(Number(data?.immediateForwardFeeCents || 0));
     },
     onError: (error) => {
       setForwardQuoteId("");
       setForwardRates([]);
       setSelectedRateId("");
+      setImmediateFeeCents(0);
       Alert.alert("No rates available", formatErrorMessage(error, "Failed to load shipping rates"));
     },
   });
@@ -417,6 +507,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   // Los paquetes se reenvían o se recogen, pero su contenido no se escanea.
   const canScan = item?.type !== "PACKAGE" && availableActions?.canRequestScan;
+
+  const selectedRate = forwardRates.find((rate) => rate.optionId === selectedRateId) || null;
 
   return (
     <Card>
@@ -671,6 +763,30 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                   );
                 })}
 
+                {/* El recargo no viene dentro de las tarifas pero se cobra
+                    igual, asi que se enseña el total antes de elegir: ver un
+                    precio y pagar otro es lo que no puede pasar. */}
+                {immediateFeeCents > 0 && selectedRate ? (
+                  <View className="gap-1 rounded-lg border border-border bg-card p-3">
+                    <View className="flex-row items-center justify-between gap-3">
+                      <Text className="text-sm text-muted-foreground">Shipping</Text>
+                      <Text className="text-sm text-foreground">
+                        {formatMoneyFromCents(selectedRate.totalAmount?.amount)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between gap-3">
+                      <Text className="text-sm text-muted-foreground">Immediate forwarding fee</Text>
+                      <Text className="text-sm text-foreground">{formatMoneyFromCents(immediateFeeCents)}</Text>
+                    </View>
+                    <View className="mt-1 flex-row items-center justify-between gap-3 border-t border-border pt-2">
+                      <Text className="text-sm font-medium text-foreground">Total</Text>
+                      <Text className="text-base font-semibold text-foreground">
+                        {formatMoneyFromCents(Number(selectedRate.totalAmount?.amount || 0) + immediateFeeCents)}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
                 <Button loading={selectRate.isPending} disabled={!selectedRateId} onPress={continueWithRate}>
                   Continue with selected rate
                 </Button>
@@ -807,6 +923,25 @@ export default function MailItemDetailScreen() {
   );
   const approvableForwardRequest = useMemo(
     () => findRequest(serviceRequests, (r) => r?.type === "FORWARD" && r?.status === "AWAITING_CLIENT_APPROVAL"),
+    [serviceRequests]
+  );
+  /**
+   * Reenvio esperando a que el cliente acepte el seguimiento.
+   *
+   * Se exige que siga sin aceptarse: una vez aceptado, la solicitud sigue su
+   * curso y la tarjeta no debe volver a pedir nada.
+   */
+  const trackingApprovalRequest = useMemo(
+    () =>
+      findRequest(
+        serviceRequests,
+        (r) =>
+          r?.type === "FORWARD"
+          && r?.status === "AWAITING_CLIENT_APPROVAL"
+          && r?.forwardDetails?.trackingApprovalRequestedAt
+          && !r?.forwardDetails?.trackingApprovedAt,
+        "createdAt"
+      ),
     [serviceRequests]
   );
   const readyToShipForwardRequest = useMemo(
@@ -1026,7 +1161,14 @@ export default function MailItemDetailScreen() {
           />
         ) : null}
 
-        {!payableForwardRequest && approvableForwardRequest?.forwardDetails ? (
+        {/* Esperando a que el cliente acepte el seguimiento. Va antes que la
+            tarjeta de cotizacion porque es la unica de las dos que le pide
+            algo, y sin responderla el reenvio no avanza. */}
+        {trackingApprovalRequest ? (
+          <TrackingApprovalCard request={trackingApprovalRequest} onRefresh={() => query.refetch()} />
+        ) : null}
+
+        {!payableForwardRequest && !trackingApprovalRequest && approvableForwardRequest?.forwardDetails ? (
           <Card className="border-amber-200 bg-amber-50">
             <CardHeader>
               <CardTitle className="text-base">Forward Quote Ready</CardTitle>
