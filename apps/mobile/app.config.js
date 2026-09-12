@@ -12,9 +12,31 @@ const brandDir = "./assets/brands/" + brand.id;
 const googleServicesFile = brandDir + "/google-services.json";
 const generatedIcon = brandDir + "/generated/icon.png";
 
-if (!fs.existsSync(path.join(__dirname, generatedIcon))) {
+/** Ruta del asset si esta marca lo tiene; null si no, para poder caer atras. */
+function brandAsset(name) {
+  const relative = brandDir + "/" + name;
+  return fs.existsSync(path.join(__dirname, relative)) ? relative : null;
+}
+
+/**
+ * Iconos entregados por diseño, uno por proposito.
+ *
+ * Sustituyen al generado cuando la marca los trae. The Worx los tiene; HDG
+ * todavia no y sigue con el generado, que es cuadrado y a sangre.
+ *
+ * El foreground adaptativo tiene que ser el simbolo suelto con transparencia y
+ * margen: si se usa el icono completo, Android recorta un cuadrado negro
+ * dentro de su mascara en vez del simbolo.
+ */
+const brandIcon = brandAsset("icon.png");
+const adaptiveForeground = brandAsset("adaptive-icon.png");
+const monochromeIcon = brandAsset("monochrome-icon.png");
+
+const appIcon = brandIcon || generatedIcon;
+
+if (!fs.existsSync(path.join(__dirname, appIcon))) {
   throw new Error(
-    `Falta el icono generado de "${brand.id}". Ejecuta: npm run icons`
+    `Falta el icono de "${brand.id}". Añade assets/brands/${brand.id}/icon.png o ejecuta: npm run icons`
   );
 }
 
@@ -27,7 +49,7 @@ module.exports = {
     owner: "ab-estrategia-360",
     version: "1.0.0",
     orientation: "portrait",
-    icon: generatedIcon,
+    icon: appIcon,
     scheme: brand.scheme,
     // Actualizaciones OTA. La URL lleva dentro el proyecto, asi que se deriva
     // de la marca: escrita fija, los builds de HDG buscarian las
@@ -45,15 +67,22 @@ module.exports = {
     ios: {
       bundleIdentifier: brand.bundleId,
       supportsTablet: false,
+      // El icono completo, sin esquinas redondeadas: iOS aplica su propia
+      // máscara y redondearlo a mano dejaría un borde doble.
+      icon: appIcon,
     },
     android: {
       package: brand.bundleId,
-      // El icono generado es cuadrado y a sangre; la máscara adaptativa lo
-      // recorta a círculo sobre el mismo color de fondo, así que no se nota
-      // el recorte.
+      // Android compone el icono en dos capas. El símbolo va delante con
+      // transparencia y el color sólido detrás; el gradiente del icono
+      // completo no se reproduce aquí a propósito, porque la capa de fondo
+      // solo admite un color.
       adaptiveIcon: {
         backgroundColor: brand.androidIconBackground,
-        foregroundImage: generatedIcon,
+        foregroundImage: adaptiveForeground || generatedIcon,
+        // Icono temático de Android 13+: el sistema lo recolorea con el tema
+        // del usuario, así que es el símbolo en blanco sobre transparente.
+        ...(monochromeIcon ? { monochromeImage: monochromeIcon } : {}),
       },
       predictiveBackGestureEnabled: false,
       // Registra la app ante Firebase y sin el no hay notificaciones en

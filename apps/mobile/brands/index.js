@@ -42,10 +42,13 @@ const BRANDS = {
     easProjectId: "922f4b80-6a1f-4072-a4df-c0d35fe374c8",
     primaryColor: "#65baaf",
     splashBackground: "#0e0d13",
-    androidIconBackground: "#0e0d13",
+    // Capa de fondo del icono adaptativo de Android. Coincide con la esquina
+    // del degradado de icon.png (#08090D), que es lo que asoma al recortar la
+    // mascara.
+    androidIconBackground: "#090A0D",
     markBackground: "#0e0d13",
     assets: {
-      mark: "the-worx-icono-simple-background-black.png",
+      mark: "icon.png",
       wordmark: "the-worx-white-transparent.png",
       wordmarkOnDark: true,
     },
