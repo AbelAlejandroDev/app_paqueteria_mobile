@@ -9,10 +9,15 @@ const VARIANTS = {
   destructive: { container: "border-destructive bg-destructive", label: "text-destructive-foreground", spinner: "#ffffff" },
 };
 
+/**
+ * Alto minimo y no fijo, en dp. Con un alto fijo, la letra grande del sistema
+ * (habitual en Samsung) partia la etiqueta en dos lineas y la segunda quedaba
+ * cortada. Con minimo, el boton crece con su texto.
+ */
 const SIZES = {
-  default: { container: "h-11 px-4", label: "text-base" },
-  sm: { container: "h-9 px-3", label: "text-sm" },
-  lg: { container: "h-12 px-5", label: "text-base" },
+  default: { container: "px-4 py-2", label: "text-base", minHeight: 44 },
+  sm: { container: "px-3 py-1.5", label: "text-sm", minHeight: 36 },
+  lg: { container: "px-5 py-2", label: "text-base", minHeight: 48 },
 };
 
 export function Button({
@@ -24,6 +29,7 @@ export function Button({
   disabled = false,
   icon = null,
   children,
+  style,
   ...props
 }) {
   const styles = VARIANTS[variant] || VARIANTS.default;
@@ -41,6 +47,7 @@ export function Button({
         isDisabled && "opacity-60",
         className
       )}
+      style={[{ minHeight: sizing.minHeight }, style]}
       {...props}
     >
       {loading ? (
@@ -48,7 +55,7 @@ export function Button({
       ) : (
         <>
           {icon ? <View>{icon}</View> : null}
-          <Text className={cn("font-semibold", styles.label, sizing.label, labelClassName)}>{children}</Text>
+          <Text className={cn("shrink text-center font-semibold", styles.label, sizing.label, labelClassName)}>{children}</Text>
         </>
       )}
     </Pressable>

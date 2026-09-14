@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { brand } from "@/lib/brand";
 
 import { cn } from "@/lib/utils";
+import { INPUT_MIN_HEIGHT, inputTextStyle } from "@/components/ui/input";
 
 /**
  * Sustituto del Select de Radix. Abre una lista a pantalla completa con
@@ -33,9 +34,10 @@ export function Select({ value, onValueChange, options, placeholder = "Select", 
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        className={cn("h-11 flex-row items-center justify-between rounded-lg border border-input bg-card px-3", className)}
+        className={cn("flex-row items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 py-2", className)}
+        style={{ minHeight: INPUT_MIN_HEIGHT }}
       >
-        <Text className={selected ? "text-base text-foreground" : "text-base text-muted-foreground"}>
+        <Text className={cn("flex-1 text-base", selected ? "text-foreground" : "text-muted-foreground")} numberOfLines={1}>
           {selected ? selected[0] + " - " + selected[1] : placeholder}
         </Text>
         <ChevronDown size={18} color="#64748b" />
@@ -54,7 +56,8 @@ export function Select({ value, onValueChange, options, placeholder = "Select", 
           <View className="gap-3 border-b border-border bg-card px-4 pb-4" style={{ paddingTop: insets.top + 16 }}>
             <Text className="text-lg font-semibold text-foreground">{title || placeholder}</Text>
             <TextInput
-              className="h-11 rounded-lg border border-input bg-background px-3 text-base text-foreground"
+              className="rounded-lg border border-input bg-background px-3 text-base text-foreground"
+              style={[{ minHeight: INPUT_MIN_HEIGHT }, inputTextStyle]}
               placeholder="Search..."
               placeholderTextColor="#94a3b8"
               value={search}
