@@ -29,6 +29,7 @@ import {
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
 import EmptyState from "@/components/common/empty-state";
+import LetterForwardSheet from "@/components/common/letter-forward-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -250,6 +251,10 @@ function TrackingApprovalCard({ request, onRefresh }) {
 
 function ActionsCard({ item, mailItemId, availableActions, serviceNotices, supportEmail, onRefresh }) {
   const [forwardOpen, setForwardOpen] = useState(false);
+  // Cada apertura monta la hoja de nuevo (key distinta): empieza siempre por el
+  // aviso del recargo y sin lo que se escribio la vez anterior.
+  const [letterForwardKey, setLetterForwardKey] = useState(0);
+  const [letterForwardOpen, setLetterForwardOpen] = useState(false);
   const [pickupOpen, setPickupOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -380,46 +385,6 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     },
   });
 
-  /**
-   * Reenvío de una carta.
-   *
-   * A diferencia de un paquete, el cliente no cotiza ni elige transportista:
-   * solo manda la petición con su dirección y si quiere seguimiento o seguro.
-   * El centro la tarifica después, y entonces el cliente aprueba el importe
-   * por el flujo de AWAITING_CLIENT_APPROVAL que ya existe.
-   */
-  const requestLetterForward = useMutation({
-    mutationFn: async () => {
-      const response = await api.post("/client/service-requests", {
-        mailItemId,
-        type: "FORWARD",
-        destinationName: forwardForm.recipient,
-        address1: forwardForm.address1,
-        address2: forwardForm.address2 || undefined,
-        city: forwardForm.city,
-        state: forwardForm.state,
-        zip: forwardForm.zip,
-        country: "US",
-        phone: forwardForm.phone || undefined,
-        shippingOptions: {
-          trackingRequested: Boolean(forwardForm.trackingRequested),
-          insuranceRequested: Boolean(forwardForm.insuranceRequested),
-          insuredValueCents: forwardForm.insuranceRequested ? toInsuredValueCents(forwardForm) : 0,
-        },
-      });
-      return response.data;
-    },
-    onSuccess: async () => {
-      Alert.alert("Request sent", "The center will prepare your shipment and let you know the cost.");
-      setForwardOpen(false);
-      setForwardForm(EMPTY_FORWARD);
-      await onRefresh?.();
-    },
-    onError: (error) => {
-      Alert.alert("Could not send request", formatErrorMessage(error, "Failed to request forwarding"));
-    },
-  });
-
   const selectRate = useMutation({
     mutationFn: async () => {
       const response = await api.post("/client/forwarding/quotes/select", {
@@ -492,11 +457,6 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     quoteRates.mutate();
   };
 
-  const submitLetterForward = () => {
-    if (!forwardFormIsValid()) return;
-    requestLetterForward.mutate();
-  };
-
   const continueWithRate = () => {
     if (!forwardQuoteId || !selectedRateId) {
       Alert.alert("Choose a rate", "Select a shipping rate first.");
@@ -541,20 +501,26 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               </Text>
             </View>
           </View>
-        ) : active.scan ? (
-          <View className="flex-row items-start gap-4 rounded-lg border-2 border-sky-300 bg-sky-50 p-4">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-sky-600">
-              <ScanLine size={20} color="#ffffff" />
-            </View>
-            <View className="min-w-0 flex-1">
-              <Text className="font-semibold text-sky-950">Scan request in progress</Text>
-              <Text className="mt-1 text-sm leading-5 text-sky-800">
-                Your item is being processed. The scan will appear here once it is ready.
-              </Text>
-            </View>
-          </View>
         ) : (
           <View className="gap-3">
+            {/* Como en el portal web: el aviso del escaneo no sustituye a los
+                botones. Quien recibe correo ajeno no puede esperar a que termine
+                un escaneo para decir "Not mine"; lo que se pisa con el escaneo lo
+                quita el backend de availableActions, y Discard se aparta aqui. */}
+            {active.scan ? (
+              <View className="flex-row items-start gap-4 rounded-lg border-2 border-sky-300 bg-sky-50 p-4">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-sky-600">
+                  <ScanLine size={20} color="#ffffff" />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="font-semibold text-sky-950">Scan request in progress</Text>
+                  <Text className="mt-1 text-sm leading-5 text-sky-800">
+                    Your item is being processed. The scan will appear here once it is ready.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {canScan ? (
               <Button icon={<ScanLine size={18} color="#0f172a" />} disabled={anyPending} onPress={() => setNoticeService("scan")}>
                 Request Scan
@@ -562,8 +528,19 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             ) : null}
 
             {availableActions?.canRequestForward ? (
-              <Button icon={<Truck size={18} color="#0f172a" />} disabled={anyPending} onPress={() => setForwardOpen(true)}>
-                Forward Item
+              <Button
+                icon={<Truck size={18} color="#0f172a" />}
+                disabled={anyPending}
+                onPress={() => {
+                  if (isLetter) {
+                    setLetterForwardKey((value) => value + 1);
+                    setLetterForwardOpen(true);
+                  } else {
+                    setForwardOpen(true);
+                  }
+                }}
+              >
+                {isLetter ? "Forward Letter" : "Forward Item"}
               </Button>
             ) : null}
 
@@ -573,7 +550,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               </Button>
             ) : null}
 
-            {availableActions?.canRequestDiscard ? (
+            {availableActions?.canRequestDiscard && !active.scan ? (
               <Button variant="destructive" icon={<Trash2 size={18} color="#ffffff" />} disabled={anyPending} onPress={() => setDiscardOpen(true)}>
                 Discard
               </Button>
@@ -626,11 +603,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           visible={forwardOpen}
           onClose={() => setForwardOpen(false)}
           title="Request Forward"
-          description={
-            isLetter
-              ? "Enter the destination address. The center will price the shipment and notify you."
-              : "Enter the destination address and choose a rate."
-          }
+          description="Enter the destination address and choose a rate."
           footer={
             <Button variant="outline" onPress={() => setForwardOpen(false)}>
               Cancel
@@ -695,19 +668,10 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               </Field>
             ) : null}
             <Text className="text-xs leading-4 text-muted-foreground">
-              {isLetter
-                ? "The center will add these extras when preparing your shipment."
-                : "The cost of these extras is already included in every rate below."}
+              The cost of these extras is already included in every rate below.
             </Text>
           </View>
 
-          {/* En cartas el cliente no cotiza ni elige transportista: manda la
-              petición y el centro la tarifica después. */}
-          {isLetter ? (
-            <Button loading={requestLetterForward.isPending} onPress={submitLetterForward}>
-              Send forwarding request
-            </Button>
-          ) : (
           <View className="gap-3 rounded-lg border border-border bg-background p-3">
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
@@ -795,13 +759,24 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               <Text className="text-xs text-muted-foreground">No rates loaded yet.</Text>
             )}
           </View>
-          )}
 
           <Notice tone="sky">
             For shipments outside the United States, contact your center
             {supportEmail ? " at " + supportEmail : ""}.
           </Notice>
         </Modal>
+
+        {/* Cartas: el mismo flujo que el portal web. El cliente no cotiza, pide
+            el reenvio y el centro confirma el franqueo al pesar el sobre. */}
+        {isLetter ? (
+          <LetterForwardSheet
+            key={letterForwardKey}
+            visible={letterForwardOpen}
+            onClose={() => setLetterForwardOpen(false)}
+            mailItems={[item]}
+            onCompleted={onRefresh}
+          />
+        ) : null}
 
         <Modal
           visible={pickupOpen}
