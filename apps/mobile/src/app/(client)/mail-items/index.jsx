@@ -45,7 +45,8 @@ const COMPLETED_FOLDERS = [
   { key: "forwarding", label: "Forwarded", icon: Truck },
   { key: "shipments", label: "Shipments", icon: Package2 },
   { key: "picked-up", label: "Picked Up", icon: Store },
-  { key: "deleted", label: "Deleted", icon: Trash2 },
+  // La clave sigue siendo "deleted" (la del backend); para el cliente es lo descartado.
+  { key: "deleted", label: "Discarded", icon: Trash2 },
 ];
 
 const FOLDER_ICONS = {

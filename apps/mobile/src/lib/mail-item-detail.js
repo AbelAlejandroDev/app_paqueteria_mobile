@@ -14,6 +14,9 @@ const ITEM_STATUS_COLORS = {
   SCANNED: { container: "border-blue-200 bg-blue-100", label: "text-blue-800" },
   FORWARD_REQUESTED: { container: "border-orange-200 bg-orange-100", label: "text-orange-800" },
   RECEIVED: { container: "border-slate-200 bg-slate-100", label: "text-slate-700" },
+  // Descartado: hoy el backend lo guarda como ARCHIVED; DISCARDED cuando renombre el estado.
+  ARCHIVED: { container: "border-rose-200 bg-rose-100", label: "text-rose-800" },
+  DISCARDED: { container: "border-rose-200 bg-rose-100", label: "text-rose-800" },
 };
 
 const REQUEST_STATUS_COLORS = {

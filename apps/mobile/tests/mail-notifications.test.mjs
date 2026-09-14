@@ -124,3 +124,29 @@ test("en la bandeja del sistema solo queda el aviso de correo mas reciente", () 
   assert.deepEqual(staleMailNotificationIds(presented), ["mid", "old"]);
   assert.deepEqual(staleMailNotificationIds(null), []);
 });
+
+test("rechazo, discard completado y cancelacion se dicen para el cliente", async () => {
+  const { notificationDisplay: display, serviceRequestDisplay } = await import("../src/lib/mail-notifications.js");
+  const sr = (data) => ({ type: "SERVICE_REQUEST_STATUS_UPDATED", title: "Service request updated", message: "DISCARD request is now COMPLETED.", data });
+
+  assert.deepEqual(display(sr({ requestType: "SCAN", status: "REJECTED", rejectionReason: "Envelope is empty" })), {
+    title: "Your scan request was rejected",
+    message: "Reason: Envelope is empty",
+  });
+  assert.equal(display(sr({ requestType: "FORWARD", status: "REJECTED" })).message, "Contact your center if you have questions.");
+  assert.deepEqual(display(sr({ requestType: "DISCARD", status: "COMPLETED" })), {
+    title: "Your discard request was completed",
+    message: "The mail item was discarded.",
+  });
+  assert.equal(display(sr({ requestType: "PICKUP", status: "CANCELLED" })).title, "Your pickup request was cancelled");
+  // Sin datos suficientes se queda lo que mando el backend.
+  assert.equal(serviceRequestDisplay({ status: "COMPLETED" }), null);
+  assert.equal(display(sr({})).title, "Service request updated");
+});
+
+test("un item descartado se lee Discarded", async () => {
+  const { formatStatusDisplay } = await import("../src/lib/mail-item-display.js");
+  assert.equal(formatStatusDisplay("ARCHIVED"), "Discarded");
+  assert.equal(formatStatusDisplay("DISCARDED"), "Discarded");
+  assert.equal(formatStatusDisplay("PICKED_UP"), "Picked Up");
+});

@@ -13,6 +13,9 @@
  */
 
 export const MAIL_RECEIVED_TYPE = "MAIL_ITEM_RECEIVED";
+export const SERVICE_REQUEST_STATUS_TYPE = "SERVICE_REQUEST_STATUS_UPDATED";
+
+const REQUEST_LABELS = { SCAN: "scan", FORWARD: "forward", PICKUP: "pickup", DISCARD: "discard" };
 
 export function isMailReceived(notification) {
   return notification?.type === MAIL_RECEIVED_TYPE;
@@ -36,12 +39,51 @@ function mailItemIdsOf(data) {
 }
 
 /**
+ * Cambio de estado de una solicitud, dicho para el cliente.
+ *
+ * El backend manda hoy "DISCARD request is now COMPLETED." o "Your scan request
+ * was rejected: motivo". Se reescribe con requestType, status y rejectionReason,
+ * que vienen en data. Devuelve null si faltan datos para decir algo mejor.
+ */
+export function serviceRequestDisplay(data) {
+  const label = REQUEST_LABELS[String(data?.requestType || "").toUpperCase()];
+  const status = String(data?.status || "").toUpperCase();
+  if (!label) return null;
+
+  if (status === "REJECTED") {
+    const reason = String(data?.rejectionReason || "").trim();
+    return {
+      title: "Your " + label + " request was rejected",
+      message: reason ? "Reason: " + reason : "Contact your center if you have questions.",
+    };
+  }
+
+  if (status === "COMPLETED") {
+    if (label === "discard") {
+      return { title: "Your discard request was completed", message: "The mail item was discarded." };
+    }
+    return { title: "Your " + label + " request was completed", message: null };
+  }
+
+  if (status === "CANCELLED") {
+    return { title: "Your " + label + " request was cancelled", message: null };
+  }
+
+  return null;
+}
+
+/**
  * Lo que se enseña de un aviso: el titulo y, solo si dice algo mas, el mensaje.
  * Un aviso de correo es una sola linea, sin codigo ni remitente.
  */
 export function notificationDisplay(notification) {
   if (isMailReceived(notification)) {
     return { title: mailReceivedTitle(mailItemCount(notification.data)), message: null };
+  }
+
+  if (notification?.type === SERVICE_REQUEST_STATUS_TYPE) {
+    const display = serviceRequestDisplay(notification.data);
+    if (display) return display;
   }
 
   const title = notification?.title || "Mailbox update";

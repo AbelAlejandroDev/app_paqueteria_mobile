@@ -14,6 +14,19 @@ const STATUS_COLORS = {
   SCAN_REQUESTED: { container: "border-violet-200 bg-violet-100", label: "text-violet-800" },
   SCANNED: { container: "border-blue-200 bg-blue-100", label: "text-blue-800" },
   FORWARD_REQUESTED: { container: "border-orange-200 bg-orange-100", label: "text-orange-800" },
+  ARCHIVED: { container: "border-rose-200 bg-rose-100", label: "text-rose-800" },
+  DISCARDED: { container: "border-rose-200 bg-rose-100", label: "text-rose-800" },
+};
+
+/**
+ * Estados que no se leen bien partiendo el nombre. Un item descartado lo guarda
+ * el backend como ARCHIVED (discard completado o correo ajeno descartado por el
+ * staff), pero para el cliente es "Discarded". DISCARDED queda cubierto para
+ * cuando el backend renombre el estado.
+ */
+const STATUS_LABELS = {
+  ARCHIVED: "Discarded",
+  DISCARDED: "Discarded",
 };
 
 const DEFAULT_STATUS_COLOR = { container: "border-slate-200 bg-slate-100", label: "text-slate-700" };
@@ -28,6 +41,7 @@ export function getStatusColor(status) {
 
 export function formatStatusDisplay(status) {
   if (!status) return "-";
+  if (STATUS_LABELS[status]) return STATUS_LABELS[status];
 
   return status
     .split("_")
