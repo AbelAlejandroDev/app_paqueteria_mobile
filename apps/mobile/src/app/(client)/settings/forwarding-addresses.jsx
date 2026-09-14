@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
 import { US_STATES } from "@/lib/us-states";
+import { addressErrorMessage, describeAddressVerification, serverVerifiesAddresses } from "@/lib/address-verification";
+import AddressVerificationBadge from "@/components/common/address-verification-badge";
 import EmptyState from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,17 +71,23 @@ function TextAction({ label, onPress, disabled, tone = "default" }) {
   );
 }
 
-function AddressCard({ address, onEdit, onDelete, onMakeDefault, busy }) {
+function AddressCard({ address, onEdit, onDelete, onMakeDefault, onVerify, verifying, busy }) {
   const lines = [address.addressLine1, address.addressLine2, `${address.city}, ${address.state} ${address.zip}`]
     .filter(Boolean);
+  const verifies = serverVerifiesAddresses(address);
+  const meta = describeAddressVerification(address.verification);
 
   return (
     <Card>
       <CardContent className="gap-3 p-4">
-        {/* La etiqueta primero: es como el cliente reconoce la direccion. */}
-        <Text className="text-base font-semibold text-foreground">
-          {address.label || address.name}
-        </Text>
+        {/* La etiqueta primero: es como el cliente reconoce la direccion. El
+            estado de verificacion, en la esquina. */}
+        <View className="flex-row flex-wrap items-center justify-between gap-2">
+          <Text className="min-w-0 shrink text-base font-semibold text-foreground">
+            {address.label || address.name}
+          </Text>
+          {verifies ? <AddressVerificationBadge verification={address.verification} /> : null}
+        </View>
 
         {address.phone ? (
           <Text className="text-sm font-medium text-foreground">{formatPhone(address.phone)}</Text>
@@ -95,6 +103,20 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, busy }) {
             </Text>
           ))}
         </View>
+
+        {/* Solo una direccion que el transportista reconoce sirve para reenviar.
+            Las anteriores a la verificacion se comprueban desde aqui. */}
+        {verifies && meta.status !== "VERIFIED" ? (
+          <View className="gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <Text className="text-sm leading-5 text-amber-900">
+              {meta.hint}
+              {meta.message ? " (" + meta.message + ")" : ""}
+            </Text>
+            <Button variant="outline" size="sm" loading={verifying} disabled={busy} onPress={() => onVerify(address)}>
+              Verify this address
+            </Button>
+          </View>
+        ) : null}
 
         <View className="flex-row items-center justify-between gap-3 border-t border-border pt-3">
           {/* Marcar la principal es elegir entre varias, asi que se comporta
@@ -158,6 +180,7 @@ export default function ForwardingAddressesScreen() {
     // El resultado es de la direccion que habia escrita; dejarlo puesto lo
     // mostraria sobre otra distinta.
     verify.reset();
+    save.reset();
   };
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
@@ -183,8 +206,22 @@ export default function ForwardingAddressesScreen() {
       closeForm();
       refresh();
     },
+    // El servidor verifica al guardar: si el transportista no la reconoce (422)
+    // o no responde (503) no se guarda nada, y el motivo se enseña junto al
+    // formulario, donde se corrige.
+  });
+
+  const reverify = useMutation({
+    mutationFn: async (address) => (await api.post(`/client/addresses/${address.id}/verify`)).data,
+    onSuccess: async (data) => {
+      await refresh();
+      const result = describeAddressVerification(data?.address?.verification);
+      if (result.status !== "VERIFIED") {
+        Alert.alert("Address not verified", result.message ? `${result.hint} (${result.message})` : result.hint);
+      }
+    },
     onError: (error) => {
-      Alert.alert("Could not save", formatErrorMessage(error, "Unable to save the address"));
+      Alert.alert("Could not check the address", addressErrorMessage(error, "Try again in a moment."));
     },
   });
 
@@ -205,12 +242,13 @@ export default function ForwardingAddressesScreen() {
     },
   });
 
-  const busy = save.isPending || makeDefault.isPending || remove.isPending;
+  const busy = save.isPending || makeDefault.isPending || remove.isPending || reverify.isPending;
 
   const startCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
     verify.reset();
+    save.reset();
     setOpen(true);
   };
 
@@ -218,6 +256,7 @@ export default function ForwardingAddressesScreen() {
     setEditing(address);
     setForm(toForm(address));
     verify.reset();
+    save.reset();
     setOpen(true);
   };
 
@@ -256,7 +295,7 @@ export default function ForwardingAddressesScreen() {
       return response.data;
     },
     onError: (error) => {
-      Alert.alert("Could not check the address", formatErrorMessage(error, "Try again in a moment."));
+      Alert.alert("Could not check the address", addressErrorMessage(error, "Try again in a moment."));
     },
   });
 
@@ -315,6 +354,8 @@ export default function ForwardingAddressesScreen() {
               onEdit={startEdit}
               onDelete={confirmDelete}
               onMakeDefault={(item) => makeDefault.mutate(item)}
+              onVerify={(item) => reverify.mutate(item)}
+              verifying={reverify.isPending && reverify.variables?.id === address.id}
             />
           ))
         )}
@@ -354,6 +395,10 @@ export default function ForwardingAddressesScreen() {
         }
       >
         {/* El resultado va arriba, pegado a los campos que hay que corregir. */}
+        {save.isError ? (
+          <Notice tone="rose">{addressErrorMessage(save.error, "Unable to save the address")}</Notice>
+        ) : null}
+
         {verify.data?.verified === false ? (
           <Notice tone="amber">{verify.data.reason}</Notice>
         ) : null}

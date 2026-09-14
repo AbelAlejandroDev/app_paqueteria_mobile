@@ -7,6 +7,17 @@ import { api } from "@/lib/api";
 import { formatErrorMessage } from "@/lib/utils";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { US_STATES } from "@/lib/us-states";
+import {
+  addressErrorMessage,
+  describeAddressVerification,
+  forwardDestinationFields,
+  isAddressUsableForForwarding,
+  isVerifiedCheck,
+  sameAddress,
+  serverVerifiesAddresses,
+  verifyPayload,
+} from "@/lib/address-verification";
+import AddressVerificationBadge from "@/components/common/address-verification-badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Modal, Notice } from "@/components/ui/modal";
@@ -183,6 +194,12 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
   const draftIsComplete = REQUIRED_FIELDS.every((field) => String(draft[field] || "").trim());
 
+  // Sin direccion verificada no sale ningun reenvio: Pitney Bowes rechaza al
+  // comprar la etiqueta la que no reconoce, con la solicitud ya creada.
+  // El servidor vuelve a verificar al crear el reenvio; esto solo avisa antes.
+  const draftVerified = isVerifiedCheck(addressCheck);
+  const destinationVerified = addingAddress ? draftVerified : isAddressUsableForForwarding(selectedAddress);
+
   const setDraftField = (field) => (value) => {
     // Cambiar la direccion invalida lo que dijo el transportista de la anterior.
     setAddressCheck(null);
@@ -197,30 +214,62 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const verifyAddress = useMutation({
     mutationFn: async () =>
       (
-        await api.post("/client/forwarding-addresses/verify", {
-          recipient: draft.recipient.trim(),
-          company: optional(draft.company),
-          addressLine1: draft.addressLine1.trim(),
-          addressLine2: optional(draft.addressLine2),
-          city: draft.city.trim(),
-          state: draft.state,
-          zip: draft.zip.trim(),
-          phone: optional(draft.phone),
-        })
+        await api.post("/client/forwarding-addresses/verify", verifyPayload(draft))
       ).data,
     onSuccess: (data) => setAddressCheck(data),
     onError: (error) => {
       setAddressCheck(null);
-      Alert.alert("Could not check the address", formatErrorMessage(error, "The address could not be checked right now."));
+      Alert.alert("Could not check the address", addressErrorMessage(error, "The address could not be checked right now."));
     },
   });
+
+  /**
+   * Re-verificar una guardada (las anteriores a la verificacion quedaron sin
+   * verificar). El resultado lo guarda el servidor: no hay que repetirlo en la
+   * siguiente sesion.
+   */
+  const verifySaved = useMutation({
+    mutationFn: async (address) => (await api.post("/client/addresses/" + address.id + "/verify")).data,
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
+      const meta = describeAddressVerification(data?.address?.verification);
+      if (meta.status !== "VERIFIED") {
+        Alert.alert("Address not verified", meta.message ? meta.hint + " (" + meta.message + ")" : meta.hint);
+      }
+    },
+    onError: (error) => {
+      Alert.alert("Could not check the address", addressErrorMessage(error, "The address could not be checked right now."));
+    },
+  });
+
+  /**
+   * La version que propone el transportista. Si se usa, es la que el mismo
+   * reconoce, asi que cuenta como verificada.
+   */
+  const useSuggestedAddress = () => {
+    const suggested = addressCheck?.suggested;
+    if (!suggested) return;
+
+    setDraft((current) => ({
+      ...current,
+      recipient: suggested.recipient || current.recipient,
+      company: suggested.company || current.company,
+      addressLine1: suggested.addressLine1 || current.addressLine1,
+      addressLine2: suggested.addressLine2 || "",
+      city: suggested.city || current.city,
+      state: suggested.state || current.state,
+      zip: suggested.zip || current.zip,
+    }));
+    setAddressCheck({ ...addressCheck, suggested: null });
+  };
 
   const requestForward = useMutation({
     mutationFn: async () => {
       let destination = selectedAddress;
 
       // Una direccion nueva se guarda antes de usarla, para que la proxima vez
-      // este en la lista y no haya que volver a escribirla.
+      // este en la lista y no haya que volver a escribirla. El servidor la
+      // verifica al guardarla y guarda la version normalizada.
       if (addingAddress) {
         if (saveForLater) {
           const saved = await api.post("/client/addresses", {
@@ -248,14 +297,8 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         mailItemId: items[0].id,
         mailItemIds: items.map((item) => item.id),
         type: "FORWARD",
-        destinationName: destination.recipient,
-        address1: destination.addressLine1,
-        address2: optional(destination.addressLine2),
-        city: destination.city,
-        state: destination.state,
-        zip: destination.zip,
-        country: destination.country || "US",
-        phone: optional(destination.phone),
+        // Una guardada viaja por su id: el servidor usa la que tiene verificada.
+        ...forwardDestinationFields(destination),
         shippingOptions: {
           trackingRequested,
           insuranceRequested,
@@ -273,7 +316,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
     onError: (error) => {
       // Si la direccion se guardo pero la peticion fallo, la lista ya la trae.
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
-      Alert.alert("Could not request forward", formatErrorMessage(error, "The forward could not be requested."));
+      Alert.alert(
+        "Could not request forward",
+        addressErrorMessage(error, formatErrorMessage(error, "The forward could not be requested."))
+      );
     },
   });
 
@@ -281,7 +327,8 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const insuredNumber = Number(insuredValue);
   const insuranceIsValid =
     !insuranceRequested || (insuredNumber >= MIN_INSURED_VALUE && insuredNumber <= MAX_INSURED_VALUE);
-  const canSubmit = (addingAddress ? draftIsComplete : Boolean(selectedAddress)) && insuranceIsValid && !pending;
+  const canSubmit =
+    (addingAddress ? draftIsComplete : Boolean(selectedAddress)) && destinationVerified && insuranceIsValid && !pending;
 
   const feeHeadline =
     feeCents === null
@@ -378,37 +425,66 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
           {addresses.map((address) => {
             const checked = effectiveAddressId === address.id;
+            const verifies = serverVerifiesAddresses(address);
+            const meta = describeAddressVerification(address.verification);
+            const verifyingThis = verifySaved.isPending && verifySaved.variables?.id === address.id;
 
             return (
-              <Pressable
+              <View
                 key={address.id}
-                onPress={() => setSelectedAddressId(address.id)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked }}
                 className={
                   checked
-                    ? "flex-row items-start gap-3 rounded-lg border border-foreground bg-card p-4"
-                    : "flex-row items-start gap-3 rounded-lg border border-border bg-card p-4"
+                    ? "gap-3 rounded-lg border border-foreground bg-card p-4"
+                    : "gap-3 rounded-lg border border-border bg-card p-4"
                 }
               >
-                <Radio checked={checked} />
-                <View className="min-w-0 flex-1">
-                  {address.isDefault ? (
-                    <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Default
+                <Pressable
+                  onPress={() => setSelectedAddressId(address.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked }}
+                  className="flex-row items-start gap-3"
+                >
+                  <Radio checked={checked} />
+                  <View className="min-w-0 flex-1">
+                    {/* Arriba: Default (o su nombre) a la izquierda y el estado de
+                        verificacion en la esquina. */}
+                    <View className="mb-1 flex-row flex-wrap items-center justify-between gap-2">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {address.isDefault ? "Default" : address.label || "Saved address"}
+                      </Text>
+                      {verifies ? <AddressVerificationBadge verification={address.verification} /> : null}
+                    </View>
+                    {addressLines(address).map((line, index) => (
+                      <Text key={index} className="text-sm leading-6 text-foreground">
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
+                </Pressable>
+
+                {/* Como en el portal: una sin verificar no se puede elegir como
+                    destino, pero se puede verificar aqui mismo. */}
+                {checked && verifies && meta.status !== "VERIFIED" ? (
+                  <View className="gap-2 border-t border-border pt-3">
+                    <Text
+                      className={
+                        meta.status === "INVALID"
+                          ? "text-sm font-semibold leading-5 text-rose-900"
+                          : "text-sm leading-5 text-amber-900"
+                      }
+                    >
+                      {meta.hint}
+                      {meta.message ? " (" + meta.message + ")" : ""}
                     </Text>
-                  ) : address.label ? (
-                    <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {address.label}
+                    <Text className="text-sm leading-5 text-muted-foreground">
+                      Mail can only be forwarded to an address the carrier recognises.
                     </Text>
-                  ) : null}
-                  {addressLines(address).map((line, index) => (
-                    <Text key={index} className="text-sm leading-6 text-foreground">
-                      {line}
-                    </Text>
-                  ))}
-                </View>
-              </Pressable>
+                    <Button variant="outline" loading={verifyingThis} onPress={() => verifySaved.mutate(address)}>
+                      Verify this address
+                    </Button>
+                  </View>
+                ) : null}
+              </View>
             );
           })}
 
@@ -463,7 +539,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
           <View className="gap-3 rounded-lg border border-border bg-card p-4">
             <Text className="text-sm leading-5 text-muted-foreground">
-              Check the address with the carrier before sending anything to it.
+              Check the address with the carrier. It is required before requesting the forward.
             </Text>
             <Button
               variant="outline"
@@ -474,16 +550,34 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
               Check address
             </Button>
 
-            {addressCheck?.verified ? (
+            {draftVerified ? (
               <Notice tone="emerald">The carrier recognises this address.</Notice>
             ) : null}
 
-            {addressCheck && !addressCheck.verified ? (
+            {/* Lo que propone el transportista, si difiere: suele corregir el ZIP
+                o la abreviatura. Usarla evita el rechazo al comprar la etiqueta. */}
+            {draftVerified && addressCheck?.suggested && !sameAddress(addressCheck.suggested, draft) ? (
+              <View className="gap-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
+                <Text className="text-sm font-semibold text-sky-900">The carrier suggests</Text>
+                {addressLines(addressCheck.suggested).map((line, index) => (
+                  <Text key={index} className="text-sm leading-5 text-sky-900">
+                    {line}
+                  </Text>
+                ))}
+                <Button variant="outline" size="sm" onPress={useSuggestedAddress}>
+                  Use suggested address
+                </Button>
+              </View>
+            ) : null}
+
+            {addressCheck && !draftVerified ? (
               <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-                <Text className="text-sm font-semibold leading-5 text-rose-900">{addressCheck.reason}</Text>
+                <Text className="text-sm font-semibold leading-5 text-rose-900">
+                  {addressCheck.reason || "The carrier does not recognise this address."}
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-rose-900">
-                  You can still save it, but the carrier will refuse to print a label for it and the forward will
-                  not go out.
+                  Correct it before forwarding: the carrier will refuse to print a label for it and the forward
+                  will not go out.
                 </Text>
               </View>
             ) : null}
