@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
@@ -62,10 +63,17 @@ function WelcomeModal({ visible, onClose, organizationName, clientName }) {
  */
 function TermsScreen({ terms, organizationName, onAccept, accepting, error }) {
   const heading = (organizationName ? organizationName + " " : "") + "Terms & Conditions";
+  // Va a pantalla completa, sin cabecera ni pestanas que reserven los bordes:
+  // el logo quedaba debajo de la barra de estado y el boton de aceptar, al
+  // final del texto, debajo de la barra de navegacion del sistema.
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="gap-5 p-5 pb-16">
+      <ScrollView
+        contentContainerClassName="gap-5 px-5"
+        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 32 }}
+      >
         <View className="items-center gap-4">
           {brandWordmarkOnLight ? (
             <Image

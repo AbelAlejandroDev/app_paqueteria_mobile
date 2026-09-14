@@ -1,5 +1,6 @@
 import { KeyboardAvoidingView, Modal as RNModal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/utils";
 
@@ -18,9 +19,29 @@ function SheetWrapper({ children }) {
   return <KeyboardAvoidingView behavior="padding">{children}</KeyboardAvoidingView>;
 }
 
+/** El padding que ya tenia el pie, sobre el que se suma la zona segura. */
+const SHEET_PADDING = 20;
+
 export function Modal({ visible, onClose, title, description, children, footer }) {
+  // La hoja llega hasta el borde inferior de la pantalla, detras de la barra de
+  // navegacion de Android y del indicador de inicio del iPhone. Sin reservar esa
+  // zona, los botones del pie quedaban debajo de los botones del sistema en los
+  // telefonos con navegacion de tres botones. El valor lo da el sistema, asi que
+  // vale igual para gestos, tres botones, tablets e iPhone.
+  const insets = useSafeAreaInsets();
+  const bottomPadding = SHEET_PADDING + insets.bottom;
+
   return (
-    <RNModal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <RNModal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      // Explicito y no por defecto: la hoja pinta su fondo hasta abajo y se
+      // separa del sistema con el padding, en vez de dejar una franja vacia.
+      navigationBarTranslucent
+    >
       <View className="flex-1 justify-end bg-black/50">
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
@@ -38,11 +59,24 @@ export function Modal({ visible, onClose, title, description, children, footer }
               </Pressable>
             </View>
 
-            <ScrollView contentContainerClassName="gap-3 p-5" keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerClassName="gap-3 px-5 pt-5"
+              // Sin pie, el ultimo elemento es el contenido: es el que necesita la
+              // zona segura.
+              contentContainerStyle={{ paddingBottom: footer ? SHEET_PADDING : bottomPadding }}
+              keyboardShouldPersistTaps="handled"
+            >
               {children}
             </ScrollView>
 
-            {footer ? <View className="gap-2 border-t border-border p-5">{footer}</View> : null}
+            {footer ? (
+              <View
+                className="gap-2 border-t border-border px-5 pt-5"
+                style={{ paddingBottom: bottomPadding }}
+              >
+                {footer}
+              </View>
+            ) : null}
           </View>
         </SheetWrapper>
       </View>

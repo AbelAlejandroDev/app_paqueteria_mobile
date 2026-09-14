@@ -1,6 +1,7 @@
 import { ScrollView, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { WifiOff } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { brand } from "@/lib/brand";
 import { brandWordmarkOnLight } from "@/lib/brand-assets";
@@ -23,10 +24,14 @@ export default function ConnectionError({
   retrying = false,
   retryLabel = "Try again",
 }) {
+  // Sustituye a la app entera, sin cabecera ni pestanas que reserven los bordes.
+  const insets = useSafeAreaInsets();
+
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="flex-grow items-center justify-center gap-6 p-8"
+      contentContainerClassName="flex-grow items-center justify-center gap-6 px-8"
+      contentContainerStyle={{ paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }}
     >
       {brandWordmarkOnLight ? (
         <Image

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { Check, ChevronDown } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { brand } from "@/lib/brand";
 
 import { cn } from "@/lib/utils";
@@ -9,9 +10,10 @@ import { cn } from "@/lib/utils";
  * Sustituto del Select de Radix. Abre una lista a pantalla completa con
  * buscador: con 50 estados, un desplegable corto no sirve en móvil.
  */
-export function Select({ value, onValueChange, options, placeholder = "Seleccionar", title, className }) {
+export function Select({ value, onValueChange, options, placeholder = "Select", title, className }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const insets = useSafeAreaInsets();
 
   const selected = options.find(([code]) => code === value);
 
@@ -39,9 +41,17 @@ export function Select({ value, onValueChange, options, placeholder = "Seleccion
         <ChevronDown size={18} color="#64748b" />
       </Pressable>
 
-      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
+      <Modal
+        visible={open}
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+        statusBarTranslucent
+        navigationBarTranslucent
+      >
         <View className="flex-1 bg-background">
-          <View className="gap-3 border-b border-border bg-card p-4 pt-14">
+          {/* Antes llevaba un pt-14 fijo para esquivar la barra de estado, que
+              acertaba solo en algunos telefonos. La altura real la da el sistema. */}
+          <View className="gap-3 border-b border-border bg-card px-4 pb-4" style={{ paddingTop: insets.top + 16 }}>
             <Text className="text-lg font-semibold text-foreground">{title || placeholder}</Text>
             <TextInput
               className="h-11 rounded-lg border border-input bg-background px-3 text-base text-foreground"
@@ -67,7 +77,13 @@ export function Select({ value, onValueChange, options, placeholder = "Seleccion
             )}
           />
 
-          <Pressable onPress={() => setOpen(false)} className="border-t border-border bg-card p-4">
+          {/* Ultimo elemento de la pantalla: sin la zona segura quedaba debajo
+              de la barra de navegacion de Android. */}
+          <Pressable
+            onPress={() => setOpen(false)}
+            className="border-t border-border bg-card px-4 pt-4"
+            style={{ paddingBottom: insets.bottom + 16 }}
+          >
             <Text className="text-center text-base font-semibold text-foreground">Cancel</Text>
           </Pressable>
         </View>
