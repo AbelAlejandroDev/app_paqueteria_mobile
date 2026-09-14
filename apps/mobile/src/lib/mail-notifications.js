@@ -127,6 +127,13 @@ export function stackMailNotifications(items) {
  */
 export function routeForMailReceived(data) {
   const ids = mailItemIdsOf(data);
+  const latest = data?.mailItemId ? String(data.mailItemId) : ids[0];
+
+  // El push trae screen: se sigue tal cual. Sin el (la lista, avisos antiguos) se
+  // decide por la cuenta.
+  if (data?.screen === "mail-inbox") return { pathname: "/mail-items", params: { folder: "inbox" } };
+  if (data?.screen === "mail-item" && latest) return { pathname: "/mail-items/[id]", params: { id: latest } };
+
   if (mailItemCount(data) === 1 && ids.length === 1) {
     return { pathname: "/mail-items/[id]", params: { id: ids[0] } };
   }

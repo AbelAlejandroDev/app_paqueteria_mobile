@@ -150,3 +150,14 @@ test("un item descartado se lee Discarded", async () => {
   assert.equal(formatStatusDisplay("DISCARDED"), "Discarded");
   assert.equal(formatStatusDisplay("PICKED_UP"), "Picked Up");
 });
+
+test("el push de correo sigue su screen", () => {
+  assert.deepEqual(routeForMailReceived({ screen: "mail-inbox", count: 2, mailItemIds: ["a", "b"], mailItemId: "b" }), {
+    pathname: "/mail-items",
+    params: { folder: "inbox" },
+  });
+  assert.deepEqual(routeForMailReceived({ screen: "mail-item", count: 1, mailItemIds: ["a"], mailItemId: "a" }), {
+    pathname: "/mail-items/[id]",
+    params: { id: "a" },
+  });
+});

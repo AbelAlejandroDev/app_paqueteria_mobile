@@ -57,6 +57,14 @@ export default function NotificationsScreen() {
       setPhone(formatForDisplay(data?.phone));
     },
     onError: (error) => {
+      // Con PHONE_REQUIRED_FOR_TEXT_ALERTS el servidor dice como quedo el
+      // interruptor de verdad: se pone asi en vez de dejar el que se pidio.
+      const data = error?.response?.data || {};
+      if (typeof data.textAlertsEnabled === "boolean") {
+        queryClient.setQueryData(["client-notification-preferences"], (current) =>
+          current ? { ...current, textAlertsEnabled: data.textAlertsEnabled } : current
+        );
+      }
       Alert.alert("Could not save", formatErrorMessage(error, "Unable to save notification settings"));
     },
   });
@@ -170,9 +178,9 @@ export default function NotificationsScreen() {
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-5">
             <Text className="text-sm leading-5 text-amber-900">
+              {/* El motivo tal cual lo manda el servidor. */}
               {query.data?.channels?.sms?.reason
-                || "Text message delivery is not set up yet."}{" "}
-              Your preference is saved and will apply once your center enables it.
+                || "Text message delivery is not set up yet. Your preference is saved and will apply once your center enables it."}
             </Text>
           </CardContent>
         </Card>
