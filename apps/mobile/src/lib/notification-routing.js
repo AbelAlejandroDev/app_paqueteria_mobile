@@ -5,6 +5,8 @@
  * No hay un segundo sistema de navegacion: todo termina en un router.push.
  */
 
+import { isMailReceived, mailItemCount, routeForMailReceived } from "./mail-notifications.js";
+
 export const NOTIFICATION_DETAIL_SCREEN = "notification-detail";
 
 /**
@@ -35,6 +37,10 @@ function detailRoute(id) {
 export function routeForNotification(data) {
   if (!data) return "/notifications";
 
+  // Correo recibido: su sitio es la pieza, o la bandeja si se apilaron varias.
+  // Va antes que notificationId porque el detalle del aviso no ensena las piezas.
+  if (isMailReceived(data)) return routeForMailReceived(data);
+
   // El caso normal: el backend manda el id exacto.
   if (data.notificationId) return detailRoute(data.notificationId);
 
@@ -62,5 +68,9 @@ function legacyRouteWithoutId(data) {
 
 /** Clave para no navegar dos veces por el mismo aviso. */
 export function navigationKeyFor(data, requestId) {
-  return (data?.notificationId && "notification:" + data.notificationId) || requestId || null;
+  if (!data?.notificationId) return requestId || null;
+  // Un aviso de correo apilado conserva su id y cambia la cuenta: el push de
+  // "2 new mail items" es otro toque distinto del de "a new mail item".
+  if (isMailReceived(data)) return "notification:" + data.notificationId + ":" + mailItemCount(data);
+  return "notification:" + data.notificationId;
 }

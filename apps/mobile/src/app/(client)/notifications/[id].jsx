@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import { isSafeUrl, planLabel, toBlocks, toSegments } from "@/lib/notification-content";
 import { loadNotificationDetail, notificationDetailQueryKey } from "@/lib/notification-routing";
+import { notificationDisplay } from "@/lib/mail-notifications";
 import EmptyState from "@/components/common/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -110,7 +111,7 @@ function WelcomeHeader({ notification }) {
 function PlainHeader({ notification }) {
   return (
     <View className="gap-1">
-      <Text className="text-xl font-semibold text-foreground">{notification.title}</Text>
+      <Text className="text-xl font-semibold text-foreground">{notificationDisplay(notification).title}</Text>
       <Text className="text-xs text-muted-foreground">{formatDate(notification.createdAt)}</Text>
     </View>
   );
@@ -166,13 +167,15 @@ export default function NotificationDetailScreen() {
   }
 
   const Header = HEADERS[notification.type] || PlainHeader;
+  // Un aviso de una sola linea (el de correo) no repite el titulo como cuerpo.
+  const body = HEADERS[notification.type] ? notification.message : notificationDisplay(notification).message;
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4 pb-24">
       <Card>
         <CardContent className="gap-4 p-6">
           <Header notification={notification} />
-          <MessageBody message={notification.message} />
+          {body ? <MessageBody message={body} /> : null}
         </CardContent>
       </Card>
     </ScrollView>

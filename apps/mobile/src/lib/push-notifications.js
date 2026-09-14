@@ -3,6 +3,7 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Device from "expo-device";
 
 import { api } from "@/lib/api";
+import { MAIL_RECEIVED_TYPE, staleMailNotificationIds } from "@/lib/mail-notifications";
 
 /**
  * En Expo Go sobre Android, expo-notifications lanza nada mas importarse:
@@ -189,5 +190,56 @@ export async function takeInitialNotificationTap() {
   } catch {
     // Leer la ultima respuesta no puede impedir que la app arranque.
     return null;
+  }
+}
+
+/**
+ * Avisa cuando llega un push con la app delante. Devuelve la funcion para dejar
+ * de escuchar.
+ */
+export function addNotificationReceivedListener(onReceive) {
+  const Notifications = loadNotifications();
+  if (!Notifications) return () => {};
+
+  const subscription = Notifications.addNotificationReceivedListener((notification) => {
+    onReceive(notification?.request?.content?.data || null);
+  });
+
+  return () => subscription.remove();
+}
+
+/**
+ * Deja en la bandeja del sistema un solo aviso de correo, el mas reciente.
+ *
+ * Expo Push no permite que un push sustituya a otro, asi que "You have 2 new mail
+ * items" llega junto al "You have a new mail item" anterior. Cuando la app corre
+ * --al llegar uno con la app delante o al volver a ella-- se retiran los viejos.
+ * Con la app cerrada no corre nada y se quedan hasta entonces.
+ */
+export async function dismissStaleMailNotifications() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(staleMailNotificationIds(presented).map((id) => Notifications.dismissNotificationAsync(id)));
+  } catch {
+    // Limpiar la bandeja es cosmetico: nunca debe romper nada.
+  }
+}
+
+/** Al abrir el correo desde un aviso, los demas avisos de correo ya estan vistos. */
+export async function dismissAllMailNotifications() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    const ids = presented
+      .filter((entry) => entry?.request?.content?.data?.type === MAIL_RECEIVED_TYPE)
+      .map((entry) => entry.request.identifier);
+    await Promise.all(ids.map((id) => Notifications.dismissNotificationAsync(id)));
+  } catch {
+    // Igual que arriba.
   }
 }

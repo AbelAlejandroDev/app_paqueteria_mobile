@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useBiometricLock } from "@/components/common/biometric-gate";
 import { consumePendingNavigation, subscribePendingNavigation } from "@/lib/pending-navigation";
@@ -31,10 +32,19 @@ export default function NotificationTapHandler() {
           termsAccepted: true,
           unlocked: !locked,
         },
-        navigate: (route) => {
+        navigate: (route, entry) => {
           // Lo que anuncia el push ya existe en el servidor.
           queryClient.invalidateQueries({ queryKey: ["client-notifications"] });
           router.push(route);
+
+          // Un aviso de correo lleva a la pieza o a la bandeja: se marca leido
+          // aqui. Sin esperar: la navegacion no depende de ello.
+          const readIds = entry?.readIds || [];
+          if (readIds.length) {
+            Promise.all(readIds.map((id) => api.patch("/client/notifications/" + encodeURIComponent(id) + "/read")))
+              .then(() => queryClient.invalidateQueries({ queryKey: ["client-notifications"] }))
+              .catch(() => {});
+          }
         },
       });
 

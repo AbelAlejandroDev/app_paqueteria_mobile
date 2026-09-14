@@ -21,13 +21,19 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-/** Guarda la intencion. Si ya se navego por esta clave, se ignora. */
-export function setPendingNavigation({ route, key }) {
+/**
+ * Guarda la intencion. Si ya se navego por esta clave, se ignora.
+ *
+ * `readIds`: avisos que quedan leidos al llegar. Los que abren su propio detalle
+ * se marcan alli; uno de correo lleva a la pieza o a la bandeja, que no saben de
+ * avisos.
+ */
+export function setPendingNavigation({ route, key, readIds = [] }) {
   if (!route) return false;
   if (key && consumed.has(key)) return false;
   if (key && pending?.key === key) return false;
 
-  pending = { route, key: key || null };
+  pending = { route, key: key || null, readIds };
   notify();
   return true;
 }
@@ -50,11 +56,11 @@ export function gatesOpen(gates) {
 export function consumePendingNavigation({ gates, navigate }) {
   if (!pending || !gatesOpen(gates)) return false;
 
-  const { route, key } = pending;
+  const entry = pending;
   pending = null;
-  if (key) consumed.add(key);
+  if (entry.key) consumed.add(entry.key);
 
-  navigate(route);
+  navigate(entry.route, entry);
   return true;
 }
 
