@@ -145,3 +145,49 @@ export async function unregisterFromPush() {
     console.warn("Unable to unregister push device", error?.message || error);
   }
 }
+
+function dataFromResponse(response) {
+  return response?.notification?.request?.content?.data || null;
+}
+
+/**
+ * Avisa cuando el cliente toca una notificacion con la app abierta o en
+ * segundo plano. Devuelve la funcion para dejar de escuchar.
+ *
+ * En Expo Go no hay modulo y no se escucha nada: tampoco llegarian pushes.
+ */
+export function addNotificationTapListener(onTap) {
+  const Notifications = loadNotifications();
+  if (!Notifications) return () => {};
+
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    onTap(dataFromResponse(response), response?.notification?.request?.identifier || null);
+  });
+
+  return () => subscription.remove();
+}
+
+/**
+ * El toque que abrio la app desde cerrada.
+ *
+ * El listener no lo recibe: se registra despues de que el toque ya ocurrio.
+ * Se borra al leerlo para que volver al panel no reabra la misma notificacion.
+ */
+export async function takeInitialNotificationTap() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return null;
+
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (!response) return null;
+
+    await Notifications.clearLastNotificationResponseAsync();
+    return {
+      data: dataFromResponse(response),
+      id: response?.notification?.request?.identifier || null,
+    };
+  } catch {
+    // Leer la ultima respuesta no puede impedir que la app arranque.
+    return null;
+  }
+}

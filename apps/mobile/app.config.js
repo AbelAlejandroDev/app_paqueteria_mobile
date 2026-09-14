@@ -111,7 +111,7 @@ module.exports = {
         "expo-local-authentication",
         {
           // iOS rechaza la app en revision si falta este texto.
-          faceIDPermission: "Permite Face ID para desbloquear tu buzón sin escribir la contraseña.",
+          faceIDPermission: "Allow Face ID to unlock your mailbox without typing your password.",
         },
       ],
       [
@@ -119,9 +119,9 @@ module.exports = {
         {
           // iOS rechaza la app si estos textos faltan.
           cameraPermission:
-            "Permite el acceso a la cámara para fotografiar tus documentos de verificación USPS.",
+            "Allow camera access to photograph your USPS verification documents.",
           photosPermission:
-            "Permite el acceso a tus fotos para adjuntar tus documentos de verificación USPS.",
+            "Allow photo access to attach your USPS verification documents.",
         },
       ],
     ],

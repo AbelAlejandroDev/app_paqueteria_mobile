@@ -15,6 +15,8 @@ import {
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
 import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
+import { clearBiometricLock } from "@/lib/security-preferences";
+import { clearPendingNavigation } from "@/lib/pending-navigation";
 
 const AuthContext = createContext(null);
 
@@ -110,6 +112,10 @@ export function AuthProvider({ children }) {
     // Antes de cerrar sesion, mientras el token todavia vale: si no, el
     // siguiente que entre en este telefono recibiria los avisos del anterior.
     await unregisterFromPush();
+    // El bloqueo es del dispositivo: quien entre despues no lo ha activado.
+    await clearBiometricLock();
+    // Un push de esta cuenta no puede abrirse en la sesion de la siguiente.
+    clearPendingNavigation();
 
     try {
       await api.post("/auth/logout");

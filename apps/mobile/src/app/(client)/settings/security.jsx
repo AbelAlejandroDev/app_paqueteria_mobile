@@ -4,6 +4,7 @@ import { Alert, ScrollView, Switch, Text, View } from "react-native";
 import { brand } from "@/lib/brand";
 import {
   authenticate,
+  describeAuthenticationError,
   getBiometricSupport,
   getSecurityPreferences,
   setSecurityPreferences,
@@ -70,11 +71,23 @@ export default function SecurityScreen() {
       return;
     }
 
+    // Se vuelve a mirar el dispositivo: el cliente pudo quitar el bloqueo de
+    // pantalla despues de abrir esta pantalla.
+    const support = await getBiometricSupport();
+    setBiometrics(support);
+    if (!support.available) {
+      Alert.alert("Could not turn it on", support.reason);
+      return;
+    }
+
     // Se exige superar la comprobacion antes de activarla: si el lector no
     // funciona, activarla dejaria al cliente fuera de su propia app.
-    const ok = await authenticate("Confirm to turn on the lock");
-    if (!ok) {
-      Alert.alert("Could not turn it on", "The biometric check was not completed.");
+    const result = await authenticate("Confirm to turn on the lock");
+    if (!result.success) {
+      // Cancelar es una decision, no un fallo: no hace falta avisar.
+      if (!result.cancelled) {
+        Alert.alert("Could not turn it on", describeAuthenticationError(result.error));
+      }
       return;
     }
 
@@ -85,24 +98,19 @@ export default function SecurityScreen() {
     <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-24">
       <Card>
         <CardContent className="gap-5 p-5">
-          <SettingRow
-            title="Keep me logged in"
-            description="Keeps your session when you close the app. If you turn it off, you will have to sign in every time."
-            value={prefs.keepLoggedIn}
-            onValueChange={(value) => update({ keepLoggedIn: value })}
-          />
-
-          <View className="h-px bg-border" />
-
+          {/* La opcion de mantener la sesion abierta se quito: guardaba una
+              preferencia que nada leia, asi que prometia algo que la app no hacia. */}
           <SettingRow
             title={biometrics.available ? biometrics.label : "Biometric lock"}
             description={
               biometrics.available
-                ? "Asks for your fingerprint or face when you open the app."
+                ? "Asks for your fingerprint, face or screen lock when you open the app, or when you come back after 30 seconds away."
                 : biometrics.reason
             }
             value={prefs.requireBiometrics}
-            disabled={!biometrics.available}
+            // Apagarlo tiene que poder hacerse siempre, aunque el dispositivo ya no
+            // tenga bloqueo: si no, quedaria encendido y sin forma de quitarlo.
+            disabled={!biometrics.available && !prefs.requireBiometrics}
             onValueChange={toggleBiometrics}
           />
         </CardContent>
