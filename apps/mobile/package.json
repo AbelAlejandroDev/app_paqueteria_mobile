@@ -12,7 +12,8 @@
     "android:hdg": "cross-env-shell APP_BRAND=hdg expo start --android",
     "ios:hdg": "cross-env-shell APP_BRAND=hdg expo start --ios",
     "icons": "node scripts/generate-brand-icons.js",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/**/*.test.mjs\""
   },
   "dependencies": {
     "@expo/ui": "~57.0.13",
