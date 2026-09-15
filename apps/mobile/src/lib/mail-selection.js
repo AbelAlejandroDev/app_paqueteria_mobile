@@ -11,14 +11,24 @@
 const TERMINAL_STATUSES = ["PICKED_UP", "FORWARDED", "DISCARDED", "ARCHIVED"];
 const ACTIVE_REQUEST_STATUSES = ["OPEN", "PROCESSING", "IN_PROGRESS", "AWAITING_CLIENT_APPROVAL", "READY_TO_SHIP"];
 
-/** Las solicitudes que se pueden pedir para varias piezas a la vez, en orden de menu. */
-export const BULK_ACTIONS = ["FORWARD", "SCAN", "DISCARD"];
+/**
+ * Las solicitudes que se pueden pedir para varias piezas a la vez, en orden de menu.
+ * NOT_MINE no es una solicitud de servicio: abre una revision de asignacion por
+ * pieza (POST /client/mail-items/:id/reject-assignment).
+ */
+export const BULK_ACTIONS = ["FORWARD", "SCAN", "DISCARD", "NOT_MINE"];
 
 /** Lo mismo que availableActions del backend, calculado con lo que trae la lista. */
 export function availableActionsFor(item) {
   const status = item?.status;
   if (TERMINAL_STATUSES.includes(status)) {
-    return { canRequestScan: false, canRequestForward: false, canRequestPickup: false, canRequestDiscard: false };
+    return {
+      canRequestScan: false,
+      canRequestForward: false,
+      canRequestPickup: false,
+      canRequestDiscard: false,
+      canRejectAssignment: false,
+    };
   }
 
   const active = (Array.isArray(item?.serviceRequests) ? item.serviceRequests : []).filter((request) =>
@@ -36,6 +46,8 @@ export function availableActionsFor(item) {
     canRequestForward: status !== "FORWARDED" && !hasActiveDisposition,
     canRequestPickup: status !== "PICKED_UP" && !hasActiveDisposition,
     canRequestDiscard: !hasActiveRequest,
+    // Como get.js: la lista ya excluye las piezas con una revision abierta.
+    canRejectAssignment: !hasActiveDisposition,
   };
 }
 
@@ -50,7 +62,63 @@ export function canBulkRequest(item, action) {
   if (action === "FORWARD") return item?.type === "LETTER" && actions.canRequestForward;
   if (action === "SCAN") return actions.canRequestScan;
   if (action === "DISCARD") return actions.canRequestDiscard;
+  if (action === "NOT_MINE") return actions.canRejectAssignment;
   return false;
+}
+
+function hasActiveRequest(item, types) {
+  return (Array.isArray(item?.serviceRequests) ? item.serviceRequests : []).some(
+    (request) => types.includes(request?.type) && ACTIVE_REQUEST_STATUSES.includes(request?.status)
+  );
+}
+
+const DISPOSITIONS = ["FORWARD", "PICKUP", "DISCARD"];
+
+/** Por que una pieza no admite una solicitud en grupo (codigo), o null si la admite. */
+export function bulkBlockReason(item, action) {
+  if (canBulkRequest(item, action)) return null;
+  if (TERMINAL_STATUSES.includes(item?.status)) return "FINISHED";
+
+  if (action === "FORWARD") {
+    if (item?.type !== "LETTER") return "NOT_A_LETTER";
+    return "REQUEST_IN_PROGRESS";
+  }
+  if (action === "SCAN") {
+    if (item?.type === "PACKAGE") return "PACKAGE_NO_SCAN";
+    if (item?.status === "SCANNED") return "ALREADY_SCANNED";
+    if (hasActiveRequest(item, ["SCAN"])) return "SCAN_IN_PROGRESS";
+    return "REQUEST_IN_PROGRESS";
+  }
+  if (action === "DISCARD") {
+    if (hasActiveRequest(item, ["SCAN"]) && !hasActiveRequest(item, DISPOSITIONS)) return "SCAN_IN_PROGRESS";
+    return "REQUEST_IN_PROGRESS";
+  }
+  return "REQUEST_IN_PROGRESS";
+}
+
+const REASON_TEXT = {
+  PACKAGE_NO_SCAN: (n) => (n === 1 ? "Packages can't be scanned." : n + " are packages, and packages can't be scanned."),
+  ALREADY_SCANNED: (n) => (n === 1 ? "1 item is already scanned." : n + " items are already scanned."),
+  SCAN_IN_PROGRESS: (n) => (n === 1 ? "1 item has a scan in progress." : n + " items have a scan in progress."),
+  NOT_A_LETTER: (n) =>
+    n === 1
+      ? "Only letters can be forwarded together. Forward it from its own page."
+      : "Only letters can be forwarded together. " + n + " items aren't letters.",
+  REQUEST_IN_PROGRESS: (n) =>
+    n === 1
+      ? "1 item already has a pickup, forward or discard in progress."
+      : n + " items already have a pickup, forward or discard in progress.",
+  FINISHED: (n) => (n === 1 ? "1 item has already left your mailbox." : n + " items have already left your mailbox."),
+};
+
+/** Los motivos de las que se quedan fuera, agrupados y dichos para el cliente. */
+export function bulkBlockReasons(items, action) {
+  const counts = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const code = bulkBlockReason(item, action);
+    if (code) counts.set(code, (counts.get(code) || 0) + 1);
+  }
+  return [...counts.entries()].map(([code, count]) => ({ code, count, text: REASON_TEXT[code](count) }));
 }
 
 /** Si una pieza admite al menos una solicitud en grupo: solo esas se pueden marcar. */
@@ -63,7 +131,7 @@ export function bulkActionSummary(selectedItems) {
   const items = Array.isArray(selectedItems) ? selectedItems : [];
   return BULK_ACTIONS.map((action) => {
     const eligible = items.filter((item) => canBulkRequest(item, action));
-    return { action, eligible, skipped: items.length - eligible.length };
+    return { action, eligible, skipped: items.length - eligible.length, reasons: bulkBlockReasons(items, action) };
   });
 }
 

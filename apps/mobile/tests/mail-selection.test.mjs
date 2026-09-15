@@ -21,6 +21,7 @@ test("las acciones siguen la misma regla que el backend", () => {
     canRequestForward: true,
     canRequestPickup: true,
     canRequestDiscard: true,
+    canRejectAssignment: true,
   });
 
   // Un escaneo en marcha no bloquea destinos, pero si descartar.
@@ -91,4 +92,37 @@ test("una sola solicitud con todas las piezas", () => {
     chargeConsent: true,
   });
   assert.deepEqual(bulkRequestBody("DISCARD", items), { type: "DISCARD", mailItemId: "a", mailItemIds: ["a", "b"] });
+});
+
+test("Not mine: cualquier pieza sin un destino en marcha", async () => {
+  const { canBulkRequest: can } = await import("../src/lib/mail-selection.js");
+  assert.equal(can(item("a"), "NOT_MINE"), true);
+  assert.equal(can(item("s", { status: "SCAN_REQUESTED", serviceRequests: [req("SCAN", "OPEN")] }), "NOT_MINE"), true);
+  assert.equal(can(item("f", { serviceRequests: [req("PICKUP", "OPEN")] }), "NOT_MINE"), false);
+  assert.equal(can(item("t", { status: "PICKED_UP" }), "NOT_MINE"), false);
+});
+
+test("una opcion no disponible dice por que", async () => {
+  const { bulkActionSummary: summary, bulkBlockReasons } = await import("../src/lib/mail-selection.js");
+  const pkg = item("p", { type: "PACKAGE" });
+
+  const scan = summary([pkg]).find((s) => s.action === "SCAN");
+  assert.equal(scan.eligible.length, 0);
+  assert.deepEqual(scan.reasons.map((r) => r.text), ["Packages can't be scanned."]);
+
+  const mixed = [
+    item("p1", { type: "PACKAGE" }),
+    item("p2", { type: "PACKAGE" }),
+    item("s1", { status: "SCANNED" }),
+    item("r1", { status: "SCAN_REQUESTED", serviceRequests: [req("SCAN", "OPEN")] }),
+  ];
+  assert.deepEqual(bulkBlockReasons(mixed, "SCAN").map((r) => r.text), [
+    "2 are packages, and packages can't be scanned.",
+    "1 item is already scanned.",
+    "1 item has a scan in progress.",
+  ]);
+
+  assert.deepEqual(bulkBlockReasons([pkg], "FORWARD").map((r) => r.code), ["NOT_A_LETTER"]);
+  assert.deepEqual(bulkBlockReasons([item("d", { serviceRequests: [req("SCAN", "OPEN")] })], "DISCARD").map((r) => r.code), ["SCAN_IN_PROGRESS"]);
+  assert.deepEqual(bulkBlockReasons([item("ok")], "SCAN"), []);
 });

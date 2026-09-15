@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronRight, ScanLine, Trash2, Truck } from "lucide-react-native";
+import { AlertCircle, ChevronRight, ScanLine, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { formatErrorMessage } from "@/lib/utils";
@@ -38,7 +38,19 @@ const OPTIONS = {
     label: "Discard",
     detail: (count) => (count === 1 ? "1 item securely destroyed." : count + " items securely destroyed."),
   },
+  NOT_MINE: {
+    icon: AlertCircle,
+    label: "Not mine",
+    detail: (count) =>
+      count === 1 ? "Your center reviews 1 item's assignment." : "Your center reviews the assignment of " + count + " items.",
+  },
 };
+
+const TONES = {
+  DISCARD: { circle: "bg-rose-50", icon: "#be123c", label: "text-rose-700" },
+  NOT_MINE: { circle: "bg-amber-50", icon: "#92400e", label: "text-amber-900" },
+};
+const DEFAULT_TONE = { circle: "bg-primary/10", icon: "#0f172a", label: "text-foreground" };
 
 function plural(count, word) {
   return count + " " + word + (count === 1 ? "" : "s");
@@ -49,7 +61,9 @@ function OptionRow({ summary, onPress }) {
   const Icon = option.icon;
   const count = summary.eligible.length;
   const disabled = count === 0;
-  const destructive = summary.action === "DISCARD";
+  const tone = TONES[summary.action] || DEFAULT_TONE;
+  // El porque, agrupado: "Packages can't be scanned. 1 item is already scanned."
+  const reasons = summary.reasons.map((reason) => reason.text).join(" ");
 
   return (
     <Pressable
@@ -60,25 +74,19 @@ function OptionRow({ summary, onPress }) {
       className="flex-row items-center gap-3 rounded-lg border border-border bg-card p-4 active:bg-muted"
       style={disabled ? { opacity: 0.5 } : null}
     >
-      <View
-        className={
-          destructive
-            ? "h-10 w-10 items-center justify-center rounded-full bg-rose-50"
-            : "h-10 w-10 items-center justify-center rounded-full bg-primary/10"
-        }
-      >
-        <Icon size={20} color={destructive ? "#be123c" : "#0f172a"} />
+      <View className={"h-10 w-10 items-center justify-center rounded-full " + tone.circle}>
+        <Icon size={20} color={tone.icon} />
       </View>
       <View className="min-w-0 flex-1">
-        <Text className={destructive ? "text-base font-semibold text-rose-700" : "text-base font-semibold text-foreground"}>
-          {option.label}
-        </Text>
+        <Text className={"text-base font-semibold " + tone.label}>{option.label}</Text>
+        {/* Sin ninguna: en gris y con el motivo. Con algunas fuera: el motivo
+            de esas, en ambar. */}
         <Text className="mt-0.5 text-sm leading-5 text-muted-foreground">
-          {disabled ? "Not available for the selected items." : option.detail(count)}
+          {disabled ? reasons || "Not available for the selected items." : option.detail(count)}
         </Text>
         {!disabled && summary.skipped ? (
           <Text className="mt-0.5 text-xs leading-4 text-amber-800">
-            {plural(summary.skipped, "selected item") + " can't be included."}
+            {plural(summary.skipped, "selected item") + " won't be included. " + reasons}
           </Text>
         ) : null}
       </View>
@@ -125,6 +133,38 @@ export default function BulkRequestSheet({ visible, onClose, selectedItems, onFo
     },
   });
 
+  /**
+   * "Not mine" abre una revision de asignacion por pieza: el backend no tiene una
+   * para varias, y el centro revisa cada foto por separado. Se mandan de una en
+   * una para poder decir cuales fallaron.
+   */
+  const rejectAssignments = useMutation({
+    mutationFn: async () => {
+      const eligible = summaryFor("NOT_MINE").eligible;
+      const failed = [];
+      for (const item of eligible) {
+        try {
+          await api.post("/client/mail-items/" + encodeURIComponent(item.id) + "/reject-assignment", {});
+        } catch (error) {
+          failed.push({ item, message: formatErrorMessage(error, "Could not send") });
+        }
+      }
+      return { sent: eligible.length - failed.length, failed };
+    },
+    onSuccess: async ({ sent, failed }) => {
+      if (failed.length) {
+        Alert.alert(
+          sent ? "Some items were not sent" : "Could not send",
+          failed.map(({ item, message }) => (item.itemCode || item.id) + ": " + message).join("\n")
+        );
+      } else {
+        Alert.alert("Sent", "Your center will review " + plural(sent, "item") + ".");
+      }
+      onClose();
+      await onCompleted?.();
+    },
+  });
+
   const choose = (action) => {
     if (action === "FORWARD") {
       onForward(summaryFor("FORWARD").eligible);
@@ -132,6 +172,39 @@ export default function BulkRequestSheet({ visible, onClose, selectedItems, onFo
     }
     setStep(action);
   };
+
+  if (step === "NOT_MINE") {
+    const count = summaryFor("NOT_MINE").eligible.length;
+
+    return (
+      <Modal
+        visible={visible}
+        onClose={onClose}
+        title={count === 1 ? "This item is not yours?" : "These " + count + " items are not yours?"}
+        description="Staff will review the photo and assignment of each item, and reassign or discard it."
+        footer={
+          <>
+            <Button
+              className="border-amber-300 bg-amber-50"
+              labelClassName="text-amber-900"
+              variant="outline"
+              loading={rejectAssignments.isPending}
+              onPress={() => rejectAssignments.mutate()}
+            >
+              Send to staff
+            </Button>
+            <Button variant="outline" disabled={rejectAssignments.isPending} onPress={() => setStep("menu")}>
+              Back
+            </Button>
+          </>
+        }
+      >
+        <Notice tone="amber">
+          Use this only when the mail belongs to another renter or was assigned to your mailbox by mistake.
+        </Notice>
+      </Modal>
+    );
+  }
 
   if (step === "SCAN" || step === "DISCARD") {
     const count = summaryFor(step).eligible.length;
