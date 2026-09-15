@@ -388,7 +388,6 @@ export default function MailItemsScreen() {
         headerTitleAlign: "center",
         headerLeft: selectedFolder
           ? () => (
-              <View className="flex-row items-center gap-1">
               <Pressable
                 // Sube un solo nivel: de una subcarpeta a Completada, y de una
                 // carpeta a la raiz. Volver del todo de golpe obligaria a
@@ -405,10 +404,14 @@ export default function MailItemsScreen() {
               >
                 <ArrowLeft size={24} color="#0f172a" />
               </Pressable>
-
-              {/* Seleccionar varias. Funciona como interruptor: la segunda vez
-                  sale del modo y desmarca todo. */}
-              {canSelect || selectionMode ? (
+            )
+          : undefined,
+        // Seleccionar varias, a la derecha y lejos de la flecha para no tocarla
+        // por error. Funciona como interruptor: la segunda vez sale del modo y
+        // desmarca todo.
+        headerRight:
+          canSelect || selectionMode
+            ? () => (
                 <Pressable
                   onPress={toggleSelectionMode}
                   hitSlop={10}
@@ -419,10 +422,8 @@ export default function MailItemsScreen() {
                 >
                   <ListChecks size={22} color={selectionMode ? brand.primaryColor : "#0f172a"} />
                 </Pressable>
-              ) : null}
-              </View>
-            )
-          : undefined,
+              )
+            : undefined,
       }}
     />
   );
