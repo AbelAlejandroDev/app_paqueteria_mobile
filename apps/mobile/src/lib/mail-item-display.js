@@ -49,6 +49,45 @@ export function formatStatusDisplay(status) {
     .join(" ");
 }
 
+const REQUEST_TYPE_LABELS = { SCAN: "Scan", FORWARD: "Forward", PICKUP: "Pickup", DISCARD: "Discard" };
+const CLOSED_REQUEST_LABELS = { REJECTED: "Rejected", CANCELLED: "Cancelled" };
+const CLOSED_REQUEST_COLOR = { container: "border-rose-200 bg-rose-100", label: "text-rose-800" };
+
+/**
+ * Estados de pieza que no son un final: sobre ellos, una solicitud cerrada sin
+ * hacerse es la ultima noticia. En PICKED_UP, FORWARDED o DISCARDED lo que manda
+ * es el final.
+ */
+const OPEN_ITEM_STATUSES = ["RECEIVED", "READY_FOR_PICKUP", "SCAN_REQUESTED", "SCANNED", "FORWARD_REQUESTED"];
+
+/** La solicitud mas reciente de la pieza (incluidas las de un reenvio agrupado). */
+export function latestServiceRequest(item) {
+  const requests = Array.isArray(item?.serviceRequests) ? item.serviceRequests : [];
+  return [...requests].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0))[0] || null;
+}
+
+/**
+ * El estado que se le enseña al cliente.
+ *
+ * Si la ultima solicitud se rechazo o cancelo, eso es lo que paso: "Forward
+ * Rejected". El backend deja la pieza en FORWARD_REQUESTED o SCAN_REQUESTED
+ * cuando el staff rechaza desde su panel, y la lista seguia diciendo "Forward
+ * Requested" de algo que ya no esta en marcha. Con el backend corregido la pieza
+ * vuelve a RECEIVED y se sigue viendo el rechazo, que es la noticia reciente.
+ */
+export function getItemStatusDisplay(item) {
+  const status = item?.status;
+  const latest = latestServiceRequest(item);
+  const closed = latest ? CLOSED_REQUEST_LABELS[latest.status] : null;
+  const type = latest ? REQUEST_TYPE_LABELS[latest.type] : null;
+
+  if (closed && type && OPEN_ITEM_STATUSES.includes(status)) {
+    return { label: type + " " + closed, color: CLOSED_REQUEST_COLOR };
+  }
+
+  return { label: formatStatusDisplay(status), color: getStatusColor(status) };
+}
+
 export function getMailTypeLabel(type) {
   if (type === "LARGE_ENVELOPE") return "Large Envelope";
   if (type === "PACKAGE") return "Package";

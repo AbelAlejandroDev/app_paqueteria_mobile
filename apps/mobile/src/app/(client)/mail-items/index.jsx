@@ -23,12 +23,11 @@ import { api } from "@/lib/api";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import {
   FOLDER_LABELS,
-  formatStatusDisplay,
   getCurrentStatusColor,
   getCurrentStatusLabel,
+  getItemStatusDisplay,
   getMailTypeLabel,
   getPrimaryPhoto,
-  getStatusColor,
   normalizeFolders,
 } from "@/lib/mail-item-display";
 import EmptyState from "@/components/common/empty-state";
@@ -145,7 +144,9 @@ function StorageFeeNotice({ notice }) {
 function MailItemCard({ item }) {
   const photo = getPrimaryPhoto(item);
   const TypeIcon = item.type === "PACKAGE" ? Package2 : Mail;
-  const statusColor = getStatusColor(item.status);
+  // El estado de la ultima solicitud si se rechazo o cancelo, no el que dejo la pieza.
+  const statusDisplay = getItemStatusDisplay(item);
+  const statusColor = statusDisplay.color;
   const currentColor = getCurrentStatusColor(item);
   // Mismo criterio que usa el backend para contar los avisos de la carpeta.
   const isUnread = item.viewStatus !== "VIEWED" && !item.viewedAt;
@@ -182,7 +183,7 @@ function MailItemCard({ item }) {
 
           <View className="flex-row flex-wrap items-center gap-1.5">
             <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
-              {formatStatusDisplay(item.status)}
+              {statusDisplay.label}
             </Badge>
             <Badge variant="outline" className={currentColor.container} labelClassName={currentColor.label}>
               {getCurrentStatusLabel(item)}

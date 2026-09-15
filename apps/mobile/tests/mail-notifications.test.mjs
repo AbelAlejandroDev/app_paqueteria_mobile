@@ -161,3 +161,28 @@ test("el push de correo sigue su screen", () => {
     params: { id: "a" },
   });
 });
+
+test("una pieza cuya ultima solicitud se rechazo no dice Forward Requested", async () => {
+  const { getItemStatusDisplay } = await import("../src/lib/mail-item-display.js");
+  const req = (type, status, createdAt) => ({ id: type + status + createdAt, type, status, createdAt });
+
+  // Lo que deja hoy el backend: la pieza en FORWARD_REQUESTED con el reenvio rechazado.
+  const stuck = { status: "FORWARD_REQUESTED", serviceRequests: [req("FORWARD", "REJECTED", "2026-09-14T10:00:00Z")] };
+  assert.equal(getItemStatusDisplay(stuck).label, "Forward Rejected");
+
+  // Con el backend corregido (RECEIVED) se sigue viendo el rechazo.
+  assert.equal(getItemStatusDisplay({ ...stuck, status: "RECEIVED" }).label, "Forward Rejected");
+
+  // La mas reciente manda, aunque lleguen desordenadas.
+  const rerequested = {
+    status: "FORWARD_REQUESTED",
+    serviceRequests: [req("FORWARD", "REJECTED", "2026-09-14T10:00:00Z"), req("FORWARD", "OPEN", "2026-09-15T10:00:00Z")],
+  };
+  assert.equal(getItemStatusDisplay(rerequested).label, "Forward Requested");
+
+  assert.equal(getItemStatusDisplay({ status: "SCAN_REQUESTED", serviceRequests: [req("SCAN", "CANCELLED", "2026-09-14T10:00:00Z")] }).label, "Scan Cancelled");
+
+  // Un final manda sobre una solicitud cerrada anterior.
+  assert.equal(getItemStatusDisplay({ status: "DISCARDED", serviceRequests: [req("FORWARD", "REJECTED", "2026-09-14T10:00:00Z")] }).label, "Discarded");
+  assert.equal(getItemStatusDisplay({ status: "RECEIVED" }).label, "Received");
+});

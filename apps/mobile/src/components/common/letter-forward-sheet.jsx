@@ -419,184 +419,202 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         ))}
       </View>
 
-      {!addingAddress ? (
-        <View className="gap-3">
-          {previewQuery.isLoading ? <Skeleton className="h-32 w-full" /> : null}
+      {/* Las guardadas se quedan siempre a la vista, con la predeterminada
+          arriba. "Send to another address" es una opcion mas de la lista: al
+          elegirla se abre el formulario debajo, y volver a una guardada es
+          tocarla. Antes el formulario sustituia a la lista y, para volver a la
+          Default, habia que cerrar la hoja. */}
+      <View className="gap-3">
+        {previewQuery.isLoading ? <Skeleton className="h-32 w-full" /> : null}
 
-          {addresses.map((address) => {
-            const checked = effectiveAddressId === address.id;
-            const verifies = serverVerifiesAddresses(address);
-            const meta = describeAddressVerification(address.verification);
-            const verifyingThis = verifySaved.isPending && verifySaved.variables?.id === address.id;
+        {addresses.map((address) => {
+          const checked = !addingAddress && effectiveAddressId === address.id;
+          const verifies = serverVerifiesAddresses(address);
+          const meta = describeAddressVerification(address.verification);
+          const verifyingThis = verifySaved.isPending && verifySaved.variables?.id === address.id;
 
-            return (
-              <View
-                key={address.id}
-                className={
-                  checked
-                    ? "gap-3 rounded-lg border border-foreground bg-card p-4"
-                    : "gap-3 rounded-lg border border-border bg-card p-4"
-                }
+          return (
+            <View
+              key={address.id}
+              className={
+                checked
+                  ? "gap-3 rounded-lg border border-foreground bg-card p-4"
+                  : "gap-3 rounded-lg border border-border bg-card p-4"
+              }
+            >
+              <Pressable
+                onPress={() => {
+                  setSelectedAddressId(address.id);
+                  setAddingAddress(false);
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked }}
+                className="flex-row items-start gap-3"
               >
-                <Pressable
-                  onPress={() => setSelectedAddressId(address.id)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked }}
-                  className="flex-row items-start gap-3"
+                <Radio checked={checked} />
+                <View className="min-w-0 flex-1">
+                  {/* Arriba: Default (o su nombre) a la izquierda y el estado de
+                      verificacion en la esquina. */}
+                  <View className="mb-1 flex-row flex-wrap items-center justify-between gap-2">
+                    <Text className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {address.isDefault ? "Default" : address.label || "Saved address"}
+                    </Text>
+                    {verifies ? <AddressVerificationBadge verification={address.verification} /> : null}
+                  </View>
+                  {addressLines(address).map((line, index) => (
+                    <Text key={index} className="text-sm leading-6 text-foreground">
+                      {line}
+                    </Text>
+                  ))}
+                </View>
+              </Pressable>
+
+              {/* Como en el portal: una sin verificar no se puede elegir como
+                  destino, pero se puede verificar aqui mismo. */}
+              {checked && verifies && meta.status !== "VERIFIED" ? (
+                <View className="gap-2 border-t border-border pt-3">
+                  <Text
+                    className={
+                      meta.status === "INVALID"
+                        ? "text-sm font-semibold leading-5 text-rose-900"
+                        : "text-sm leading-5 text-amber-900"
+                    }
+                  >
+                    {meta.hint}
+                    {meta.message ? " (" + meta.message + ")" : ""}
+                  </Text>
+                  <Text className="text-sm leading-5 text-muted-foreground">
+                    Mail can only be forwarded to an address the carrier recognises.
+                  </Text>
+                  <Button variant="outline" loading={verifyingThis} onPress={() => verifySaved.mutate(address)}>
+                    Verify this address
+                  </Button>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+
+        {addresses.length === 0 && !previewQuery.isLoading ? (
+          <View className="rounded-lg border border-border bg-muted p-4">
+            <Text className="text-sm leading-5 text-muted-foreground">
+              You have no saved addresses yet. Add the one you want this mail sent to.
+            </Text>
+          </View>
+        ) : null}
+
+        <View
+          className={
+            addingAddress
+              ? "gap-4 rounded-lg border border-foreground bg-card p-4"
+              : "gap-4 rounded-lg border border-border bg-card p-4"
+          }
+        >
+          <Pressable
+            onPress={() => setAddingAddress(true)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: addingAddress }}
+            className="flex-row items-center gap-3"
+          >
+            <Radio checked={addingAddress} />
+            <Plus size={18} color="#0f172a" />
+            <Text className="min-w-0 flex-1 text-base font-semibold text-foreground">Send to another address</Text>
+          </Pressable>
+
+          {addingAddress ? (
+            <View className="gap-3">
+              <Field label="Name this address">
+                <Input value={draft.label} placeholder="Home, Office" onChangeText={setDraftField("label")} />
+              </Field>
+              <Field label={<RequiredLabel>Recipient</RequiredLabel>}>
+                <Input value={draft.recipient} onChangeText={setDraftField("recipient")} autoComplete="name" />
+              </Field>
+              <Field label="Company">
+                <Input value={draft.company} onChangeText={setDraftField("company")} />
+              </Field>
+              <Field label={<RequiredLabel>Address line 1</RequiredLabel>}>
+                <Input value={draft.addressLine1} onChangeText={setDraftField("addressLine1")} autoComplete="street-address" />
+              </Field>
+              <Field label="Address line 2">
+                <Input value={draft.addressLine2} onChangeText={setDraftField("addressLine2")} />
+              </Field>
+              <Field label={<RequiredLabel>City</RequiredLabel>}>
+                <Input value={draft.city} onChangeText={setDraftField("city")} />
+              </Field>
+              <Field label={<RequiredLabel>State</RequiredLabel>}>
+                <Select
+                  value={draft.state}
+                  onValueChange={setDraftField("state")}
+                  options={US_STATES}
+                  placeholder="Select state"
+                  title="State"
+                />
+              </Field>
+              <Field label={<RequiredLabel>ZIP</RequiredLabel>}>
+                <Input value={draft.zip} onChangeText={setDraftField("zip")} keyboardType="number-pad" maxLength={10} />
+              </Field>
+              <Field label={<RequiredLabel>Phone</RequiredLabel>}>
+                <Input value={draft.phone} onChangeText={setDraftField("phone")} keyboardType="phone-pad" autoComplete="tel" />
+                <Text className="text-xs text-muted-foreground">The carrier prints it on the label.</Text>
+              </Field>
+
+              <View className="gap-3 rounded-lg border border-border bg-card p-4">
+                <Text className="text-sm leading-5 text-muted-foreground">
+                  Check the address with the carrier. It is required before requesting the forward.
+                </Text>
+                <Button
+                  variant="outline"
+                  loading={verifyAddress.isPending}
+                  disabled={!draftIsComplete}
+                  onPress={() => verifyAddress.mutate()}
                 >
-                  <Radio checked={checked} />
-                  <View className="min-w-0 flex-1">
-                    {/* Arriba: Default (o su nombre) a la izquierda y el estado de
-                        verificacion en la esquina. */}
-                    <View className="mb-1 flex-row flex-wrap items-center justify-between gap-2">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {address.isDefault ? "Default" : address.label || "Saved address"}
-                      </Text>
-                      {verifies ? <AddressVerificationBadge verification={address.verification} /> : null}
-                    </View>
-                    {addressLines(address).map((line, index) => (
-                      <Text key={index} className="text-sm leading-6 text-foreground">
+                  Check address
+                </Button>
+
+                {draftVerified ? (
+                  <Notice tone="emerald">The carrier recognises this address.</Notice>
+                ) : null}
+
+                {/* Lo que propone el transportista, si difiere: suele corregir el ZIP
+                    o la abreviatura. Usarla evita el rechazo al comprar la etiqueta. */}
+                {draftVerified && addressCheck?.suggested && !sameAddress(addressCheck.suggested, draft) ? (
+                  <View className="gap-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
+                    <Text className="text-sm font-semibold text-sky-900">The carrier suggests</Text>
+                    {addressLines(addressCheck.suggested).map((line, index) => (
+                      <Text key={index} className="text-sm leading-5 text-sky-900">
                         {line}
                       </Text>
                     ))}
-                  </View>
-                </Pressable>
-
-                {/* Como en el portal: una sin verificar no se puede elegir como
-                    destino, pero se puede verificar aqui mismo. */}
-                {checked && verifies && meta.status !== "VERIFIED" ? (
-                  <View className="gap-2 border-t border-border pt-3">
-                    <Text
-                      className={
-                        meta.status === "INVALID"
-                          ? "text-sm font-semibold leading-5 text-rose-900"
-                          : "text-sm leading-5 text-amber-900"
-                      }
-                    >
-                      {meta.hint}
-                      {meta.message ? " (" + meta.message + ")" : ""}
-                    </Text>
-                    <Text className="text-sm leading-5 text-muted-foreground">
-                      Mail can only be forwarded to an address the carrier recognises.
-                    </Text>
-                    <Button variant="outline" loading={verifyingThis} onPress={() => verifySaved.mutate(address)}>
-                      Verify this address
+                    <Button variant="outline" size="sm" onPress={useSuggestedAddress}>
+                      Use suggested address
                     </Button>
                   </View>
                 ) : null}
-              </View>
-            );
-          })}
 
-          {addresses.length === 0 && !previewQuery.isLoading ? (
-            <View className="rounded-lg border border-border bg-muted p-4">
-              <Text className="text-sm leading-5 text-muted-foreground">
-                You have no saved addresses yet. Add the one you want this mail sent to.
-              </Text>
+                {addressCheck && !draftVerified ? (
+                  <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+                    <Text className="text-sm font-semibold leading-5 text-rose-900">
+                      {addressCheck.reason || "The carrier does not recognise this address."}
+                    </Text>
+                    <Text className="mt-1 text-sm leading-5 text-rose-900">
+                      Correct it before forwarding: the carrier will refuse to print a label for it and the forward
+                      will not go out.
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <CheckCard
+                checked={saveForLater}
+                onToggle={() => setSaveForLater((value) => !value)}
+                label="Save this address"
+                description="Keep it in your profile so you can pick it next time."
+              />
+
             </View>
           ) : null}
-
-          <Button variant="outline" icon={<Plus size={18} color="#0f172a" />} onPress={() => setAddingAddress(true)}>
-            Send to another address
-          </Button>
         </View>
-      ) : (
-        <View className="gap-3">
-          <Field label="Name this address">
-            <Input value={draft.label} placeholder="Home, Office" onChangeText={setDraftField("label")} />
-          </Field>
-          <Field label={<RequiredLabel>Recipient</RequiredLabel>}>
-            <Input value={draft.recipient} onChangeText={setDraftField("recipient")} autoComplete="name" />
-          </Field>
-          <Field label="Company">
-            <Input value={draft.company} onChangeText={setDraftField("company")} />
-          </Field>
-          <Field label={<RequiredLabel>Address line 1</RequiredLabel>}>
-            <Input value={draft.addressLine1} onChangeText={setDraftField("addressLine1")} autoComplete="street-address" />
-          </Field>
-          <Field label="Address line 2">
-            <Input value={draft.addressLine2} onChangeText={setDraftField("addressLine2")} />
-          </Field>
-          <Field label={<RequiredLabel>City</RequiredLabel>}>
-            <Input value={draft.city} onChangeText={setDraftField("city")} />
-          </Field>
-          <Field label={<RequiredLabel>State</RequiredLabel>}>
-            <Select
-              value={draft.state}
-              onValueChange={setDraftField("state")}
-              options={US_STATES}
-              placeholder="Select state"
-              title="State"
-            />
-          </Field>
-          <Field label={<RequiredLabel>ZIP</RequiredLabel>}>
-            <Input value={draft.zip} onChangeText={setDraftField("zip")} keyboardType="number-pad" maxLength={10} />
-          </Field>
-          <Field label={<RequiredLabel>Phone</RequiredLabel>}>
-            <Input value={draft.phone} onChangeText={setDraftField("phone")} keyboardType="phone-pad" autoComplete="tel" />
-            <Text className="text-xs text-muted-foreground">The carrier prints it on the label.</Text>
-          </Field>
-
-          <View className="gap-3 rounded-lg border border-border bg-card p-4">
-            <Text className="text-sm leading-5 text-muted-foreground">
-              Check the address with the carrier. It is required before requesting the forward.
-            </Text>
-            <Button
-              variant="outline"
-              loading={verifyAddress.isPending}
-              disabled={!draftIsComplete}
-              onPress={() => verifyAddress.mutate()}
-            >
-              Check address
-            </Button>
-
-            {draftVerified ? (
-              <Notice tone="emerald">The carrier recognises this address.</Notice>
-            ) : null}
-
-            {/* Lo que propone el transportista, si difiere: suele corregir el ZIP
-                o la abreviatura. Usarla evita el rechazo al comprar la etiqueta. */}
-            {draftVerified && addressCheck?.suggested && !sameAddress(addressCheck.suggested, draft) ? (
-              <View className="gap-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
-                <Text className="text-sm font-semibold text-sky-900">The carrier suggests</Text>
-                {addressLines(addressCheck.suggested).map((line, index) => (
-                  <Text key={index} className="text-sm leading-5 text-sky-900">
-                    {line}
-                  </Text>
-                ))}
-                <Button variant="outline" size="sm" onPress={useSuggestedAddress}>
-                  Use suggested address
-                </Button>
-              </View>
-            ) : null}
-
-            {addressCheck && !draftVerified ? (
-              <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-                <Text className="text-sm font-semibold leading-5 text-rose-900">
-                  {addressCheck.reason || "The carrier does not recognise this address."}
-                </Text>
-                <Text className="mt-1 text-sm leading-5 text-rose-900">
-                  Correct it before forwarding: the carrier will refuse to print a label for it and the forward
-                  will not go out.
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          <CheckCard
-            checked={saveForLater}
-            onToggle={() => setSaveForLater((value) => !value)}
-            label="Save this address"
-            description="Keep it in your profile so you can pick it next time."
-          />
-
-          {addresses.length ? (
-            <Pressable onPress={() => setAddingAddress(false)} hitSlop={8} className="self-start py-1">
-              <Text className="text-sm font-semibold text-foreground">Use a saved address instead</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )}
+      </View>
 
       <CheckCard
         checked={trackingRequested}

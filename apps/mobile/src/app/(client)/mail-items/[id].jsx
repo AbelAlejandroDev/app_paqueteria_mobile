@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
-import { formatStatusDisplay, getCurrentStatusColor, getCurrentStatusLabel } from "@/lib/mail-item-display";
+import { formatStatusDisplay, getCurrentStatusColor, getCurrentStatusLabel, getItemStatusDisplay } from "@/lib/mail-item-display";
 import {
   buildTimeline,
   findRequest,
@@ -1006,7 +1006,8 @@ export default function MailItemDetailScreen() {
     );
   }
 
-  const statusColor = itemStatusColor(item.status);
+  const statusDisplay = getItemStatusDisplay(item);
+  const statusColor = statusDisplay.label === formatStatusDisplay(item.status) ? itemStatusColor(item.status) : statusDisplay.color;
   const currentColor = getCurrentStatusColor(item);
   const photoUrl = primaryPhoto?.signedUrl || primaryPhoto?.url;
   const serviceNotices = normalizeBasicPlanServiceNotices(serviceNoticesQuery.data?.basicPlanServiceNotices);
@@ -1057,7 +1058,7 @@ export default function MailItemDetailScreen() {
 
             <View className="absolute right-3 top-3 items-end gap-1.5">
               <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
-                {formatStatusDisplay(item.status || "UNKNOWN")}
+                {item.status ? statusDisplay.label : formatStatusDisplay("UNKNOWN")}
               </Badge>
               <Badge variant="outline" className={currentColor.container} labelClassName={currentColor.label}>
                 {getCurrentStatusLabel(item)}
