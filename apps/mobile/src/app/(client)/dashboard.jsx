@@ -5,7 +5,7 @@ import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, BellRing, CheckCircle2, ExternalLink, Inbox, MapPin, UsersRound } from "lucide-react-native";
+import { Bell, CheckCircle2, ExternalLink, Inbox, MapPin, UsersRound } from "lucide-react-native";
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
@@ -63,14 +63,6 @@ export default function DashboardScreen() {
       const response = await api.get("/client/mail-items");
       return response.data;
     },
-  });
-
-  // Solo el contador: la lista se pide al entrar en ella. La clave cuelga de
-  // "client-notifications", que es lo que se invalida al leer un aviso, asi que
-  // el numero baja solo.
-  const unreadQuery = useQuery({
-    queryKey: ["client-notifications", "unread-count"],
-    queryFn: async () => (await api.get("/client/notifications", { params: { take: 1 } })).data?.unreadCount || 0,
   });
 
   const folders = useMemo(() => (Array.isArray(query.data?.folders) ? query.data.folders : []), [query.data]);
@@ -146,12 +138,9 @@ export default function DashboardScreen() {
           notificationCount={folderNotificationCount("inbox")}
         />
         <AccessCard title="Action Required" icon={Bell} onPress={openFolder("action_required")} />
-        <AccessCard
-          title="Notifications"
-          icon={BellRing}
-          onPress={() => router.push("/notifications")}
-          notificationCount={unreadQuery.data || 0}
-        />
+        {/* Sin acceso a Notifications en el panel: el cliente no lo ve aqui. Los
+            push siguen abriendo el detalle de su aviso, y la ruta /notifications
+            sigue existiendo para eso. */}
         <AccessCard title="Recent" icon={CheckCircle2} onPress={openFolder("completed")} />
         <AccessCard
           title="Conference Room"
