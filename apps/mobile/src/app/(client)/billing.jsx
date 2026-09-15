@@ -28,6 +28,7 @@ import {
 } from "@/lib/billing";
 import { formatErrorMessage } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
+import FeeScheduleView, { FEE_SCHEDULE_QUERY_KEY } from "@/components/common/fee-schedule";
 import PageTitle from "@/components/common/page-title";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ const TABS = [
   { value: "usage", label: "Usage" },
   { value: "statement", label: "Statement" },
   { value: "payment", label: "Payment" },
+  // La tabla de tarifas que publica el centro (la mencionan los terminos).
+  { value: "fees", label: "Fee Schedule" },
 ];
 
 function StatTile({ label, value, description, icon: Icon }) {
@@ -513,7 +516,8 @@ export default function BillingScreen() {
     usageQuery.refetch();
     statementsQuery.refetch();
     paymentQuery.refetch();
-  }, [usageQuery, statementsQuery, paymentQuery]);
+    queryClient.invalidateQueries({ queryKey: FEE_SCHEDULE_QUERY_KEY });
+  }, [usageQuery, statementsQuery, paymentQuery, queryClient]);
 
   const subtitle = useMemo(() => {
     if (usageQuery.isLoading) return "Loading plan, usage, statement and payment method.";
@@ -563,6 +567,8 @@ export default function BillingScreen() {
           isOpening={portalMutation.isPending}
         />
       ) : null}
+
+      {tab === "fees" ? <FeeScheduleView /> : null}
     </ScrollView>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ChevronRight, ScanLine, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
@@ -97,6 +97,7 @@ function OptionRow({ summary, onPress }) {
 
 export default function BulkRequestSheet({ visible, onClose, selectedItems, onForward, onCompleted }) {
   // "menu" elige la solicitud; "SCAN" y "DISCARD" la confirman.
+  const queryClient = useQueryClient();
   const [step, setStep] = useState("menu");
   // Las piezas con las que se abrio. Quien la usa la monta con una key nueva en
   // cada apertura; al terminar vacia su seleccion, y sin esto la hoja diria
@@ -129,6 +130,10 @@ export default function BulkRequestSheet({ visible, onClose, selectedItems, onFo
       await onCompleted?.();
     },
     onError: (error) => {
+      // Un 409 MULTI_SCAN_ITEM_NOT_ALLOWED / MULTI_DISCARD_ITEM_NOT_ALLOWED dice
+      // que piezas cambiaron ("#000007"): la lista se vuelve a pedir para que
+      // la seleccion refleje su estado real.
+      queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
       Alert.alert("Could not send request", formatErrorMessage(error, "The request could not be sent."));
     },
   });

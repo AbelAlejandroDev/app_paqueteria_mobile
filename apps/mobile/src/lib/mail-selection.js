@@ -3,9 +3,9 @@
  *
  * Que se puede pedir sobre cada pieza lo decide el backend
  * (computeAvailableActions en controllers/client/mailItems/shared/helpers.js).
- * La lista no trae availableActions, pero si el estado y las solicitudes, asi
- * que aqui se aplica la misma regla para saber de antemano cuantas de las
- * elegidas admiten cada solicitud. Al crearla, el servidor vuelve a comprobarlo.
+ * La lista trae availableActions en cada pieza y se usan tal cual. Si faltan (un
+ * servidor anterior), se aplica aqui la misma regla con el estado y las
+ * solicitudes. Al crear la solicitud, el servidor vuelve a comprobarlo.
  */
 
 const TERMINAL_STATUSES = ["PICKED_UP", "FORWARDED", "DISCARDED", "ARCHIVED"];
@@ -18,9 +18,25 @@ const ACTIVE_REQUEST_STATUSES = ["OPEN", "PROCESSING", "IN_PROGRESS", "AWAITING_
  */
 export const BULK_ACTIONS = ["FORWARD", "SCAN", "DISCARD", "NOT_MINE"];
 
-/** Lo mismo que availableActions del backend, calculado con lo que trae la lista. */
+/** Las availableActions de la pieza: las del servidor si vienen, o calculadas igual. */
 export function availableActionsFor(item) {
   const status = item?.status;
+  const fromServer = item?.availableActions;
+
+  if (fromServer && typeof fromServer === "object") {
+    return {
+      canRequestScan: Boolean(fromServer.canRequestScan),
+      canRequestForward: Boolean(fromServer.canRequestForward),
+      canRequestPickup: Boolean(fromServer.canRequestPickup),
+      canRequestDiscard: Boolean(fromServer.canRequestDiscard),
+      // La lista no manda canRejectAssignment; es la regla de get.js con lo que si manda.
+      canRejectAssignment:
+        typeof fromServer.canRejectAssignment === "boolean"
+          ? fromServer.canRejectAssignment
+          : !TERMINAL_STATUSES.includes(status) && !fromServer.hasActiveDisposition,
+    };
+  }
+
   if (TERMINAL_STATUSES.includes(status)) {
     return {
       canRequestScan: false,

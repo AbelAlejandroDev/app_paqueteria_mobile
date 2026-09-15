@@ -13,6 +13,7 @@ import { formatErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal, Notice } from "@/components/ui/modal";
 import ConnectionError from "@/components/common/connection-error";
+import { FeeScheduleText, useFeeSchedule } from "@/components/common/fee-schedule";
 import { hasPassedTerms, markTermsPassed } from "@/lib/terms-state";
 
 const QUERY_KEY = ["auth-terms-current"];
@@ -61,6 +62,23 @@ function WelcomeModal({ visible, onClose, organizationName, clientName }) {
  * encabezado pide leerlos hasta el final: con el boton siempre a la vista, esa
  * frase seria mentira.
  */
+/**
+ * El Fee Schedule como anexo de los terminos: los terminos lo dan por
+ * incorporado y se acepta con ellos. Si el centro no ha publicado ninguno, o no
+ * carga, no se pinta nada: no puede impedir aceptar los terminos.
+ */
+function FeeScheduleAnnex() {
+  const query = useFeeSchedule();
+  if (!query.data) return null;
+
+  return (
+    <View className="rounded-lg border border-border bg-card p-4">
+      <Text className="mb-3 text-base font-semibold text-foreground">Fee Schedule</Text>
+      <FeeScheduleText feeSchedule={query.data} />
+    </View>
+  );
+}
+
 function TermsScreen({ terms, organizationName, onAccept, accepting, error }) {
   const heading = (organizationName ? organizationName + " " : "") + "Terms & Conditions";
   // Va a pantalla completa, sin cabecera ni pestanas que reserven los bordes:
@@ -100,6 +118,8 @@ function TermsScreen({ terms, organizationName, onAccept, accepting, error }) {
               cual: los saltos de linea que puso son los que se ven. */}
           <Text className="text-sm leading-6 text-foreground">{terms?.content || ""}</Text>
         </View>
+
+        <FeeScheduleAnnex />
 
         {error ? <Notice tone="rose">{error}</Notice> : null}
 

@@ -126,3 +126,24 @@ test("una opcion no disponible dice por que", async () => {
   assert.deepEqual(bulkBlockReasons([item("d", { serviceRequests: [req("SCAN", "OPEN")] })], "DISCARD").map((r) => r.code), ["SCAN_IN_PROGRESS"]);
   assert.deepEqual(bulkBlockReasons([item("ok")], "SCAN"), []);
 });
+
+test("las availableActions del servidor mandan sobre el calculo local", async () => {
+  const { availableActionsFor: actions, canBulkRequest: can } = await import("../src/lib/mail-selection.js");
+  const fromServer = item("srv", {
+    // Sin solicitudes en la lista, el calculo local diria que se puede escanear.
+    availableActions: {
+      canRequestScan: false,
+      canRequestForward: true,
+      canRequestPickup: true,
+      canRequestDiscard: false,
+      hasActiveDisposition: false,
+    },
+  });
+  assert.equal(actions(fromServer).canRequestScan, false);
+  assert.equal(can(fromServer, "DISCARD"), false);
+  assert.equal(can(fromServer, "NOT_MINE"), true);
+  assert.equal(
+    can(item("d", { availableActions: { canRequestForward: false, hasActiveDisposition: true } }), "NOT_MINE"),
+    false
+  );
+});
