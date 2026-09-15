@@ -1,15 +1,18 @@
-import { useMemo } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Animated, FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ImageIcon,
   Inbox,
+  ListChecks,
   Mail,
   Package2,
   ScanLine,
@@ -30,7 +33,10 @@ import {
   getPrimaryPhoto,
   normalizeFolders,
 } from "@/lib/mail-item-display";
+import { isSelectable, selectedItemsFrom, toggleAll, toggleId } from "@/lib/mail-selection";
+import BulkRequestSheet from "@/components/common/bulk-request-sheet";
 import EmptyState from "@/components/common/empty-state";
+import LetterForwardSheet from "@/components/common/letter-forward-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -141,7 +147,65 @@ function StorageFeeNotice({ notice }) {
   );
 }
 
-function MailItemCard({ item }) {
+/** Espacio que se abre a la izquierda para la casilla. */
+const CHECK_SPACE = 44;
+
+function SelectionCheck({ checked, disabled = false }) {
+  return (
+    <View
+      className={
+        checked
+          ? "h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-primary"
+          : "h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-card"
+      }
+      // Tamano fijo: dentro de un hueco estrecho se estiraba y salia ovalada.
+      style={[{ width: 24, height: 24 }, disabled ? { opacity: 0.4 } : null]}
+    >
+      {checked ? <Check size={14} color={brand.primaryForeground} strokeWidth={3} /> : null}
+    </View>
+  );
+}
+
+/**
+ * Una fila de la lista con su casilla.
+ *
+ * Todas las filas comparten el mismo valor animado, asi que al activar la
+ * seleccion se desplazan a la derecha a la vez y la casilla aparece en el hueco.
+ */
+function SelectableRow({ progress, selectionMode, selectable, selected, onToggle, children }) {
+  return (
+    <View>
+      <Animated.View
+        pointerEvents={selectionMode ? "auto" : "none"}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 16,
+          width: CHECK_SPACE - 8,
+          justifyContent: "center",
+          alignItems: "flex-start",
+          opacity: progress,
+        }}
+      >
+        <Pressable
+          onPress={onToggle}
+          disabled={!selectable}
+          hitSlop={10}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected, disabled: !selectable }}
+        >
+          <SelectionCheck checked={selected} disabled={!selectable} />
+        </Pressable>
+      </Animated.View>
+      <Animated.View style={{ marginLeft: progress.interpolate({ inputRange: [0, 1], outputRange: [0, CHECK_SPACE] }) }}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+function MailItemCard({ item, selectionMode = false, selectable = false, selected = false, onToggle }) {
   const photo = getPrimaryPhoto(item);
   const TypeIcon = item.type === "PACKAGE" ? Package2 : Mail;
   // El estado de la ultima solicitud si se rechazo o cancelo, no el que dejo la pieza.
@@ -152,8 +216,21 @@ function MailItemCard({ item }) {
   const isUnread = item.viewStatus !== "VIEWED" && !item.viewedAt;
 
   return (
-    <Card className="mb-4">
-      <Pressable onPress={() => router.push("/mail-items/" + item.id)} className="flex-row active:opacity-80">
+    <Card
+      className={selected ? "mb-4 border-primary" : "mb-4"}
+      style={selectionMode && !selectable ? { opacity: 0.5 } : null}
+    >
+      <Pressable
+        onPress={() => {
+          if (!selectionMode) {
+            router.push("/mail-items/" + item.id);
+            return;
+          }
+          // Las que no admiten ninguna solicitud en grupo no se marcan.
+          if (selectable) onToggle?.();
+        }}
+        className="flex-row active:opacity-80"
+      >
         <View style={{ height: 132 }} className="w-24 items-center justify-center bg-slate-100">
           {photo ? (
             <Image source={{ uri: photo.signedUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
@@ -224,6 +301,45 @@ export default function MailItemsScreen() {
   });
 
   const mailItems = query.data?.items || [];
+  const queryClient = useQueryClient();
+
+  // La seleccion pertenece a la carpeta en la que se empezo: al cambiar de
+  // carpeta se apaga sola, sin un efecto que la resetee.
+  const folderKey = selectedFolder + ":" + selectedFilter;
+  const [selection, setSelection] = useState({ folderKey: "", active: false, ids: [] });
+  const selectionMode = selection.active && selection.folderKey === folderKey;
+  const selectedIds = selectionMode ? selection.ids : [];
+  const selectedItems = selectedItemsFrom(selectedIds, mailItems);
+  const selectableItems = mailItems.filter(isSelectable);
+  const allSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedIds.includes(String(item.id)));
+
+  const [progress] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.timing(progress, { toValue: selectionMode ? 1 : 0, duration: 220, useNativeDriver: false }).start();
+  }, [selectionMode, progress]);
+
+  const toggleSelectionMode = () =>
+    setSelection((current) =>
+      current.active && current.folderKey === folderKey
+        ? { folderKey, active: false, ids: [] }
+        : { folderKey, active: true, ids: [] }
+    );
+  const setIds = (update) => setSelection((current) => ({ ...current, ids: update(current.ids) }));
+
+  const [bulk, setBulk] = useState({ open: false, key: 0 });
+  const [forward, setForward] = useState({ open: false, key: 0, items: [] });
+
+  const finishSelection = async () => {
+    setSelection({ folderKey: "", active: false, ids: [] });
+    await queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
+  };
+
+  const openForward = (items) => {
+    setBulk((current) => ({ ...current, open: false }));
+    // Una hoja se cierra antes de abrir la otra: dos Modal animandose a la vez
+    // se pisan en iOS.
+    setTimeout(() => setForward((current) => ({ open: true, key: current.key + 1, items })), 350);
+  };
   // El backend manda los contadores por tipo de cierre; aqui solo se cruzan
   // con la etiqueta y el icono, que son cosa de la app.
   const completedFolders = useMemo(() => {
@@ -262,6 +378,9 @@ export default function MailItemsScreen() {
    * flecha no puede venir del Stack: se pinta aqui solo cuando hay carpeta
    * abierta y lo unico que hace es limpiar el parametro.
    */
+  const isList = Boolean(selectedFolder) && !isCompletedLanding;
+  const canSelect = isList && !isBusy && selectableItems.length > 0;
+
   const screenHeader = (
     <Stack.Screen
       options={{
@@ -269,6 +388,7 @@ export default function MailItemsScreen() {
         headerTitleAlign: "center",
         headerLeft: selectedFolder
           ? () => (
+              <View className="flex-row items-center gap-1">
               <Pressable
                 // Sube un solo nivel: de una subcarpeta a Completada, y de una
                 // carpeta a la raiz. Volver del todo de golpe obligaria a
@@ -285,6 +405,22 @@ export default function MailItemsScreen() {
               >
                 <ArrowLeft size={24} color="#0f172a" />
               </Pressable>
+
+              {/* Seleccionar varias. Funciona como interruptor: la segunda vez
+                  sale del modo y desmarca todo. */}
+              {canSelect || selectionMode ? (
+                <Pressable
+                  onPress={toggleSelectionMode}
+                  hitSlop={10}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: selectionMode }}
+                  accessibilityLabel="Select multiple mail items"
+                  className={selectionMode ? "rounded-full bg-primary/15 p-1.5" : "rounded-full p-1.5"}
+                >
+                  <ListChecks size={22} color={selectionMode ? brand.primaryColor : "#0f172a"} />
+                </Pressable>
+              ) : null}
+              </View>
             )
           : undefined,
       }}
@@ -328,12 +464,67 @@ export default function MailItemsScreen() {
   return (
     <>
       {screenHeader}
+
+      {selectionMode ? (
+        <View className="flex-row items-center gap-3 border-b border-border bg-card px-4 py-3">
+          <Pressable
+            onPress={() => setIds((ids) => toggleAll(ids, mailItems))}
+            hitSlop={8}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: allSelected }}
+            className="flex-row items-center gap-2"
+          >
+            <SelectionCheck checked={allSelected} />
+            <Text className="text-sm font-semibold text-foreground">Select all</Text>
+          </Pressable>
+
+          <Text className="min-w-0 flex-1 text-sm text-muted-foreground" numberOfLines={1}>
+            {selectedItems.length} selected
+          </Text>
+
+          {/* Desplegable de solicitudes para lo marcado. */}
+          <Pressable
+            onPress={() => setBulk((current) => ({ open: true, key: current.key + 1 }))}
+            disabled={!selectedItems.length}
+            accessibilityRole="button"
+            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
+            style={!selectedItems.length ? { opacity: 0.5 } : null}
+          >
+            <Text className="text-sm font-semibold text-primary-foreground">Request</Text>
+            <ChevronDown size={16} color={brand.primaryForeground} />
+          </Pressable>
+        </View>
+      ) : null}
+
       <FlatList
         className="flex-1 bg-background"
         contentContainerClassName="p-4 pb-24"
         data={isBusy ? [] : mailItems}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <MailItemCard item={item} />}
+        extraData={selectedIds}
+        renderItem={({ item }) => {
+          const selectable = isSelectable(item);
+          const selected = selectedIds.includes(String(item.id));
+          const onToggle = () => setIds((ids) => toggleId(ids, item.id));
+
+          return (
+            <SelectableRow
+              progress={progress}
+              selectionMode={selectionMode}
+              selectable={selectable}
+              selected={selected}
+              onToggle={onToggle}
+            >
+              <MailItemCard
+                item={item}
+                selectionMode={selectionMode}
+                selectable={selectable}
+                selected={selected}
+                onToggle={onToggle}
+              />
+            </SelectableRow>
+          );
+        }}
         ListHeaderComponent={header}
         ListEmptyComponent={
           isBusy ? null : (
@@ -342,6 +533,25 @@ export default function MailItemsScreen() {
         }
         refreshControl={refreshControl}
       />
+
+      <BulkRequestSheet
+        key={"bulk-" + bulk.key}
+        visible={bulk.open}
+        onClose={() => setBulk((current) => ({ ...current, open: false }))}
+        selectedItems={selectedItems}
+        onForward={openForward}
+        onCompleted={finishSelection}
+      />
+
+      {forward.items.length ? (
+        <LetterForwardSheet
+          key={"forward-" + forward.key}
+          visible={forward.open}
+          onClose={() => setForward((current) => ({ ...current, open: false }))}
+          mailItems={forward.items}
+          onCompleted={finishSelection}
+        />
+      ) : null}
     </>
   );
 }
