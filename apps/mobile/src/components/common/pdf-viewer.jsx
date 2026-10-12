@@ -45,7 +45,17 @@ function usePdfFile(media) {
 
       const file = new File(directory, id + ".pdf");
       if (!file.exists) {
-        await File.downloadFileAsync(url, file, { idempotent: true });
+        // A un nombre temporal y se mueve al acabar: si la descarga se corta
+        // (red, app cerrada), Android deja el archivo a medias, y con el
+        // nombre definitivo se reutilizaria roto en cada apertura.
+        const partial = new File(directory, id + ".part");
+        try {
+          await File.downloadFileAsync(url, partial, { idempotent: true });
+          await partial.move(file);
+        } catch (error) {
+          if (partial.exists) partial.delete();
+          throw error;
+        }
       }
 
       return { file, base64: await file.base64() };
@@ -185,7 +195,12 @@ async function savePdf(file, fileName) {
     return;
   }
 
-  await Sharing.shareAsync(file.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
+  // Se comparte una copia con el nombre legible: "Guardar en Archivos" usa el
+  // nombre del archivo, y el de la cache es el id interno.
+  const named = new File(Paths.cache, fileName);
+  if (named.exists) named.delete();
+  await file.copy(named);
+  await Sharing.shareAsync(named.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
 }
 
 export function PdfViewer({ media, title, fileName, onClose }) {

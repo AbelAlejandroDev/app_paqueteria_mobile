@@ -224,6 +224,10 @@ export default function DashboardScreen() {
   const actionRequiredCount = Number(folderOf("action_required").count || 0);
 
   const openFolder = (folder) => () => router.push({ pathname: "/mail-items", params: { folder } });
+  // Inbox lleva a Mail, donde estan las cuatro carpetas (Inbox, Pending,
+  // Action Required, Completed). Los parametros vacios hacen falta: la pestaña
+  // Mail recuerda la ultima carpeta abierta y sin ellos volveria a esa.
+  const openMail = () => router.push({ pathname: "/mail-items", params: { folder: "", filter: "" } });
 
   const refresh = () => Promise.all([query.refetch(), unreadQuery.refetch()]);
 
@@ -254,7 +258,7 @@ export default function DashboardScreen() {
         <AccessCard
           title="Inbox"
           icon={Inbox}
-          onPress={openFolder("inbox")}
+          onPress={openMail}
           notificationCount={Number(folderOf("inbox").notificationCount || 0)}
         />
         {/* En amarillo y con el numero cuando hay piezas esperando algo del

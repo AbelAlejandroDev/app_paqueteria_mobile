@@ -9,7 +9,9 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clock3,
+  FileText,
   ImageIcon,
   Inbox,
   ListChecks,
@@ -23,10 +25,12 @@ import {
 import { brand } from "@/lib/brand";
 
 import { api } from "@/lib/api";
-import { formatDate, formatErrorMessage } from "@/lib/utils";
+import { overWhite } from "@/lib/colors";
+import { cn, formatErrorMessage } from "@/lib/utils";
+import { formatEventTime } from "@/lib/mail-item-detail";
 import {
   FOLDER_LABELS,
-  getCurrentStatusColor,
+  formatStatusDisplay,
   getCurrentStatusLabel,
   getItemStatusDisplay,
   getMailTypeLabel,
@@ -37,9 +41,10 @@ import { isSelectable, selectedItemsFrom, toggleAll, toggleId } from "@/lib/mail
 import BulkRequestSheet from "@/components/common/bulk-request-sheet";
 import EmptyState from "@/components/common/empty-state";
 import LetterForwardSheet from "@/components/common/letter-forward-sheet";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { DetailCard, StatusPill, ViewPill } from "@/components/common/mail-item-detail-ui";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const { palette } = brand;
 
 // Coinciden con COMPLETED_FILTERS del backend. Se navegan como carpetas, igual
 // que el primer nivel, y se solapan a proposito: un item recogido que antes se
@@ -62,14 +67,55 @@ const FOLDER_ICONS = {
   trash: Trash2,
 };
 
+/** Icono de "Action Required" cuando hay algo pendiente, como en el panel. */
+const ATTENTION_ICON = "#D97706";
+
 /** Aviso de elementos sin ver, igual en carpetas y subcarpetas. */
 function UnreadBadge({ count }) {
   if (!count) return null;
 
   return (
-    <View className="h-7 min-w-[28px] items-center justify-center rounded-full bg-rose-500 px-2">
-      <Text className="text-xs font-semibold text-white">{count > 99 ? "99+" : count}</Text>
+    <View className="h-7 min-w-[28px] items-center justify-center rounded-full bg-rose-600 px-2">
+      <Text className="font-hanken-bold text-[12px] text-white">{count > 99 ? "99+" : count}</Text>
     </View>
+  );
+}
+
+/**
+ * Caja de una carpeta, con el mismo aspecto que las tarjetas del panel: icono
+ * en el cuadro verde de marca, nombre, cuantas hay y flecha. `attention` la
+ * pone en amarillo (Action Required con piezas pendientes).
+ */
+function FolderBox({ icon: Icon, label, count, notificationCount, attention = false, onPress }) {
+  return (
+    <DetailCard tone={attention ? "amber" : "default"} className="mb-3">
+      <Pressable
+        onPress={onPress}
+        className={cn(
+          "flex-row items-center gap-3.5 px-4 py-3.5",
+          attention ? "active:bg-amber-100/60" : "active:bg-tint/20"
+        )}
+      >
+        <View
+          className={cn(
+            "h-12 w-12 items-center justify-center rounded-[10px] border",
+            attention ? "border-amber-200 bg-amber-100" : "border-primary/40 bg-tint/35"
+          )}
+        >
+          <Icon size={23} color={attention ? ATTENTION_ICON : palette.glyph} />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className="font-hanken-bold text-[16px] text-ink" numberOfLines={1}>
+            {label}
+          </Text>
+          <Text className="mt-0.5 font-hanken text-[13px] text-ink/60">
+            {count} item{count === 1 ? "" : "s"}
+          </Text>
+        </View>
+        <UnreadBadge count={notificationCount} />
+        <ChevronRight size={20} color={palette.ink} />
+      </Pressable>
+    </DetailCard>
   );
 }
 
@@ -81,53 +127,29 @@ function UnreadBadge({ count }) {
  * cliente entraba y no sabia cual de los seis tipos mirar.
  */
 function CompletedFolderCard({ folder }) {
-  const Icon = folder.icon;
-  const count = Number(folder.count || 0);
-
   return (
-    <Pressable
+    <FolderBox
+      icon={folder.icon}
+      label={folder.label}
+      count={Number(folder.count || 0)}
+      notificationCount={Number(folder.notificationCount || 0)}
       onPress={() => router.setParams({ folder: "completed", filter: folder.key })}
-      className="mb-3 flex-row items-center gap-3 rounded-lg border border-border bg-card p-3 active:bg-muted"
-    >
-      <View className="h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
-        <Icon size={22} color="#334155" />
-      </View>
-      <View className="min-w-0 flex-1">
-        <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
-          {folder.label}
-        </Text>
-        <Text className="mt-0.5 text-sm text-muted-foreground">
-          {count} item{count === 1 ? "" : "s"}
-        </Text>
-      </View>
-      <UnreadBadge count={folder.notificationCount} />
-    </Pressable>
+    />
   );
 }
 
 function FolderCard({ folder }) {
-  const Icon = FOLDER_ICONS[folder.key] || Inbox;
   const count = Number(folder.count || 0);
-  const notificationCount = Number(folder.notificationCount || 0);
 
   return (
-    <Pressable
+    <FolderBox
+      icon={FOLDER_ICONS[folder.key] || Inbox}
+      label={FOLDER_LABELS[folder.key] || folder.label}
+      count={count}
+      notificationCount={Number(folder.notificationCount || 0)}
+      attention={folder.key === "action_required" && count > 0}
       onPress={() => router.setParams({ folder: folder.key })}
-      className="mb-3 flex-row items-center gap-3 rounded-lg border border-border bg-card p-3 active:bg-muted"
-    >
-      <View className="h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
-        <Icon size={22} color="#334155" />
-      </View>
-      <View className="min-w-0 flex-1">
-        <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
-          {FOLDER_LABELS[folder.key] || folder.label}
-        </Text>
-        <Text className="mt-0.5 text-sm text-muted-foreground">
-          {count} item{count === 1 ? "" : "s"}
-        </Text>
-      </View>
-      <UnreadBadge count={notificationCount} />
-    </Pressable>
+    />
   );
 }
 
@@ -139,13 +161,20 @@ function StorageFeeNotice({ notice }) {
 
   return (
     <View className="flex-row items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
-      <AlertCircle size={14} color="#78350f" />
-      <Text className="flex-1 text-[11px] font-semibold text-amber-900" numberOfLines={1}>
+      <AlertCircle size={14} color="#B45309" />
+      <Text className="flex-1 font-hanken-semibold text-[11px] text-amber-900" numberOfLines={1}>
         {message}
       </Text>
     </View>
   );
 }
+
+/**
+ * Alto fijo de cada tarjeta de la lista: todas miden lo mismo. Son tres
+ * lineas (codigo y fecha; tipo o aviso de almacenaje; estados), asi que el
+ * aviso no añade una cuarta: ocupa el sitio del tipo, que ya dice el icono.
+ */
+const CARD_HEIGHT = 104;
 
 /** Espacio que se abre a la izquierda para la casilla. */
 const CHECK_SPACE = 44;
@@ -153,15 +182,19 @@ const CHECK_SPACE = 44;
 function SelectionCheck({ checked, disabled = false }) {
   return (
     <View
-      className={
-        checked
-          ? "h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-primary"
-          : "h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-card"
-      }
+      className="items-center justify-center rounded-full border-2"
       // Tamano fijo: dentro de un hueco estrecho se estiraba y salia ovalada.
-      style={[{ width: 24, height: 24 }, disabled ? { opacity: 0.4 } : null]}
+      style={[
+        {
+          width: 24,
+          height: 24,
+          borderColor: checked ? brand.primaryColor : overWhite(palette.ink, 0.25),
+          backgroundColor: checked ? brand.primaryColor : "#ffffff",
+        },
+        disabled ? { opacity: 0.4 } : null,
+      ]}
     >
-      {checked ? <Check size={14} color={brand.primaryForeground} strokeWidth={3} /> : null}
+      {checked ? <Check size={14} color="#ffffff" strokeWidth={3} /> : null}
     </View>
   );
 }
@@ -181,7 +214,7 @@ function SelectableRow({ progress, selectionMode, selectable, selected, onToggle
           position: "absolute",
           left: 0,
           top: 0,
-          bottom: 16,
+          bottom: 12,
           width: CHECK_SPACE - 8,
           justifyContent: "center",
           alignItems: "flex-start",
@@ -205,19 +238,20 @@ function SelectableRow({ progress, selectionMode, selectable, selected, onToggle
   );
 }
 
+const TYPE_ICONS = { PACKAGE: Package2, LETTER: Mail, LARGE_ENVELOPE: FileText };
+
 function MailItemCard({ item, selectionMode = false, selectable = false, selected = false, onToggle }) {
   const photo = getPrimaryPhoto(item);
-  const TypeIcon = item.type === "PACKAGE" ? Package2 : Mail;
+  const TypeIcon = TYPE_ICONS[item.type] || Mail;
   // El estado de la ultima solicitud si se rechazo o cancelo, no el que dejo la pieza.
   const statusDisplay = getItemStatusDisplay(item);
-  const statusColor = statusDisplay.color;
-  const currentColor = getCurrentStatusColor(item);
+  const closedRequest = Boolean(item.status) && statusDisplay.label !== formatStatusDisplay(item.status);
   // Mismo criterio que usa el backend para contar los avisos de la carpeta.
   const isUnread = item.viewStatus !== "VIEWED" && !item.viewedAt;
 
   return (
-    <Card
-      className={selected ? "mb-4 border-primary" : "mb-4"}
+    <DetailCard
+      className={cn("mb-3", selected && "border-2 border-primary")}
       style={selectionMode && !selectable ? { opacity: 0.5 } : null}
     >
       <Pressable
@@ -230,45 +264,58 @@ function MailItemCard({ item, selectionMode = false, selectable = false, selecte
           if (selectable) onToggle?.();
         }}
         className="flex-row active:opacity-80"
+        style={{ height: CARD_HEIGHT }}
       >
-        <View style={{ height: 132 }} className="w-24 items-center justify-center bg-slate-100">
+        {/* La foto entera ("contain"), sin recortar, sobre el fondo de marca
+            que rellena lo que sobra. Va en absoluto sobre una columna de alto
+            fijo para que ninguna foto cambie el tamaño de la tarjeta. */}
+        <View className="h-full w-24 items-center justify-center bg-media">
           {photo ? (
-            <Image source={{ uri: photo.signedUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+            <Image
+              source={{ uri: photo.signedUrl }}
+              style={{ position: "absolute", top: 4, right: 4, bottom: 4, left: 4 }}
+              contentFit="contain"
+            />
           ) : (
-            <ImageIcon size={28} color="#94a3b8" />
+            <ImageIcon size={28} color={palette.glyph} />
           )}
         </View>
 
-        <View className="min-w-0 flex-1 gap-2 p-3">
-          <View className="flex-row items-center gap-2">
-            <View className="h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-              <TypeIcon size={16} color={brand.primaryColor} />
+        <View className="min-w-0 flex-1 justify-center gap-1.5 px-3 py-2.5">
+          <View className="flex-row items-center gap-1.5">
+            <View
+              className="h-6 w-6 items-center justify-center rounded-md"
+              style={{ backgroundColor: overWhite(palette.tint, 0.35) }}
+            >
+              <TypeIcon size={14} color={palette.glyph} />
             </View>
-            <Text className="min-w-0 flex-1 text-base font-bold text-foreground" numberOfLines={1}>
+            <Text className="min-w-0 flex-1 font-hanken-bold text-[15px] text-ink" numberOfLines={1}>
               {item.itemCode || item.id}
             </Text>
             {/* El mismo punto rojo del aviso de la carpeta, para que al entrar
                 se vea de un vistazo cual es el que lo provocaba. */}
-            {isUnread ? <View className="h-2.5 w-2.5 rounded-full bg-rose-500" /> : null}
+            {isUnread ? <View className="h-2 w-2 rounded-full bg-rose-500" /> : null}
+            <Text className="font-hanken-medium text-[12px] text-ink/55" numberOfLines={1}>
+              {formatEventTime(item.receivedAt || item.createdAt)}
+            </Text>
           </View>
 
-          <Text className="text-xs font-medium text-muted-foreground" numberOfLines={1}>
-            {getMailTypeLabel(item.type)} · {formatDate(item.receivedAt || item.createdAt)}
-          </Text>
+          {item.storageFeeNotice ? (
+            <StorageFeeNotice notice={item.storageFeeNotice} />
+          ) : (
+            <Text className="font-hanken-medium text-[13px] text-ink/60" numberOfLines={1}>
+              {getMailTypeLabel(item.type)}
+            </Text>
+          )}
 
-          {item.storageFeeNotice ? <StorageFeeNotice notice={item.storageFeeNotice} /> : null}
-
-          <View className="flex-row flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
-              {statusDisplay.label}
-            </Badge>
-            <Badge variant="outline" className={currentColor.container} labelClassName={currentColor.label}>
-              {getCurrentStatusLabel(item)}
-            </Badge>
+          {/* En una sola linea, para que la tarjeta no crezca. */}
+          <View className="flex-row items-center gap-1.5">
+            <StatusPill status={item.status} closedRequest={closedRequest} label={statusDisplay.label} />
+            <ViewPill label={getCurrentStatusLabel(item)} />
           </View>
         </View>
       </Pressable>
-    </Card>
+    </DetailCard>
   );
 }
 
@@ -357,9 +404,9 @@ export default function MailItemsScreen() {
     <View className="gap-4 pb-4">
       {query.isLoading ? (
         <View className="gap-3">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
         </View>
       ) : null}
 
@@ -402,7 +449,7 @@ export default function MailItemsScreen() {
                 accessibilityLabel="Back to folders"
                 className="pr-3"
               >
-                <ArrowLeft size={24} color="#0f172a" />
+                <ArrowLeft size={24} color={palette.ink} />
               </Pressable>
             )
           : undefined,
@@ -418,9 +465,10 @@ export default function MailItemsScreen() {
                   accessibilityRole="switch"
                   accessibilityState={{ checked: selectionMode }}
                   accessibilityLabel="Select multiple mail items"
-                  className={selectionMode ? "rounded-full bg-primary/15 p-1.5" : "rounded-full p-1.5"}
+                  className="rounded-full p-1.5"
+                  style={selectionMode ? { backgroundColor: overWhite(palette.tint, 0.5) } : null}
                 >
-                  <ListChecks size={22} color={selectionMode ? brand.primaryColor : "#0f172a"} />
+                  <ListChecks size={22} color={selectionMode ? palette.glyph : palette.ink} />
                 </Pressable>
               )
             : undefined,
@@ -433,7 +481,7 @@ export default function MailItemsScreen() {
       <>
         {screenHeader}
         <FlatList
-          className="flex-1 bg-background"
+          className="flex-1 bg-canvas"
           contentContainerClassName="p-4 pb-24"
           data={isBusy ? [] : completedFolders}
           keyExtractor={(folder) => folder.key}
@@ -450,7 +498,7 @@ export default function MailItemsScreen() {
       <>
         {screenHeader}
         <FlatList
-          className="flex-1 bg-background"
+          className="flex-1 bg-canvas"
           contentContainerClassName="p-4 pb-24"
           data={isBusy ? [] : folders}
           keyExtractor={(folder) => folder.key}
@@ -467,7 +515,7 @@ export default function MailItemsScreen() {
       {screenHeader}
 
       {selectionMode ? (
-        <View className="flex-row items-center gap-3 border-b border-border bg-card px-4 py-3">
+        <View className="flex-row items-center gap-3 border-b border-ink/[0.08] bg-white px-4 py-3">
           <Pressable
             onPress={() => setIds((ids) => toggleAll(ids, mailItems))}
             hitSlop={8}
@@ -476,10 +524,10 @@ export default function MailItemsScreen() {
             className="flex-row items-center gap-2"
           >
             <SelectionCheck checked={allSelected} />
-            <Text className="text-sm font-semibold text-foreground">Select all</Text>
+            <Text className="font-hanken-semibold text-[14px] text-ink">Select all</Text>
           </Pressable>
 
-          <Text className="min-w-0 flex-1 text-sm text-muted-foreground" numberOfLines={1}>
+          <Text className="min-w-0 flex-1 font-hanken text-[14px] text-ink/60" numberOfLines={1}>
             {selectedItems.length} selected
           </Text>
 
@@ -488,17 +536,17 @@ export default function MailItemsScreen() {
             onPress={() => setBulk((current) => ({ open: true, key: current.key + 1 }))}
             disabled={!selectedItems.length}
             accessibilityRole="button"
-            className="flex-row items-center gap-1.5 rounded-lg bg-primary px-3 py-2"
+            className="flex-row items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-2"
             style={!selectedItems.length ? { opacity: 0.5 } : null}
           >
-            <Text className="text-sm font-semibold text-primary-foreground">Request</Text>
-            <ChevronDown size={16} color={brand.primaryForeground} />
+            <Text className="font-hanken-bold text-[14px] text-white">Request</Text>
+            <ChevronDown size={16} color="#ffffff" />
           </Pressable>
         </View>
       ) : null}
 
       <FlatList
-        className="flex-1 bg-background"
+        className="flex-1 bg-canvas"
         contentContainerClassName="p-4 pb-24"
         data={isBusy ? [] : mailItems}
         keyExtractor={(item) => String(item.id)}

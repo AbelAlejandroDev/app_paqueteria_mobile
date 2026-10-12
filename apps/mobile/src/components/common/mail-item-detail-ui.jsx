@@ -121,9 +121,13 @@ export function StatusPill({ status, label, closedRequest = false }) {
   const Icon = isClosed ? XCircle : IN_PROGRESS.includes(status) ? Clock3 : CheckCircle2;
 
   return (
-    <View className="flex-row items-center gap-1 rounded-md px-2.5 py-1" style={[PILL_SHADOW, { backgroundColor: fill }]}>
+    // `shrink` y una linea: en una fila estrecha (la lista de Mail) un estado
+    // largo se corta con "..." en vez de partirse y hacer mas alta la tarjeta.
+    <View className="shrink flex-row items-center gap-1 rounded-md px-2.5 py-1" style={[PILL_SHADOW, { backgroundColor: fill }]}>
       <Icon size={13} color="#ffffff" />
-      <Text className="font-hanken-bold text-[11px] uppercase tracking-wide text-white">{label}</Text>
+      <Text className="shrink font-hanken-bold text-[11px] uppercase tracking-wide text-white" numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -134,7 +138,7 @@ export function ViewPill({ label }) {
   const Icon = isNew ? Sparkles : Eye;
 
   return (
-    <View className="flex-row items-center gap-1 rounded-md border border-ink/[0.12] bg-white/90 px-2.5 py-1" style={PILL_SHADOW}>
+    <View className="flex-row items-center gap-1 rounded-md border border-ink/[0.12] bg-white px-2.5 py-1" style={PILL_SHADOW}>
       <Icon size={13} color={isNew ? brand.primaryColor : palette.glyph} />
       <Text className="font-hanken-medium text-[11px] uppercase text-ink">{label}</Text>
     </View>

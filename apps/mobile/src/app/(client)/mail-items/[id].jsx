@@ -3,8 +3,7 @@ import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Switch
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
-// Con nombre propio porque `Linking` de react-native ya esta importado arriba
-// y aqui se usan los dos: aquel abre URLs, este construye el deep link.
+// Construye el deep link de vuelta del pago de Stripe.
 import * as ExpoLinking from "expo-linking";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
@@ -1288,6 +1287,7 @@ export default function MailItemDetailScreen() {
 
       <ImageViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
       <PdfViewer
+        key={pdfMedia?.id || "pdf-viewer"}
         media={pdfMedia}
         title={"Scan · " + itemTitle}
         fileName={(item.itemCode ? "Item-" + item.itemCode : "Item") + "-scan.pdf"}
