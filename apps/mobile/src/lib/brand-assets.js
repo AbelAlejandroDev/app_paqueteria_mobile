@@ -25,6 +25,16 @@ const MONOCHROME_MARKS = {
 export const brandMonochromeMark = MONOCHROME_MARKS[brand.id] || null;
 
 /**
+ * Foto de fondo de la tarjeta de bienvenida del panel. Opcional: la marca que
+ * no la tenga se queda con el degradado verde.
+ */
+const HOME_HEROES = {
+  the_worx: require("../../assets/brands/the_worx/home-hero.jpg"),
+};
+
+export const brandHomeHero = HOME_HEROES[brand.id] || null;
+
+/**
  * Logotipo completo para fondo claro. El icono cuadrado (`mark`) se sigue
  * usando para el icono de la app; esto es la versión con el nombre, para
  * pintarla dentro de tarjetas blancas.

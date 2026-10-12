@@ -72,6 +72,28 @@ export function getOrganizationName(user) {
   return user?.branding?.brandingName || user?.branding?.name || "";
 }
 
+/**
+ * Direccion del centro, en una linea, para la cabecera del panel.
+ *
+ * Es la del centro y no la del cliente: el panel dice donde esta su buzon. El
+ * backend la tiene en Center (addressLine1...zip) pero `serializeCenter` aun no
+ * la manda; mientras falte se devuelve "" y la linea no se pinta, en vez de
+ * enseñar otra direccion en su lugar.
+ */
+export function formatCenterAddress(user) {
+  const center = user?.center || {};
+  const street = [center.addressLine1, center.addressLine2].filter(Boolean).join(", ");
+  const stateZip = [center.state, center.zip].filter(Boolean).join(" ");
+
+  return [street, center.city, stateZip].filter(Boolean).join(", ");
+}
+
+/** El buzon del cliente ("VO-7"); el numero suelto si no hay codigo. */
+export function getMailboxCode(user) {
+  const context = user?.clientContext || {};
+  return context.mailboxCode || (context.mailboxNumber != null ? String(context.mailboxNumber) : "");
+}
+
 /** `displayName` es la forma corta; `name` la larga, como respaldo. */
 export function getCenterLabel(user) {
   const center = user?.center;
