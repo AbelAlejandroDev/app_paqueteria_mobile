@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isUpdateNotification, notificationKind } from "../src/lib/notification-kind.js";
+import { isUpdateNotification, notificationKind, relatedAction } from "../src/lib/notification-kind.js";
 
 test("cada familia de aviso tiene su tipo", () => {
   assert.equal(notificationKind({ type: "MAIL_ITEM_RECEIVED" }), "mail");
@@ -37,4 +37,23 @@ test("Updates es todo menos el aviso de correo nuevo", () => {
   assert.equal(isUpdateNotification({ type: "MAIL_ITEM_RECEIVED" }), false);
   assert.equal(isUpdateNotification({ type: "SCAN_COMPLETED" }), true);
   assert.equal(isUpdateNotification({ type: "SERVICE_NOTICE" }), true);
+});
+
+test("el detalle lleva a la pieza que nombra el aviso", () => {
+  const scan = { type: "SCAN_COMPLETED", data: { mailItemId: "m1" } };
+  assert.deepEqual(relatedAction(scan), {
+    label: "View mail item",
+    route: { pathname: "/mail-items/[id]", params: { id: "m1" } },
+  });
+});
+
+test("el aviso de varias piezas abre la bandeja", () => {
+  const mail = { type: "MAIL_ITEM_RECEIVED", data: { count: 3, mailItemIds: ["a", "b", "c"] } };
+  assert.equal(relatedAction(mail).label, "Open inbox");
+});
+
+test("pagos van a Billing, el 1583 a su pantalla, y lo demas sin boton", () => {
+  assert.equal(relatedAction({ type: "SUBSCRIPTION_PAST_DUE" }).route, "/billing");
+  assert.equal(relatedAction({ type: "USPS_COMPLIANCE_APPROVED" }).route, "/usps-verification");
+  assert.equal(relatedAction({ type: "SERVICE_NOTICE" }), null);
 });

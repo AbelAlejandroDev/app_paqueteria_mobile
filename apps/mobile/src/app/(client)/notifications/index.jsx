@@ -2,28 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
-  CreditCard,
-  FileText,
-  Mail,
-  Megaphone,
-  Package,
-  Send,
-  ShieldCheck,
-  Store,
-  Tag,
-  Trash2,
-} from "lucide-react-native";
+import { ArrowLeft, ChevronRight } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
+import { overWhite } from "@/lib/colors";
 import { cn, formatErrorMessage } from "@/lib/utils";
 import { formatEventTime } from "@/lib/mail-item-detail";
 import { NOTIFICATIONS_QUERY_KEY } from "@/lib/notification-routing";
-import { isUpdateNotification, notificationKind } from "@/lib/notification-kind";
+import { isUpdateNotification } from "@/lib/notification-kind";
 import {
   isMailReceived,
   notificationDisplay,
@@ -31,28 +18,10 @@ import {
   stackMailNotifications,
 } from "@/lib/mail-notifications";
 import EmptyState from "@/components/common/empty-state";
+import { NotificationIcon } from "@/components/common/notification-icon";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const { palette } = brand;
-
-/**
- * Icono y colores de cada familia de aviso. El verde de marca para lo que es
- * del buzon (escaneos, recogidas); el resto, un color propio para que la lista
- * se lea de un vistazo sin leer los titulos.
- */
-const KIND_STYLES = {
-  mail: { icon: Mail, color: "#D97706", background: "#FEF3E2" },
-  scan: { icon: FileText, color: palette.glyph, background: palette.tint + "59" },
-  forward: { icon: Send, color: "#2563EB", background: "#E8F0FE" },
-  label: { icon: Tag, color: "#7C3AED", background: "#F1EAFE" },
-  pickup: { icon: Store, color: palette.glyph, background: palette.tint + "59" },
-  discard: { icon: Trash2, color: "#BE123C", background: "#FFE8EC" },
-  payment: { icon: CreditCard, color: "#BE123C", background: "#FFE8EC" },
-  storage: { icon: Package, color: "#D97706", background: "#FEF3E2" },
-  account: { icon: ShieldCheck, color: palette.glyph, background: palette.tint + "59" },
-  notice: { icon: Megaphone, color: "#8C7A45", background: palette.sand + "40" },
-  general: { icon: Bell, color: palette.glyph, background: palette.tint + "59" },
-};
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -75,28 +44,37 @@ const CARD_SHADOW = {
   elevation: 2,
 };
 
+/**
+ * Fondos de la tarjeta, siempre opacos. En Android la sombra (elevation) se
+ * pinta debajo de la vista, y con un fondo translucido se transparenta: lo no
+ * leido salia con un recuadro oscuro alrededor, como seleccionado.
+ */
+const ROW_BACKGROUND = {
+  unread: overWhite(palette.tint, 0.14),
+  unreadPressed: overWhite(palette.tint, 0.3),
+  read: "#ffffff",
+  readPressed: overWhite(palette.tint, 0.18),
+};
+const ROW_BORDER = overWhite(palette.ink, 0.07);
+
 function NotificationRow({ notification, onOpen }) {
+  const [pressed, setPressed] = useState(false);
   const unread = !notification.readAt;
+  const background = ROW_BACKGROUND[(unread ? "unread" : "read") + (pressed ? "Pressed" : "")];
   const { title, message } = notificationDisplay(notification);
-  const kind = KIND_STYLES[notificationKind(notification)] || KIND_STYLES.general;
-  const Icon = kind.icon;
 
   return (
     <Pressable
       onPress={() => onOpen(notification)}
-      className={cn(
-        "mb-3 flex-row items-center gap-3.5 rounded-2xl border py-4 pl-6 pr-3",
-        // Lo no leido se distingue por el punto y un velo apenas visible. Con
-        // borde de color o un velo mas fuerte parecia seleccionado.
-        unread ? "border-ink/[0.06] bg-tint/10 active:bg-tint/25" : "border-ink/[0.06] bg-white active:bg-tint/15"
-      )}
-      style={CARD_SHADOW}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      // Lo no leido se distingue por el punto y un velo de marca muy suave.
+      className="mb-3 flex-row items-center gap-3.5 rounded-2xl border py-4 pl-6 pr-3"
+      style={[CARD_SHADOW, { backgroundColor: background, borderColor: ROW_BORDER }]}
     >
       {unread ? <View className="absolute left-2 top-1/2 -mt-1 h-2.5 w-2.5 rounded-full bg-rose-500" /> : null}
 
-      <View className="h-14 w-14 items-center justify-center rounded-xl" style={{ backgroundColor: kind.background }}>
-        <Icon size={26} color={kind.color} />
-      </View>
+      <NotificationIcon notification={notification} />
 
       <View className="min-w-0 flex-1 gap-0.5">
         <Text numberOfLines={2} className="font-hanken-bold text-[16px] text-ink">

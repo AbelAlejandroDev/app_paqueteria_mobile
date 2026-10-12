@@ -1,3 +1,5 @@
+import { isMailReceived, routeForMailReceived } from "./mail-notifications.js";
+
 /**
  * De que va un aviso, para elegir su icono y su color en la lista.
  *
@@ -57,4 +59,31 @@ export function notificationKind(notification) {
  */
 export function isUpdateNotification(notification) {
   return notificationKind(notification) !== "mail";
+}
+
+/**
+ * El boton del detalle: a donde lleva el aviso, o null si no hay nada que
+ * abrir. Un aviso de correo va a su pieza (o a la bandeja si son varias);
+ * cualquier otro que nombre una pieza, a esa pieza; los de pago, a Billing; y
+ * los del 1583, a su pantalla.
+ */
+export function relatedAction(notification) {
+  const data = notification?.data || {};
+
+  if (isMailReceived(notification)) {
+    const route = routeForMailReceived(data);
+    return { label: route.pathname === "/mail-items/[id]" ? "View mail item" : "Open inbox", route };
+  }
+
+  if (data.mailItemId) {
+    return { label: "View mail item", route: { pathname: "/mail-items/[id]", params: { id: String(data.mailItemId) } } };
+  }
+
+  const kind = notificationKind(notification);
+  if (kind === "payment") return { label: "Go to Billing", route: "/billing" };
+  if (/USPS|1583|COMPLIANCE/.test(String(notification?.type || "").toUpperCase())) {
+    return { label: "Open USPS verification", route: "/usps-verification" };
+  }
+
+  return null;
 }
