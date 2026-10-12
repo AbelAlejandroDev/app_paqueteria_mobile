@@ -59,7 +59,7 @@ compartidos).
 ```bash
 npm install                    # desde la raíz: instala todos los workspaces
 cd apps/mobile
-cp .env.example .env           # y rellena EXPO_PUBLIC_API_URL
+cp .env.example .env           # ya apunta a la API oficial
 npm start
 ```
 
@@ -69,6 +69,33 @@ npm start
 | --- | --- |
 | `EXPO_PUBLIC_API_URL` | Base de la API, incluido `/api/v1`. **Debe ser HTTPS** en release: Android bloquea el tráfico en claro por defecto e iOS lo rechaza por ATS. |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Clave publicable de Stripe (la misma que usa el web). |
+
+La API oficial es `https://core.theworxoffices.com/api/v1` en todos los casos.
+`src/lib/api.js` falla al arrancar si falta la variable: no hay URL de reserva a
+propósito, para que un build mal configurado se note en vez de apuntar a otro
+sitio.
+
+**Builds de EAS.** El `.env` está en `.gitignore` y EAS no lo sube, así que los
+builds no lo leen. Cada perfil base de `eas.json` declara su `environment` y la
+variable vive en las EAS Environment Variables de **cada proyecto de marca**
+(The Worx y HDG son proyectos distintos en expo.dev):
+
+| Perfil | Environment de EAS |
+| --- | --- |
+| `*-development` | `development` |
+| `*-preview`, `*-simulator` | `preview` |
+| `*-production` | `production` |
+
+**EAS Update.** Publica siempre con `--environment` igual al del canal. Sin él,
+el bundle se genera con el `.env` local de quien publica:
+
+```bash
+eas update --channel production --environment production --message "..."
+eas update --channel preview --environment preview --message "..."
+eas update --channel development --environment development --message "..."
+```
+
+Con `APP_BRAND=hdg` delante para publicar la de HDG.
 
 ## Estado
 
@@ -86,4 +113,4 @@ npm start
 | Portal de pago de Stripe | ✅ vía navegador in-app, sin SDK nativo |
 | New Service Request | ⬜ marcador, inalcanzable igual que en el web |
 | Push (hoy es polling cada 15 s) | ⬜ |
-| TLS propio en el VPS (hoy túnel ngrok) | ⬜ |
+| TLS propio en el VPS (`core.theworxoffices.com`) | ✅ |
