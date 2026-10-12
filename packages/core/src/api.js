@@ -20,6 +20,25 @@ import { broadcastAuthUserUpdated, normalizeAuthUser } from "./auth.js";
  *   queda irrecuperable y hay que mandar al usuario al login.
  * @param {Record<string, string>} [options.headers]
  */
+/**
+ * Peticiones que se hacen sin sesion: entrar, renovar, crear o recuperar la
+ * contraseña. Su 401 significa "credenciales incorrectas", no "sesion
+ * caducada", asi que no se intenta renovar ni se cierra nada.
+ *
+ * Sin esto, una contraseña mal escrita en el login acababa en abortSession:
+ * se volvia a cargar la pantalla de login y el mensaje de error se perdia.
+ */
+const PUBLIC_AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/set-password", "/auth/forgot-password"];
+
+export function isPublicAuthRequest(url) {
+  const path = String(url || "")
+    .split("?")[0]
+    .replace(/^https?:\/\/[^/]+/, "")
+    .replace(/^\/api\/v\d+/, "");
+  const normalized = path.startsWith("/") ? path : "/" + path;
+  return PUBLIC_AUTH_PATHS.includes(normalized);
+}
+
 export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
   if (!baseURL) {
     throw new Error("createApiClient requiere baseURL.");
@@ -36,11 +55,16 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
     pendingQueue = [];
   }
 
-  async function abortSession() {
+  /**
+   * `reason` es el `code` del backend cuando lo hay (SESSION_REVOKED si el
+   * cliente cambio su contraseña), para que la app pueda explicar por que
+   * vuelve al login en vez de echarle sin decir nada.
+   */
+  async function abortSession(reason = null) {
     await clearTokens();
     await clearAuthUser();
     broadcastAuthUserUpdated(null);
-    onUnauthorized?.();
+    onUnauthorized?.(reason);
   }
 
   const api = axios.create({ baseURL, headers });
@@ -60,7 +84,7 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
       const originalRequest = error.config;
       const status = error?.response?.status;
 
-      if (status !== 401 || originalRequest?._retry) {
+      if (status !== 401 || originalRequest?._retry || isPublicAuthRequest(originalRequest?.url)) {
         return Promise.reject(error);
       }
 
@@ -102,7 +126,9 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        await abortSession();
+        // Un 401 del refresh (SESSION_REVOKED incluido) no se reintenta: el
+        // token no va a volver a valer.
+        await abortSession(refreshError?.response?.data?.code || null);
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

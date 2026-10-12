@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import BrandIdentity from "@/components/common/brand-identity";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
+import { loginErrorMessage, sessionEndedMessage } from "@/lib/auth-messages";
 import { INPUT_MIN_HEIGHT, inputTextStyle } from "@/components/ui/input";
 
 const loginSchema = z.object({
@@ -34,19 +35,19 @@ function Field({ control, name, placeholder, icon: Icon, error, secure, ...input
     <View className="gap-1.5">
       <View
         className={cn(
-          "flex-row items-center rounded-lg border bg-card px-3",
+          "flex-row items-center rounded-[10px] border bg-card px-3",
           error ? "border-destructive" : "border-input"
         )}
         // Mas alto que el resto de campos: es la primera pantalla y la mas usada.
         style={{ minHeight: INPUT_MIN_HEIGHT + 4 }}
       >
-        <Icon size={18} color="#94a3b8" />
+        <Icon size={18} color="#A3A19E" />
         <Controller
           control={control}
           name={name}
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              className="ml-2.5 flex-1 self-stretch text-base text-foreground"
+              className="ml-2.5 flex-1 self-stretch font-hanken text-base text-foreground"
               style={inputTextStyle}
               placeholder={placeholder}
               placeholderTextColor="#94a3b8"
@@ -60,17 +61,21 @@ function Field({ control, name, placeholder, icon: Icon, error, secure, ...input
         />
         {secure ? (
           <TouchableOpacity onPress={() => setHidden((v) => !v)} hitSlop={10}>
-            {hidden ? <EyeOff size={18} color="#94a3b8" /> : <Eye size={18} color="#94a3b8" />}
+            {hidden ? <EyeOff size={18} color="#A3A19E" /> : <Eye size={18} color="#A3A19E" />}
           </TouchableOpacity>
         ) : null}
       </View>
-      {error ? <Text className="ml-1 text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text className="ml-1 font-hanken text-sm text-destructive">{error}</Text> : null}
     </View>
   );
 }
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  // Si la sesion termino sola (p. ej. se cambio la contraseña en otro
+  // dispositivo), se explica arriba del formulario.
+  const { reason } = useLocalSearchParams();
+  const sessionNotice = sessionEndedMessage(typeof reason === "string" ? reason : "");
   const [activationMessage, setActivationMessage] = useState("");
   const [formError, setFormError] = useState("");
   // Telefonos de 360 dp como el Galaxy A06: con los margenes de pantalla y de
@@ -104,7 +109,7 @@ export default function LoginScreen() {
       return;
     }
 
-    setFormError(result.message || "Invalid credentials.");
+    setFormError(loginErrorMessage(result));
   };
 
   return (
@@ -119,9 +124,12 @@ export default function LoginScreen() {
           contentContainerClassName={cn("flex-grow justify-center", compact ? "px-4 py-6" : "px-6 py-10")}
           keyboardShouldPersistTaps="handled"
         >
-          <View className={cn("rounded-lg border border-border bg-card", compact ? "px-5 py-6" : "p-6")}>
+          <View
+            className={cn("rounded-2xl border border-border bg-card", compact ? "px-5 py-6" : "p-6")}
+            style={{ shadowColor: "#1D4E4A", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
+          >
             <BrandIdentity centered className="mb-2" />
-            <Text className="mb-8 text-center text-sm text-muted-foreground">
+            <Text className="mb-8 text-center font-hanken text-sm text-muted-foreground">
               Sign in to your mailbox
             </Text>
 
@@ -150,22 +158,48 @@ export default function LoginScreen() {
                 textContentType="password"
               />
 
+              <View className="-mt-1 items-end">
+                <Link href="/forgot-password" asChild>
+                  <TouchableOpacity hitSlop={8} accessibilityRole="link">
+                    <Text className="font-hanken-semibold text-sm" style={{ color: brand.palette.glyph }}>
+                      Forgot password?
+                    </Text>
+                  </TouchableOpacity>
+                </Link>
+              </View>
+
+              {sessionNotice && !formError ? (
+                <View className="flex-row gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3" accessibilityRole="alert">
+                  <AlertCircle size={18} color="#B45309" />
+                  <Text className="flex-1 font-hanken text-sm leading-5 text-amber-900">{sessionNotice}</Text>
+                </View>
+              ) : null}
+
               {activationMessage ? (
-                <View className="flex-row gap-2 rounded-lg border border-border bg-muted p-3">
-                  <AlertCircle size={18} color="#64748b" />
-                  <Text className="flex-1 text-sm leading-5 text-muted-foreground">
+                <View className="flex-row gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <AlertCircle size={18} color="#B45309" />
+                  <Text className="flex-1 font-hanken text-sm leading-5 text-amber-900">
                     {activationMessage}
                   </Text>
                 </View>
               ) : null}
 
+              {/* Visible y anunciado: antes el error se perdia porque la
+                  pantalla se recargaba con el 401 del login. */}
               {formError ? (
-                <Text className="text-center text-sm text-destructive">{formError}</Text>
+                <View
+                  className="flex-row gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3"
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
+                  <AlertCircle size={18} color="#BE123C" />
+                  <Text className="flex-1 font-hanken-semibold text-sm leading-5 text-rose-800">{formError}</Text>
+                </View>
               ) : null}
 
               <TouchableOpacity
                 className={cn(
-                  "mt-2 items-center justify-center rounded-lg bg-primary px-4 py-2",
+                  "mt-2 items-center justify-center rounded-[10px] bg-primary px-4 py-2",
                   isSubmitting && "opacity-60"
                 )}
                 style={{ minHeight: INPUT_MIN_HEIGHT + 4 }}
@@ -175,7 +209,7 @@ export default function LoginScreen() {
                 {isSubmitting ? (
                   <ActivityIndicator color={brand.primaryForeground} />
                 ) : (
-                  <Text className="text-base font-semibold text-primary-foreground">
+                  <Text className="font-hanken-bold text-base text-primary-foreground">
                     Sign in
                   </Text>
                 )}

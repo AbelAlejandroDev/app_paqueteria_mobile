@@ -11,8 +11,9 @@ if (!API_BASE_URL) {
 
 export const api = createApiClient({
   baseURL: API_BASE_URL,
-  onUnauthorized: () => {
+  onUnauthorized: (reason) => {
     // Equivalente nativo del window.location.assign("/login") del front web.
-    router.replace("/login");
+    // El motivo viaja al login para que diga por que se cerro la sesion.
+    router.replace(reason ? { pathname: "/login", params: { reason } } : "/login");
   },
 });

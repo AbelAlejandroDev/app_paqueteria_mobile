@@ -1,4 +1,4 @@
-export { createApiClient } from "./api.js";
+export { createApiClient, isPublicAuthRequest } from "./api.js";
 
 export {
   AUTH_USER_UPDATED_EVENT,

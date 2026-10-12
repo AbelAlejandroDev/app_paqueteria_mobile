@@ -102,6 +102,10 @@ export function AuthProvider({ children }) {
           ok: false,
           code: error?.response?.data?.error || "LOGIN_FAILED",
           message: formatErrorMessage(error, "Invalid credentials."),
+          // Sin respuesta del servidor no son las credenciales: es la red (o
+          // una VPN que no deja pasar). Se distingue para decirlo asi.
+          network: !error?.response,
+          status: error?.response?.status || null,
         };
       }
     },
