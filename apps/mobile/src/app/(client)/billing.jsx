@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, RefreshControl, ScrollView, Text, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,13 +27,12 @@ import {
   labelWithPrefix,
   titleCase,
 } from "@/lib/billing";
+import { overWhite } from "@/lib/colors";
 import { formatErrorMessage } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 import FeeScheduleView, { FEE_SCHEDULE_QUERY_KEY } from "@/components/common/fee-schedule";
-import PageTitle from "@/components/common/page-title";
+import { ActionButton, CardHeading, CardSubheading, DetailCard, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -44,22 +44,50 @@ const TABS = [
   { value: "fees", label: "Fee Schedule" },
 ];
 
+const { palette } = brand;
+
+/** Caja interior de una tarjeta: fondo de lienzo y borde de tinta suave. */
+const INSET = "rounded-xl border border-ink/[0.08] bg-canvas p-4";
+
+/** Verde oscuro de la tarjeta de pago, el mismo de la bienvenida del panel. */
+const CARD_FROM = "#0F3A33";
+const CARD_TO = "#2F6F62";
+
+/** Tarjeta con titulo y descripcion arriba, separados del contenido por una linea. */
+function Section({ title, description, icon: Icon, children }) {
+  return (
+    <DetailCard>
+      <View className="gap-1 border-b border-ink/[0.08] px-5 pb-4 pt-5">
+        <View className="flex-row items-center gap-2">
+          {Icon ? <Icon size={20} color={palette.glyph} /> : null}
+          <CardHeading>{title}</CardHeading>
+        </View>
+        {description ? <CardSubheading>{description}</CardSubheading> : null}
+      </View>
+      <View className="gap-3 p-4">{children}</View>
+    </DetailCard>
+  );
+}
+
 function StatTile({ label, value, description, icon: Icon }) {
   return (
-    <View className="min-w-[47%] flex-1 rounded-lg border border-border bg-card p-4">
+    <DetailCard className="min-w-[47%] flex-1 p-4">
       <View className="flex-row items-start justify-between gap-2">
-        <Text className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="min-w-0 flex-1 font-hanken-bold text-[11px] uppercase tracking-widest text-ink/55">
           {label}
         </Text>
-        <View className="h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-          <Icon size={18} color={brand.primaryColor} />
+        <View
+          className="h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+          style={{ backgroundColor: overWhite(palette.tint, 0.4) }}
+        >
+          <Icon size={18} color={palette.glyph} />
         </View>
       </View>
-      <Text className="mt-2 text-xl font-semibold text-foreground">{value}</Text>
+      <Text className="mt-2 font-hanken-bold text-[20px] tracking-tight text-ink">{value}</Text>
       {description ? (
-        <Text className="mt-2 text-xs leading-4 text-muted-foreground">{description}</Text>
+        <Text className="mt-1.5 font-hanken text-[12px] leading-4 text-ink/60">{description}</Text>
       ) : null}
-    </View>
+    </DetailCard>
   );
 }
 
@@ -72,30 +100,31 @@ function UsageBar({ label, description, used, included, remaining }) {
   const percent = getUsagePercent(used, included);
 
   return (
-    <View className="rounded-lg border border-border bg-background p-4">
-      <View className="gap-2">
-        <Text className="text-base font-semibold text-foreground">{label}</Text>
-        <Text className="text-sm leading-5 text-muted-foreground">{description}</Text>
-        <Badge variant="outline" className="border-slate-200 bg-slate-100" labelClassName="text-slate-800">
-          {hasIncluded ? used + " / " + included + " included" : used + " used"}
-        </Badge>
+    <View className={INSET}>
+      <View className="items-start gap-2">
+        <Text className="font-hanken-bold text-[16px] text-ink">{label}</Text>
+        <Text className="font-hanken text-[14px] leading-5 text-ink/60">{description}</Text>
+        <MailboxChip>{hasIncluded ? used + " / " + included + " included" : used + " used"}</MailboxChip>
       </View>
 
       {/* Sin cupo mensual no hay nada que llenar: la web pinta la barra al
           100% igualmente, y eso se lee como "límite agotado". */}
       {hasIncluded ? (
-        <View className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
+        <View
+          className="mt-4 h-2.5 overflow-hidden rounded-full"
+          style={{ backgroundColor: overWhite(palette.ink, 0.08) }}
+        >
           <View className="h-full rounded-full bg-primary" style={{ width: percent + "%" }} />
         </View>
       ) : null}
 
       <View className="mt-3 flex-row items-center justify-between gap-3">
-        <Text className="min-w-0 flex-1 text-xs text-muted-foreground">
+        <Text className="min-w-0 flex-1 font-hanken text-[12px] text-ink/60">
           {hasIncluded && remaining != null
             ? remaining + " remaining in cycle"
             : "Billed from approved usage and quotes"}
         </Text>
-        <Text className="text-xs font-medium text-foreground">
+        <Text className="font-hanken-semibold text-[12px] text-ink">
           {hasIncluded ? percent + "% used" : "Usage tracked"}
         </Text>
       </View>
@@ -105,13 +134,13 @@ function UsageBar({ label, description, used, included, remaining }) {
 
 function RequestTile({ icon: Icon, label, total, active }) {
   return (
-    <View className="min-w-[47%] flex-1 rounded-lg border border-border bg-background p-4">
+    <View className={"min-w-[47%] flex-1 " + INSET}>
       <View className="flex-row items-center gap-2">
-        <Icon size={16} color={brand.primaryColor} />
-        <Text className="text-sm font-semibold text-foreground">{label}</Text>
+        <Icon size={16} color={palette.glyph} />
+        <Text className="font-hanken-bold text-[14px] text-ink">{label}</Text>
       </View>
-      <Text className="mt-2 text-2xl font-semibold text-foreground">{total || 0}</Text>
-      <Text className="mt-1 text-xs text-muted-foreground">{(active || 0) + " active request(s)"}</Text>
+      <Text className="mt-2 font-hanken-bold text-[26px] tracking-tight text-ink">{total || 0}</Text>
+      <Text className="mt-0.5 font-hanken text-[12px] text-ink/60">{(active || 0) + " active request(s)"}</Text>
     </View>
   );
 }
@@ -120,7 +149,7 @@ function LoadingTiles({ count = 4 }) {
   return (
     <View className="flex-row flex-wrap gap-3">
       {Array.from({ length: count }).map((_, index) => (
-        <Skeleton key={index} className="h-28 min-w-[47%] flex-1" />
+        <Skeleton key={index} className="h-28 min-w-[47%] flex-1 rounded-xl" />
       ))}
     </View>
   );
@@ -131,7 +160,7 @@ function UsageTab({ data, isLoading, isError, error }) {
     return (
       <View className="gap-4">
         <LoadingTiles />
-        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-56 w-full rounded-xl" />
       </View>
     );
   }
@@ -154,7 +183,7 @@ function UsageTab({ data, isLoading, isError, error }) {
       .join(" · ") || "Active client billing plan";
 
   return (
-    <View className="gap-6">
+    <View className="gap-5">
       <StatGrid>
         <StatTile
           label="Current Plan"
@@ -184,74 +213,45 @@ function UsageTab({ data, isLoading, isError, error }) {
         />
       </StatGrid>
 
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg">Usage</CardTitle>
-          <CardDescription>
-            {entitlements.scan?.description || "Current billing usage for this cycle."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="gap-3 p-4 pt-4">
-          <UsageBar
-            label="Scan pages"
-            description="Pages processed through approved scan work."
-            used={scan.used || 0}
-            included={scan.monthlyIncluded}
-            remaining={scan.remainingMonthly}
-          />
-          <UsageBar
-            label="Open and scan requests"
-            description="Client requests to open mail and create digital scan work."
-            used={scanRequests.total || 0}
-            included={null}
-            remaining={null}
-          />
-        </CardContent>
-      </Card>
+      <Section title="Usage" description={entitlements.scan?.description || "Current billing usage for this cycle."}>
+        <UsageBar
+          label="Scan pages"
+          description="Pages processed through approved scan work."
+          used={scan.used || 0}
+          included={scan.monthlyIncluded}
+          remaining={scan.remainingMonthly}
+        />
+        <UsageBar
+          label="Open and scan requests"
+          description="Client requests to open mail and create digital scan work."
+          used={scanRequests.total || 0}
+          included={null}
+          remaining={null}
+        />
+      </Section>
 
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg">Requests</CardTitle>
-          <CardDescription>Scan and forwarding activity in the current cycle.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 pt-4">
-          <View className="flex-row flex-wrap gap-3">
-            <RequestTile icon={ScanLine} label="Scans" total={scanRequests.total} active={scanRequests.active} />
-            <RequestTile
-              icon={Truck}
-              label="Forwarding"
-              total={forwardRequests.total}
-              active={forwardRequests.active}
-            />
-          </View>
-        </CardContent>
-      </Card>
+      <Section title="Requests" description="Scan and forwarding activity in the current cycle.">
+        <View className="flex-row flex-wrap gap-3">
+          <RequestTile icon={ScanLine} label="Scans" total={scanRequests.total} active={scanRequests.active} />
+          <RequestTile icon={Truck} label="Forwarding" total={forwardRequests.total} active={forwardRequests.active} />
+        </View>
+      </Section>
 
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg">Pending Approval</CardTitle>
-          <CardDescription>Quotes waiting for you in this cycle.</CardDescription>
-        </CardHeader>
-        <CardContent className="gap-3 p-4 pt-4">
-          {pendingForward.length === 0 ? (
-            <Text className="rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground">
-              No pending approvals.
-            </Text>
-          ) : (
-            pendingForward.map((item) => (
-              <View key={item.id} className="rounded-lg border border-border bg-background p-4">
-                <Text className="text-base font-semibold text-foreground">Forwarding quote</Text>
-                <Text className="mt-1 text-sm text-muted-foreground">
-                  {[item.quotedCarrier, item.quotedService].filter(Boolean).join(" · ") || "Carrier pending"}
-                </Text>
-                <Text className="mt-2 text-base font-semibold text-foreground">
-                  {formatMoneyCents(item.quotedAmountCents)}
-                </Text>
-              </View>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <Section title="Pending Approval" description="Quotes waiting for you in this cycle.">
+        {pendingForward.length === 0 ? (
+          <Text className={INSET + " font-hanken text-[14px] text-ink/60"}>No pending approvals.</Text>
+        ) : (
+          pendingForward.map((item) => (
+            <View key={item.id} className={INSET}>
+              <Text className="font-hanken-bold text-[16px] text-ink">Forwarding quote</Text>
+              <Text className="mt-1 font-hanken text-[14px] text-ink/60">
+                {[item.quotedCarrier, item.quotedService].filter(Boolean).join(" · ") || "Carrier pending"}
+              </Text>
+              <Text className="mt-2 font-hanken-bold text-[16px] text-ink">{formatMoneyCents(item.quotedAmountCents)}</Text>
+            </View>
+          ))
+        )}
+      </Section>
     </View>
   );
 }
@@ -266,15 +266,15 @@ function StatementRow({ row }) {
   const mailItemCode = row.serviceRequest?.mailItem?.itemCode || row.mailItem?.itemCode || null;
 
   return (
-    <View className="gap-2 rounded-lg border border-border bg-background p-4">
+    <View className={"gap-2 " + INSET}>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-sm font-semibold text-foreground">{row.description}</Text>
+          <Text className="font-hanken-bold text-[14px] text-ink">{row.description}</Text>
           {mailItemCode ? (
-            <Text className="mt-1 text-xs text-muted-foreground">{"Mail item " + mailItemCode}</Text>
+            <Text className="mt-1 font-hanken text-[12px] text-ink/60">{"Mail item " + mailItemCode}</Text>
           ) : null}
         </View>
-        <Text className="shrink-0 text-base font-semibold text-foreground">
+        <Text className="shrink-0 font-hanken-bold text-[16px] text-ink">
           {formatMoneyCents(row.totalAmountCents, row.currency)}
         </Text>
       </View>
@@ -283,9 +283,9 @@ function StatementRow({ row }) {
         <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
           {titleCase(row.status)}
         </Badge>
-        <Text className="text-xs text-muted-foreground">{titleCase(row.type)}</Text>
-        <Text className="text-xs text-muted-foreground">·</Text>
-        <Text className="text-xs text-muted-foreground">{formatDateOnly(row.createdAt)}</Text>
+        <Text className="font-hanken text-[12px] text-ink/60">{titleCase(row.type)}</Text>
+        <Text className="font-hanken text-[12px] text-ink/60">·</Text>
+        <Text className="font-hanken text-[12px] text-ink/60">{formatDateOnly(row.createdAt)}</Text>
       </View>
     </View>
   );
@@ -296,7 +296,7 @@ function StatementTab({ data, isLoading, isError, error }) {
     return (
       <View className="gap-4">
         <LoadingTiles count={3} />
-        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full rounded-xl" />
       </View>
     );
   }
@@ -309,7 +309,7 @@ function StatementTab({ data, isLoading, isError, error }) {
   const summary = data?.summary || {};
 
   return (
-    <View className="gap-6">
+    <View className="gap-5">
       <StatGrid>
         <StatTile
           label="Statement Total"
@@ -331,21 +331,15 @@ function StatementTab({ data, isLoading, isError, error }) {
         />
       </StatGrid>
 
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg">Statement</CardTitle>
-          <CardDescription>Approved service charges for the current billing cycle.</CardDescription>
-        </CardHeader>
-        <CardContent className="gap-3 p-4 pt-4">
-          {rows.length === 0 ? (
-            <Text className="rounded-lg border border-border bg-background p-4 text-center text-sm text-muted-foreground">
-              No statement items for this cycle.
-            </Text>
-          ) : (
-            rows.map((row) => <StatementRow key={row.id} row={row} />)
-          )}
-        </CardContent>
-      </Card>
+      <Section title="Statement" description="Approved service charges for the current billing cycle.">
+        {rows.length === 0 ? (
+          <Text className={INSET + " text-center font-hanken text-[14px] text-ink/60"}>
+            No statement items for this cycle.
+          </Text>
+        ) : (
+          rows.map((row) => <StatementRow key={row.id} row={row} />)
+        )}
+      </Section>
     </View>
   );
 }
@@ -354,8 +348,8 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
   if (isLoading) {
     return (
       <View className="gap-4">
-        <Skeleton className="h-72 w-full" />
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-72 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </View>
     );
   }
@@ -378,85 +372,83 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
   const paymentColor = getStatusColor(subscription.paymentStatus);
 
   return (
-    <View className="gap-6">
-      <Card>
-        <CardHeader className="border-b border-border">
-          <View className="flex-row items-center gap-2">
-            <WalletCards size={20} color={brand.primaryColor} />
-            <CardTitle className="text-lg">Payment Method</CardTitle>
-          </View>
-          <CardDescription>
-            Card used for subscription renewal and approved service charges.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="gap-4 p-4 pt-4">
-          <View className="rounded-lg border border-slate-800 bg-slate-800 p-5">
-            <View className="flex-row items-center justify-between gap-3">
-              <Text className="text-xs font-semibold uppercase tracking-widest text-white/60">{cardBrand}</Text>
-              <CreditCard size={20} color="rgba(255,255,255,0.7)" />
-            </View>
-            {/* Bullets en vez de asteriscos: los `*` se apoyan en la parte alta
-                de la línea y quedan desalineados con los cuatro dígitos. */}
-            <Text className="mt-10 text-xl tracking-widest text-white">{"•••• •••• •••• " + last4}</Text>
-            <View className="mt-6 flex-row items-center justify-between gap-4">
-              <Text className="text-xs text-white/75">{method ? "Default card" : "No payment method"}</Text>
-              <Text className="text-xs text-white/75">
-                {"Expires " + String(expMonth).padStart(2, "0") + "/" + String(expYear).slice(-2)}
-              </Text>
-            </View>
-          </View>
+    <View className="gap-5">
+      <Section
+        title="Payment Method"
+        icon={WalletCards}
+        description="Card used for subscription renewal and approved service charges."
+      >
+        {/* La tarjeta, en el verde oscuro de la marca (el de la bienvenida del
+            panel), con el degradado dibujado en SVG. */}
+        <View className="overflow-hidden rounded-2xl p-5" style={{ backgroundColor: CARD_FROM }}>
+          <Svg style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} width="100%" height="100%">
+            <Defs>
+              <LinearGradient id="paymentCard" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={CARD_FROM} />
+                <Stop offset="1" stopColor={CARD_TO} />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#paymentCard)" />
+          </Svg>
 
-          <Button
-            disabled={!portal.available}
-            loading={isOpening}
-            icon={<ExternalLink size={18} color={brand.primaryForeground} />}
-            onPress={onOpenPortal}
-          >
-            Manage Payment
-          </Button>
-
-          <Text className="text-sm leading-5 text-muted-foreground">
-            {portal.available
-              ? "Opens the secure Stripe portal. You will come back here when you are done."
-              : portal.unavailableReason || "The payment portal is not available for this account."}
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className="font-hanken-bold text-[12px] uppercase tracking-widest text-white/70">{cardBrand}</Text>
+            <CreditCard size={20} color="rgba(255,255,255,0.75)" />
+          </View>
+          {/* Bullets en vez de asteriscos: los `*` se apoyan en la parte alta
+              de la línea y quedan desalineados con los cuatro dígitos. */}
+          <Text className="mt-10 font-hanken-semibold text-[20px] tracking-widest text-white">
+            {"•••• •••• •••• " + last4}
           </Text>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg">Subscription</CardTitle>
-          <CardDescription>Subscription and payment status linked to this account.</CardDescription>
-        </CardHeader>
-        <CardContent className="gap-3 p-4 pt-4">
-          <View className="rounded-lg border border-border bg-background p-4">
-            <Text className="text-sm font-semibold text-foreground">Plan</Text>
-            <Text className="mt-2 text-sm leading-5 text-muted-foreground">
-              {plan.stripePlanName || plan.name || titleCase(plan.code) || "Current plan"}
+          <View className="mt-6 flex-row items-center justify-between gap-4">
+            <Text className="font-hanken text-[12px] text-white/80">{method ? "Default card" : "No payment method"}</Text>
+            <Text className="font-hanken text-[12px] text-white/80">
+              {"Expires " + String(expMonth).padStart(2, "0") + "/" + String(expYear).slice(-2)}
             </Text>
           </View>
-          <View className="rounded-lg border border-border bg-background p-4">
-            <Text className="text-sm font-semibold text-foreground">Subscription Status</Text>
-            <Badge
-              variant="outline"
-              className={"mt-3 " + subscriptionColor.container}
-              labelClassName={subscriptionColor.label}
-            >
-              {titleCase(subscription.status || "unknown")}
-            </Badge>
-          </View>
-          <View className="rounded-lg border border-border bg-background p-4">
-            <Text className="text-sm font-semibold text-foreground">Payment Status</Text>
-            <Badge
-              variant="outline"
-              className={"mt-3 " + paymentColor.container}
-              labelClassName={paymentColor.label}
-            >
-              {titleCase(subscription.paymentStatus || "unknown")}
-            </Badge>
-          </View>
-        </CardContent>
-      </Card>
+        </View>
+
+        <ActionButton
+          variant="primary"
+          icon={ExternalLink}
+          disabled={!portal.available}
+          loading={isOpening}
+          onPress={onOpenPortal}
+        >
+          Manage Payment
+        </ActionButton>
+
+        <Text className="font-hanken text-[14px] leading-5 text-ink/60">
+          {portal.available
+            ? "Opens the secure Stripe portal. You will come back here when you are done."
+            : portal.unavailableReason || "The payment portal is not available for this account."}
+        </Text>
+      </Section>
+
+      <Section title="Subscription" description="Subscription and payment status linked to this account.">
+        <View className={INSET}>
+          <Text className="font-hanken-bold text-[14px] text-ink">Plan</Text>
+          <Text className="mt-1.5 font-hanken text-[14px] leading-5 text-ink/60">
+            {plan.stripePlanName || plan.name || titleCase(plan.code) || "Current plan"}
+          </Text>
+        </View>
+        <View className={INSET}>
+          <Text className="font-hanken-bold text-[14px] text-ink">Subscription Status</Text>
+          <Badge
+            variant="outline"
+            className={"mt-3 " + subscriptionColor.container}
+            labelClassName={subscriptionColor.label}
+          >
+            {titleCase(subscription.status || "unknown")}
+          </Badge>
+        </View>
+        <View className={INSET}>
+          <Text className="font-hanken-bold text-[14px] text-ink">Payment Status</Text>
+          <Badge variant="outline" className={"mt-3 " + paymentColor.container} labelClassName={paymentColor.label}>
+            {titleCase(subscription.paymentStatus || "unknown")}
+          </Badge>
+        </View>
+      </Section>
     </View>
   );
 }
@@ -531,11 +523,13 @@ export default function BillingScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="gap-6 p-4 pb-24"
+      className="flex-1 bg-canvas"
+      contentContainerClassName="gap-5 p-4 pb-24"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <PageTitle title="Billing" subtitle={subtitle} />
+      {/* El titulo "Billing" ya lo pone la cabecera, centrado; aqui solo el
+          plan y el ciclo, para no repetirlo. */}
+      <Text className="text-center font-hanken-medium text-[14px] leading-5 text-ink/60">{subtitle}</Text>
 
       <SegmentedControl options={TABS} value={tab} onChange={setTab} />
 

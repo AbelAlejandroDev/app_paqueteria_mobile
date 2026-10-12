@@ -38,6 +38,9 @@
  *   - `success` estado recibido.
  *   - `canvas`  fondo de la pantalla.
  *   - `media`   fondo de la foto mientras carga o si no hay.
+ *   - `onPrimary` texto e iconos sobre el color primario. El diseño de The
+ *                 Worx usa blanco sobre su verde aunque el contraste calculado
+ *                 pediria oscuro.
  */
 
 const BRANDS = {
@@ -64,6 +67,7 @@ const BRANDS = {
       success: "#00A887",
       canvas: "#F1FCFA",
       media: "#EEF2F1",
+      onPrimary: "#FFFFFF",
     },
     assets: {
       mark: "icon.png",
@@ -93,6 +97,7 @@ const BRANDS = {
       success: "#00A887",
       canvas: "#F8F7FB",
       media: "#EFEEF3",
+      onPrimary: "#FFFFFF",
     },
     assets: {
       mark: "hdg-icono-simple-transparent.png",

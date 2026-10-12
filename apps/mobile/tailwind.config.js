@@ -1,9 +1,12 @@
 const { getBrand } = require("./brands");
-const { getForegroundForColor } = require("./brands/color");
+const { getForegroundForColor, mixWithWhite } = require("./brands/color");
 
 // El color de marca se hornea aquí, en tiempo de build: cada marca genera su
 // propia app, así que no hace falta resolverlo en runtime como en la web.
 const brand = getBrand();
+
+const { palette } = brand;
+const onPrimary = palette.onPrimary || getForegroundForColor(brand.primaryColor);
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -12,14 +15,17 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
+        // Los tokens genericos salen de la paleta de la marca: asi cada
+        // pantalla que usa bg-background, text-foreground o border-border
+        // queda con el lienzo, la tinta y los bordes del diseño sin tocarla.
+        border: mixWithWhite(palette.ink, 0.1),
+        input: mixWithWhite(palette.ink, 0.14),
         ring: brand.primaryColor,
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        background: palette.canvas,
+        foreground: palette.ink,
         primary: {
           DEFAULT: brand.primaryColor,
-          foreground: getForegroundForColor(brand.primaryColor),
+          foreground: onPrimary,
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -30,8 +36,8 @@ module.exports = {
           foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: mixWithWhite(palette.ink, 0.06),
+          foreground: mixWithWhite(palette.ink, 0.62),
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
@@ -42,8 +48,8 @@ module.exports = {
           foreground: "hsl(var(--popover-foreground))",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "#FFFFFF",
+          foreground: palette.ink,
         },
         // Tonos de marca del detalle del item; ver `palette` en brands/index.js.
         ink: brand.palette.ink,

@@ -8,9 +8,11 @@ import PaymentAlerts from "@/components/common/payment-alerts";
 import TermsGate from "@/components/common/terms-gate";
 import BiometricGate from "@/components/common/biometric-gate";
 import NotificationTapHandler from "@/components/common/notification-tap-handler";
+import { canvasHeaderOptions } from "@/components/common/header-title";
 
 const ACTIVE_COLOR = brand.primaryColor;
-const INACTIVE_COLOR = "#64748b";
+// La tinta de la marca atenuada, no el gris azulado de antes.
+const INACTIVE_COLOR = "#7D7B78";
 
 /**
  * Equivalente de ClientLayout + ProtectedRoute allow={["CLIENT"]} del web.
@@ -52,6 +54,7 @@ export default function ClientLayout() {
           screenOptions={{
             tabBarActiveTintColor: ACTIVE_COLOR,
             tabBarInactiveTintColor: INACTIVE_COLOR,
+            tabBarLabelStyle: { fontFamily: "HankenGrotesk_600SemiBold", fontSize: 11 },
           }}
         >
           <Tabs.Screen
@@ -77,6 +80,9 @@ export default function ClientLayout() {
             name="billing"
             options={{
               title: "Billing",
+              // Centrada y sobre el fondo de lienzo, como Mail y Notifications.
+              // La pantalla no repite el titulo debajo.
+              ...canvasHeaderOptions,
               tabBarIcon: ({ color, size }) => <CreditCard color={color} size={size} />,
             }}
           />

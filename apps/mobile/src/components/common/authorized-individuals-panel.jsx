@@ -86,17 +86,17 @@ export default function AuthorizedIndividualsPanel() {
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
           <View className="flex-row items-center gap-2">
-            <UserCheck size={16} color="#64748b" />
-            <Text className="text-base font-semibold text-foreground">Authorized individuals</Text>
+            <UserCheck size={16} color="#7D7B78" />
+            <Text className="text-base font-hanken-bold text-foreground">Authorized individuals</Text>
           </View>
-          <Text className="mt-1 text-sm leading-5 text-muted-foreground">
+          <Text className="font-hanken mt-1 text-sm leading-5 text-muted-foreground">
             Who can receive or pick up mail on your behalf.
           </Text>
         </View>
         <Button
           variant="outline"
           size="sm"
-          icon={isAdding ? <X size={16} color="#0f172a" /> : <Plus size={16} color="#0f172a" />}
+          icon={isAdding ? <X size={16} color="#2D2A26" /> : <Plus size={16} color="#2D2A26" />}
           onPress={() => setIsAdding((value) => !value)}
         >
           {isAdding ? "Cancel" : "Add"}
@@ -141,36 +141,36 @@ export default function AuthorizedIndividualsPanel() {
 
       {query.isLoading ? (
         <View className="rounded-lg border border-border bg-card p-4">
-          <Text className="text-sm text-muted-foreground">Loading authorized individuals...</Text>
+          <Text className="font-hanken text-sm text-muted-foreground">Loading authorized individuals...</Text>
         </View>
       ) : query.isError ? (
         <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <Text className="text-sm text-rose-700">
+          <Text className="font-hanken text-sm text-rose-700">
             {formatErrorMessage(query.error, "Unable to load authorized individuals")}
           </Text>
         </View>
       ) : activeItems.length === 0 ? (
-        <View className="rounded-lg border border-dashed border-slate-300 bg-card p-4">
-          <Text className="text-sm text-muted-foreground">No authorized individuals yet.</Text>
+        <View className="rounded-lg border border-dashed border-input bg-card p-4">
+          <Text className="font-hanken text-sm text-muted-foreground">No authorized individuals yet.</Text>
         </View>
       ) : (
         <View className="gap-2">
           {activeItems.map((item) => (
             <View key={item.id} className="gap-3 rounded-lg border border-border bg-card p-4">
               <View className="flex-row flex-wrap items-center gap-2">
-                <Text className="font-semibold text-foreground">{item.fullName}</Text>
+                <Text className="font-hanken-bold text-foreground">{item.fullName}</Text>
                 <Badge variant="outline" className="border-emerald-200 bg-emerald-50" labelClassName="text-emerald-700">
                   Active
                 </Badge>
               </View>
 
               <View className="flex-row flex-wrap gap-x-4 gap-y-1">
-                {item.relationship ? <Text className="text-sm text-muted-foreground">{item.relationship}</Text> : null}
-                {item.phone ? <Text className="text-sm text-muted-foreground">{item.phone}</Text> : null}
-                {item.email ? <Text className="text-sm text-muted-foreground">{item.email}</Text> : null}
+                {item.relationship ? <Text className="font-hanken text-sm text-muted-foreground">{item.relationship}</Text> : null}
+                {item.phone ? <Text className="font-hanken text-sm text-muted-foreground">{item.phone}</Text> : null}
+                {item.email ? <Text className="font-hanken text-sm text-muted-foreground">{item.email}</Text> : null}
               </View>
 
-              {item.notes ? <Text className="text-sm text-muted-foreground">{item.notes}</Text> : null}
+              {item.notes ? <Text className="font-hanken text-sm text-muted-foreground">{item.notes}</Text> : null}
 
               <Button
                 variant="outline"

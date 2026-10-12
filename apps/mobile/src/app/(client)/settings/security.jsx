@@ -16,16 +16,16 @@ function SettingRow({ title, description, value, onValueChange, disabled }) {
   return (
     <View className="flex-row items-start justify-between gap-3">
       <View className="min-w-0 flex-1">
-        <Text className="text-base font-medium text-foreground">{title}</Text>
+        <Text className="text-base font-hanken-semibold text-foreground">{title}</Text>
         {description ? (
-          <Text className="mt-1 text-sm leading-5 text-muted-foreground">{description}</Text>
+          <Text className="font-hanken mt-1 text-sm leading-5 text-muted-foreground">{description}</Text>
         ) : null}
       </View>
       <Switch
         value={value}
         disabled={disabled}
         onValueChange={onValueChange}
-        trackColor={{ true: brand.primaryColor, false: "#cbd5e1" }}
+        trackColor={{ true: brand.primaryColor, false: "#D5D4D2" }}
         thumbColor="#ffffff"
       />
     </View>

@@ -5,7 +5,7 @@ const FALLBACK = {
   tenantSlug: "the_worx",
   name: "Client Portal",
   primaryColor: "#65baaf",
-  primaryForeground: "#0f172a",
+  primaryForeground: "#FFFFFF",
   markBackground: "#0e0d13",
   palette: {
     ink: "#2D2A26",
@@ -15,6 +15,7 @@ const FALLBACK = {
     success: "#00A887",
     canvas: "#F1FCFA",
     media: "#EEF2F1",
+    onPrimary: "#FFFFFF",
   },
 };
 

@@ -73,12 +73,12 @@ function ApprovedState({ view }) {
         <View className="h-16 w-16 items-center justify-center rounded-full bg-emerald-600">
           <CheckCircle2 size={34} color="#ffffff" />
         </View>
-        <Text className="text-center text-xl font-semibold text-emerald-950">USPS Form 1583 Approved</Text>
-        <Text className="text-center text-sm leading-6 text-emerald-900">
+        <Text className="text-center text-xl font-hanken-bold text-emerald-950">USPS Form 1583 Approved</Text>
+        <Text className="font-hanken text-center text-sm leading-6 text-emerald-900">
           Your USPS Form 1583 has been approved. No additional documents are required.
         </Text>
         {approvedOn ? (
-          <Text className="text-center text-xs text-emerald-800">Approved on {approvedOn}</Text>
+          <Text className="font-hanken text-center text-xs text-emerald-800">Approved on {approvedOn}</Text>
         ) : null}
 
         {/* El mensaje de bienvenida ya existe en el servidor: se enlaza por su
@@ -87,7 +87,7 @@ function ApprovedState({ view }) {
           <Button
             variant="outline"
             className="mt-1 w-full"
-            icon={<Mail size={18} color="#0f172a" />}
+            icon={<Mail size={18} color="#2D2A26" />}
             onPress={() => router.push({ pathname: "/notifications/[id]", params: { id: String(welcomeId) } })}
           >
             Read your welcome message
@@ -207,12 +207,12 @@ export default function UspsVerificationScreen() {
                   {status.label}
                 </Badge>
                 {record?.submittedAt ? (
-                  <Text className="text-sm text-muted-foreground">Submitted {formatDate(record.submittedAt)}</Text>
+                  <Text className="font-hanken text-sm text-muted-foreground">Submitted {formatDate(record.submittedAt)}</Text>
                 ) : null}
               </View>
-              {status.note ? <Text className="text-sm leading-5 text-foreground">{status.note}</Text> : null}
+              {status.note ? <Text className="font-hanken text-sm leading-5 text-foreground">{status.note}</Text> : null}
               {view.reviewReason ? (
-                <Text className="text-sm text-muted-foreground">Note from the center: {view.reviewReason}</Text>
+                <Text className="font-hanken text-sm text-muted-foreground">Note from the center: {view.reviewReason}</Text>
               ) : null}
             </View>
 
@@ -259,7 +259,7 @@ export default function UspsVerificationScreen() {
                   </Field>
                 </View>
 
-                <Text className="text-sm leading-5 text-muted-foreground">
+                <Text className="font-hanken text-sm leading-5 text-muted-foreground">
                   PDF, JPG, PNG or WEBP. Submitting again replaces the current paperwork and sends it
                   back to the center for review.
                 </Text>

@@ -1,5 +1,7 @@
 import { Stack } from "expo-router";
 
+import { canvasHeaderOptions } from "@/components/common/header-title";
+
 /**
  * Cada seccion de Settings es una ruta propia, asi que el Stack da la flecha
  * de vuelta y permite enlazar directamente a una de ellas. Los datos de cada
@@ -7,7 +9,7 @@ import { Stack } from "expo-router";
  */
 export default function SettingsLayout() {
   return (
-    <Stack screenOptions={{ headerTitleAlign: "center" }}>
+    <Stack screenOptions={canvasHeaderOptions}>
       <Stack.Screen name="index" options={{ title: "Settings" }} />
       <Stack.Screen name="forwarding-addresses" options={{ title: "Forwarding Addresses" }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />

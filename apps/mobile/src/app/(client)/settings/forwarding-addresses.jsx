@@ -60,8 +60,8 @@ function TextAction({ label, onPress, disabled, tone = "default" }) {
       <Text
         className={
           tone === "danger"
-            ? "text-sm font-medium text-rose-700"
-            : "text-sm font-medium text-foreground"
+            ? "text-sm font-hanken-semibold text-rose-700"
+            : "text-sm font-hanken-semibold text-foreground"
         }
         style={disabled ? { opacity: 0.5 } : null}
       >
@@ -83,22 +83,22 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, onVerify, verif
         {/* La etiqueta primero: es como el cliente reconoce la direccion. El
             estado de verificacion, en la esquina. */}
         <View className="flex-row flex-wrap items-center justify-between gap-2">
-          <Text className="min-w-0 shrink text-base font-semibold text-foreground">
+          <Text className="min-w-0 shrink text-base font-hanken-bold text-foreground">
             {address.label || address.name}
           </Text>
           {verifies ? <AddressVerificationBadge verification={address.verification} /> : null}
         </View>
 
         {address.phone ? (
-          <Text className="text-sm font-medium text-foreground">{formatPhone(address.phone)}</Text>
+          <Text className="text-sm font-hanken-semibold text-foreground">{formatPhone(address.phone)}</Text>
         ) : null}
 
         <View>
           {address.label ? (
-            <Text className="text-sm leading-5 text-muted-foreground">{address.name}</Text>
+            <Text className="font-hanken text-sm leading-5 text-muted-foreground">{address.name}</Text>
           ) : null}
           {lines.map((line) => (
-            <Text key={line} className="text-sm leading-5 text-muted-foreground">
+            <Text key={line} className="font-hanken text-sm leading-5 text-muted-foreground">
               {line}
             </Text>
           ))}
@@ -108,7 +108,7 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, onVerify, verif
             Las anteriores a la verificacion se comprueban desde aqui. */}
         {verifies && meta.status !== "VERIFIED" ? (
           <View className="gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <Text className="text-sm leading-5 text-amber-900">
+            <Text className="font-hanken text-sm leading-5 text-amber-900">
               {meta.hint}
               {meta.message ? " (" + meta.message + ")" : ""}
             </Text>
@@ -133,7 +133,7 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, onVerify, verif
               className={
                 address.isDefault
                   ? "h-5 w-5 items-center justify-center rounded-full border-2 border-primary"
-                  : "h-5 w-5 rounded-full border-2 border-slate-300"
+                  : "h-5 w-5 rounded-full border-2 border-input"
               }
             >
               {address.isDefault ? <View className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
@@ -141,8 +141,8 @@ function AddressCard({ address, onEdit, onDelete, onMakeDefault, onVerify, verif
             <Text
               className={
                 address.isDefault
-                  ? "text-sm font-medium text-foreground"
-                  : "text-sm text-muted-foreground"
+                  ? "text-sm font-hanken-semibold text-foreground"
+                  : "font-hanken text-sm text-muted-foreground"
               }
             >
               Default
@@ -364,7 +364,7 @@ export default function ForwardingAddressesScreen() {
           Add address
         </Button>
 
-        <Text className="px-1 text-xs leading-4 text-muted-foreground">
+        <Text className="font-hanken px-1 text-xs leading-4 text-muted-foreground">
           Your center is notified when you change these details, in case it has mail already
           prepared with the previous address.
         </Text>
@@ -406,10 +406,10 @@ export default function ForwardingAddressesScreen() {
         {verify.data?.verified ? (
           verify.data.suggested ? (
             <View className="gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <Text className="text-sm font-medium text-emerald-900">
+              <Text className="text-sm font-hanken-semibold text-emerald-900">
                 The carrier suggests this address
               </Text>
-              <Text className="text-sm leading-5 text-emerald-800">
+              <Text className="font-hanken text-sm leading-5 text-emerald-800">
                 {[
                   verify.data.suggested.addressLine1,
                   verify.data.suggested.addressLine2,

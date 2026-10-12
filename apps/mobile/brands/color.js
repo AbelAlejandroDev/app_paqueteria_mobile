@@ -61,6 +61,17 @@ function getContrastRatio(background, foreground) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * Mezcla un color con blanco y devuelve el hex opaco. Para los tonos del tema
+ * (bordes, texto secundario) sacados de la tinta de la marca: opacos, porque
+ * en Android un color translucido deja ver la sombra de debajo.
+ */
+function mixWithWhite(color, alpha) {
+  const { r, g, b } = hexToRgb(color);
+  const mix = (channel) => Math.round(channel * alpha + 255 * (1 - alpha));
+  return "#" + [mix(r), mix(g), mix(b)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 /** Elige el texto (oscuro o claro) que mejor contrasta sobre `color`. */
 function getForegroundForColor(color) {
   const rgb = hexToRgb(color);
@@ -75,5 +86,6 @@ module.exports = {
   DARK_FOREGROUND,
   LIGHT_FOREGROUND,
   getForegroundForColor,
+  mixWithWhite,
   normalizeHexColor,
 };

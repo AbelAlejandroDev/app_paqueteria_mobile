@@ -19,7 +19,7 @@ export function Badge({ variant = "default", className, labelClassName, children
 
   return (
     <View className={cn("self-start rounded-md border px-2 py-0.5", styles.container, className)}>
-      <Text className={cn("text-xs font-medium", styles.label, labelClassName)}>{children}</Text>
+      <Text className={cn("font-hanken-semibold text-xs", styles.label, labelClassName)}>{children}</Text>
     </View>
   );
 }

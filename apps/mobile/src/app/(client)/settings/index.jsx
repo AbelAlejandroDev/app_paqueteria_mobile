@@ -1,37 +1,48 @@
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { ChevronRight, LogOut } from "lucide-react-native";
+import { Bell, ChevronRight, LockKeyhole, LogOut, MapPin, ShieldCheck, UsersRound } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
+import { brand } from "@/lib/brand";
+import { overWhite } from "@/lib/colors";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
-import { Card } from "@/components/ui/card";
+import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
+
+const { palette } = brand;
 
 /**
  * Cada opcion abre su propia ruta. Nada se consulta desde aqui: los datos de
  * cada seccion se piden al entrar en ella, no al abrir Settings.
  */
 const SECTIONS = [
-  { label: "Forwarding Addresses", href: "/settings/forwarding-addresses" },
-  { label: "Notifications", href: "/settings/notifications" },
-  { label: "Authorized Individuals", href: "/settings/authorized-individuals" },
-  { label: "USPS Verification", href: "/usps-verification" },
-  { label: "Security", href: "/settings/security" },
+  { label: "Forwarding Addresses", href: "/settings/forwarding-addresses", icon: MapPin },
+  { label: "Notifications", href: "/settings/notifications", icon: Bell },
+  { label: "Authorized Individuals", href: "/settings/authorized-individuals", icon: UsersRound },
+  { label: "USPS Verification", href: "/usps-verification", icon: ShieldCheck },
+  { label: "Security", href: "/settings/security", icon: LockKeyhole },
 ];
 
-function SectionRow({ label, href, last }) {
+/** Una seccion: icono en el cuadro verde de marca, nombre y flecha, como las tarjetas del panel. */
+function SectionRow({ label, href, icon: Icon, last }) {
   return (
     <Pressable
       onPress={() => router.push(href)}
       className={
         last
-          ? "flex-row items-center justify-between gap-4 px-5 py-4 active:bg-muted"
-          : "flex-row items-center justify-between gap-4 border-b border-border px-5 py-4 active:bg-muted"
+          ? "flex-row items-center gap-3.5 px-4 py-3.5 active:bg-tint/20"
+          : "flex-row items-center gap-3.5 border-b border-border px-4 py-3.5 active:bg-tint/20"
       }
     >
-      <Text className="text-base font-medium text-foreground">{label}</Text>
-      <ChevronRight size={20} color="#94a3b8" />
+      <View
+        className="h-10 w-10 items-center justify-center rounded-[10px]"
+        style={{ backgroundColor: overWhite(palette.tint, 0.4) }}
+      >
+        <Icon size={20} color={palette.glyph} />
+      </View>
+      <Text className="min-w-0 flex-1 font-hanken-bold text-[16px] text-ink">{label}</Text>
+      <ChevronRight size={20} color={palette.ink} />
     </Pressable>
   );
 }
@@ -77,42 +88,44 @@ export default function SettingsScreen() {
     <>
       <Stack.Screen options={{ title: "Settings", headerTitleAlign: "center" }} />
 
-      <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 p-4 pb-24">
-        <Card>
+      <ScrollView className="flex-1 bg-canvas" contentContainerClassName="gap-5 p-4 pb-24">
+        <DetailCard>
           {SECTIONS.map((section, index) => (
             <SectionRow
               key={section.href}
               label={section.label}
               href={section.href}
+              icon={section.icon}
               last={index === SECTIONS.length - 1}
             />
           ))}
-        </Card>
+        </DetailCard>
 
         {/* Cerrar sesion vivia en Security, que ahora solo guarda ajustes.
             Va aparte porque es una accion, no una preferencia. */}
-        <Card>
-          <Pressable
-            onPress={confirmLogout}
-            className="flex-row items-center justify-between gap-4 px-5 py-4 active:bg-muted"
-          >
-            <Text className="text-base font-medium text-rose-700">Sign out</Text>
-            <LogOut size={20} color="#be123c" />
+        <DetailCard>
+          <Pressable onPress={confirmLogout} className="flex-row items-center gap-3.5 px-4 py-3.5 active:bg-rose-50">
+            <View className="h-10 w-10 items-center justify-center rounded-[10px] bg-rose-50">
+              <LogOut size={20} color="#BE123C" />
+            </View>
+            <Text className="min-w-0 flex-1 font-hanken-bold text-[16px] text-rose-700">Sign out</Text>
           </Pressable>
-        </Card>
+        </DetailCard>
 
-        <Card>
-          <View className="gap-3 p-5">
-            {accountDetails.map((item) => (
-              <View key={item.label} className="rounded-md border border-border bg-background p-4">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {item.label}
-                </Text>
-                <Text className="mt-2 text-sm font-semibold text-foreground">{item.value}</Text>
-              </View>
-            ))}
-          </View>
-        </Card>
+        {/* Los datos de la cuenta, en filas como los del item. El numero de
+            cliente es su buzon, asi que va en el mismo chip que en el resto. */}
+        <DetailCard className="px-5 pb-2 pt-5">
+          <CardHeading className="mb-1">Account</CardHeading>
+          {accountDetails.map((item, index) =>
+            item.label === "Customer #" && item.value !== "Not assigned" ? (
+              <DetailRow key={item.label} label={item.label}>
+                <MailboxChip>{item.value}</MailboxChip>
+              </DetailRow>
+            ) : (
+              <DetailRow key={item.label} label={item.label} value={item.value} last={index === accountDetails.length - 1} />
+            )
+          )}
+        </DetailCard>
       </ScrollView>
     </>
   );

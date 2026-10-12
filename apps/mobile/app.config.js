@@ -134,15 +134,12 @@ module.exports = {
       // Proyecto de expo.dev de esta marca. Lo lee getExpoPushTokenAsync; sin
       // el, la app detecta que no puede registrarse y no lo intenta.
       eas: { projectId: brand.easProjectId || null },
-      // Se evalua al compilar, asi que queda congelada la fecha real del build
-      // que el usuario tiene instalado. En desarrollo es la de cada arranque.
-      buildDate: new Date().toISOString(),
       brand: {
         id: brand.id,
         tenantSlug: brand.tenantSlug,
         name: brand.name,
         primaryColor: brand.primaryColor,
-        primaryForeground: getForegroundForColor(brand.primaryColor),
+        primaryForeground: brand.palette.onPrimary || getForegroundForColor(brand.primaryColor),
         markBackground: brand.markBackground,
         palette: brand.palette,
       },

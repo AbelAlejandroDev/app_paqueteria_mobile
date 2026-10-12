@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, Text } from "react-native";
 
+import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,9 +21,17 @@ export function SegmentedControl({ options, value, onChange, className }) {
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      className={cn("rounded-lg border border-border bg-muted", className)}
+      className={cn("rounded-2xl bg-white", className)}
       // flexGrow permite que las opciones llenen el ancho cuando sobra espacio.
-      contentContainerStyle={{ flexGrow: 1, padding: 4, gap: 4 }}
+      contentContainerStyle={{ flexGrow: 1, padding: 6, gap: 6 }}
+      // Barra blanca con la sombra suave del resto del diseño.
+      style={{
+        shadowColor: "#1D4E4A",
+        shadowOpacity: 0.06,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 2,
+      }}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -34,18 +43,12 @@ export function SegmentedControl({ options, value, onChange, className }) {
             accessibilityState={{ selected: active }}
             onPress={() => onChange(option.value)}
             // flexShrink 0: nunca por debajo de lo que pide el texto.
-            style={{ flexGrow: 1, flexShrink: 0, minHeight: 40 }}
-            className={cn(
-              "items-center justify-center rounded-md px-4",
-              active ? "bg-card" : "active:bg-card/50"
-            )}
+            style={{ flexGrow: 1, flexShrink: 0, minHeight: 42, backgroundColor: active ? brand.primaryColor : "transparent" }}
+            className={cn("items-center justify-center rounded-xl px-4", !active && "active:opacity-70")}
           >
             <Text
               numberOfLines={1}
-              className={cn(
-                "text-sm",
-                active ? "font-semibold text-foreground" : "font-medium text-muted-foreground"
-              )}
+              className={cn("text-sm", active ? "font-hanken-bold text-white" : "font-hanken-semibold text-ink")}
             >
               {option.label}
             </Text>

@@ -18,7 +18,7 @@ export default function AddressVerificationBadge({ verification }) {
   return (
     <View className={"flex-row items-center gap-1 rounded-full border px-2 py-0.5 " + tone.container}>
       <Icon size={13} color={tone.color} />
-      <Text className={"text-xs font-semibold " + tone.text}>{meta.label}</Text>
+      <Text className={"text-xs font-hanken-bold " + tone.text}>{meta.label}</Text>
     </View>
   );
 }

@@ -3,9 +3,9 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { cn } from "@/lib/utils";
 
 const VARIANTS = {
-  default: { container: "border-primary bg-primary", label: "text-primary-foreground", spinner: "#0f172a" },
-  outline: { container: "border-border bg-card", label: "text-foreground", spinner: "#0f172a" },
-  secondary: { container: "border-secondary bg-secondary", label: "text-secondary-foreground", spinner: "#0f172a" },
+  default: { container: "border-primary bg-primary", label: "text-primary-foreground", spinner: "#ffffff" },
+  outline: { container: "border-input bg-card", label: "text-foreground", spinner: "#2D2A26" },
+  secondary: { container: "border-secondary bg-secondary", label: "text-secondary-foreground", spinner: "#2D2A26" },
   destructive: { container: "border-destructive bg-destructive", label: "text-destructive-foreground", spinner: "#ffffff" },
 };
 
@@ -41,7 +41,7 @@ export function Button({
       accessibilityRole="button"
       disabled={isDisabled}
       className={cn(
-        "flex-row items-center justify-center gap-2 rounded-lg border",
+        "flex-row items-center justify-center gap-2 rounded-[10px] border",
         styles.container,
         sizing.container,
         isDisabled && "opacity-60",
@@ -55,7 +55,7 @@ export function Button({
       ) : (
         <>
           {icon ? <View>{icon}</View> : null}
-          <Text className={cn("shrink text-center font-semibold", styles.label, sizing.label, labelClassName)}>{children}</Text>
+          <Text className={cn("shrink text-center font-hanken-bold", styles.label, sizing.label, labelClassName)}>{children}</Text>
         </>
       )}
     </Pressable>
