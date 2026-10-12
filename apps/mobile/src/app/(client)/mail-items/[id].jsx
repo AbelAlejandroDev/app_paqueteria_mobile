@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
@@ -7,22 +7,22 @@ import * as WebBrowser from "expo-web-browser";
 // y aqui se usan los dos: aquel abre URLs, este construye el deep link.
 import * as ExpoLinking from "expo-linking";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Eye, ImageIcon, Package2, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
+import { Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
-import { formatStatusDisplay, getCurrentStatusColor, getCurrentStatusLabel, getItemStatusDisplay } from "@/lib/mail-item-display";
+import { formatStatusDisplay, getCurrentStatusLabel, getItemStatusDisplay, getMailTypeLabel } from "@/lib/mail-item-display";
 import {
   buildTimeline,
   findRequest,
+  formatEventTime,
   formatItemWeight,
   formatMoneyFromCents,
   getScanMedia,
   getVisibleMedia,
   hasDisplayValue,
-  itemStatusColor,
   PAYABLE_PAYMENT_STATUSES,
   requestStatusColor,
 } from "@/lib/mail-item-detail";
@@ -30,9 +30,28 @@ import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/
 import { US_STATES } from "@/lib/us-states";
 import EmptyState from "@/components/common/empty-state";
 import LetterForwardSheet from "@/components/common/letter-forward-sheet";
+import { isPdfMedia, PdfThumbnail, PdfViewer } from "@/components/common/pdf-viewer";
+import {
+  ActionButton,
+  ActionGrid,
+  CardHeading,
+  CardSubheading,
+  DetailCard,
+  DetailRow,
+  ImageViewer,
+  ItemHeaderTitle,
+  MailboxChip,
+  ProgressNotice,
+  SectionLabel,
+  StatusPill,
+  Timeline,
+  TimelineDetailLine,
+  TimelineDetails,
+  TypeChip,
+  ViewPill,
+} from "@/components/common/mail-item-detail-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { Modal, Notice } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
@@ -60,23 +79,25 @@ function toInsuredValueCents(form) {
   return Math.round(value * 100);
 }
 
-function DetailRow({ label, value, last = false }) {
-  return (
-    <View className={last ? "flex-row items-center justify-between gap-4 py-3" : "flex-row items-center justify-between gap-4 border-b border-border py-3"}>
-      <Text className="text-sm text-muted-foreground">{label}</Text>
-      <Text className="max-w-[65%] text-right text-sm font-medium text-foreground">{value}</Text>
-    </View>
-  );
-}
-
 function SummaryLine({ label, value }) {
   if (!hasDisplayValue(value)) return null;
 
   return (
-    <Text className="text-sm text-foreground">
-      <Text className="font-medium">{label}: </Text>
+    <Text className="font-hanken text-[14px] text-ink">
+      <Text className="font-hanken-semibold">{label}: </Text>
       {value}
     </Text>
+  );
+}
+
+/** Tarjeta de aviso con titulo (pago, cotizacion, rechazo...). */
+function NoticeCard({ tone, title, description, children }) {
+  return (
+    <DetailCard tone={tone} className="gap-1.5 p-5">
+      <CardHeading className="text-[16px]">{title}</CardHeading>
+      {description ? <CardSubheading className="mb-1">{description}</CardSubheading> : null}
+      {children}
+    </DetailCard>
   );
 }
 
@@ -133,36 +154,32 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   });
 
   return (
-    <Card className="border-amber-200 bg-amber-50">
-      <CardHeader>
-        <CardTitle className="text-base">Forward Payment</CardTitle>
-        <CardDescription>
-          {needsAuthentication
-            ? "Your bank asked to verify this payment."
-            : "Forwarding rate selected, payment pending."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="gap-1.5 p-5 pt-0">
-        <SummaryLine label="Carrier" value={details.quotedCarrier} />
-        <SummaryLine label="Service" value={details.quotedService} />
-        <SummaryLine label="Accepted quote" value={formatMoneyFromCents(details.quotedAmountCents)} />
-        <SummaryLine label="Payment" value={formatStatusDisplay(details.paymentStatus)} />
+    <NoticeCard
+      tone="amber"
+      title="Forward Payment"
+      description={
+        needsAuthentication ? "Your bank asked to verify this payment." : "Forwarding rate selected, payment pending."
+      }
+    >
+      <SummaryLine label="Carrier" value={details.quotedCarrier} />
+      <SummaryLine label="Service" value={details.quotedService} />
+      <SummaryLine label="Accepted quote" value={formatMoneyFromCents(details.quotedAmountCents)} />
+      <SummaryLine label="Payment" value={formatStatusDisplay(details.paymentStatus)} />
 
-        {needsAuthentication ? (
-          <Notice tone="amber" className="mt-2">
-            Your card is fine, but the bank needs you to confirm this charge. Tap below to finish it.
-          </Notice>
-        ) : null}
+      {needsAuthentication ? (
+        <Notice tone="amber" className="mt-2">
+          Your card is fine, but the bank needs you to confirm this charge. Tap below to finish it.
+        </Notice>
+      ) : null}
 
-        <Button className="mt-3" loading={pay.isPending} onPress={() => pay.mutate()}>
-          {needsAuthentication ? "Verify and pay" : "Pay now"}
-        </Button>
+      <Button className="mt-3" loading={pay.isPending} onPress={() => pay.mutate()}>
+        {needsAuthentication ? "Verify and pay" : "Pay now"}
+      </Button>
 
-        <Text className="mt-1 text-xs leading-4 text-muted-foreground">
-          Payment opens in a secure Stripe page. It can take a moment to show as paid here.
-        </Text>
-      </CardContent>
-    </Card>
+      <Text className="mt-1 font-hanken text-[12px] leading-4 text-ink/60">
+        Payment opens in a secure Stripe page. It can take a moment to show as paid here.
+      </Text>
+    </NoticeCard>
   );
 }
 
@@ -212,40 +229,38 @@ function TrackingApprovalCard({ request, onRefresh }) {
   };
 
   return (
-    <Card className="border-amber-200 bg-amber-50">
-      <CardHeader>
-        <CardTitle className="text-base">Tracking needed to forward this</CardTitle>
-        <CardDescription>
-          {weight && limit
-            ? `Your mail weighs ${weight}, over the ${limit} that USPS allows without tracking.`
-            : "This shipment is over the weight USPS allows without tracking."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="gap-1.5 p-5 pt-0">
-        <SummaryLine label="Service" value={details.trackingApprovalEstimateService} />
-        <SummaryLine
-          label="Estimated cost"
-          value={
-            details.trackingApprovalEstimateCents != null
-              ? formatMoneyFromCents(details.trackingApprovalEstimateCents)
-              : null
-          }
-        />
+    <NoticeCard
+      tone="amber"
+      title="Tracking needed to forward this"
+      description={
+        weight && limit
+          ? `Your mail weighs ${weight}, over the ${limit} that USPS allows without tracking.`
+          : "This shipment is over the weight USPS allows without tracking."
+      }
+    >
+      <SummaryLine label="Service" value={details.trackingApprovalEstimateService} />
+      <SummaryLine
+        label="Estimated cost"
+        value={
+          details.trackingApprovalEstimateCents != null
+            ? formatMoneyFromCents(details.trackingApprovalEstimateCents)
+            : null
+        }
+      />
 
-        <Text className="mt-2 text-sm leading-6 text-foreground">
-          {details.trackingApprovalEstimateCents != null
-            ? "This is an estimate. You will see the final price before paying."
-            : "The center will price it and show you the final amount before you pay."}
-        </Text>
+      <Text className="mt-2 font-hanken text-[14px] leading-6 text-ink">
+        {details.trackingApprovalEstimateCents != null
+          ? "This is an estimate. You will see the final price before paying."
+          : "The center will price it and show you the final amount before you pay."}
+      </Text>
 
-        <Button className="mt-3" loading={respond.isPending} onPress={() => respond.mutate("APPROVE")}>
-          Approve tracking
-        </Button>
-        <Button variant="outline" disabled={respond.isPending} onPress={confirmDecline}>
-          Decline
-        </Button>
-      </CardContent>
-    </Card>
+      <Button className="mt-3" loading={respond.isPending} onPress={() => respond.mutate("APPROVE")}>
+        Approve tracking
+      </Button>
+      <Button variant="outline" disabled={respond.isPending} onPress={confirmDecline}>
+        Decline
+      </Button>
+    </NoticeCard>
   );
 }
 
@@ -470,14 +485,64 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const selectedRate = forwardRates.find((rate) => rate.optionId === selectedRateId) || null;
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Available actions</CardTitle>
-        <CardDescription>Request services for this item</CardDescription>
-      </CardHeader>
+  const openForward = () => {
+    if (isLetter) {
+      setLetterForwardKey((value) => value + 1);
+      setLetterForwardOpen(true);
+    } else {
+      setForwardOpen(true);
+    }
+  };
 
-      <CardContent className="gap-3 p-5 pt-0">
+  /**
+   * Reenviar es la accion principal cuando se puede; si no, lo es el escaneo.
+   * Lo demas va de dos en dos debajo. Que botones salen lo decide el servidor,
+   * asi que la rejilla se arma con los que haya.
+   */
+  const forwardAction = availableActions?.canRequestForward ? (
+    <ActionButton variant="primary" icon={Truck} disabled={anyPending} onPress={openForward}>
+      {isLetter ? "Forward Letter" : "Forward Item"}
+    </ActionButton>
+  ) : null;
+
+  const scanAction = canScan ? (
+    <ActionButton
+      variant={forwardAction ? "secondary" : "primary"}
+      icon={ScanLine}
+      disabled={anyPending}
+      onPress={() => setNoticeService("scan")}
+    >
+      {forwardAction ? "Scan" : "Request Scan"}
+    </ActionButton>
+  ) : null;
+
+  const secondaryActions = [
+    forwardAction ? scanAction : null,
+    availableActions?.canRequestPickup ? (
+      <ActionButton icon={Store} disabled={anyPending} onPress={() => setPickupOpen(true)}>
+        Pickup
+      </ActionButton>
+    ) : null,
+    // Lo que se pisa con un escaneo en marcha lo quita el backend, pero
+    // Discard se aparta aqui: descartar lo que se esta escaneando no tiene
+    // sentido aunque el servidor lo permita.
+    availableActions?.canRequestDiscard && !active.scan ? (
+      <ActionButton icon={Trash2} disabled={anyPending} onPress={() => setDiscardOpen(true)}>
+        Discard
+      </ActionButton>
+    ) : null,
+  ].filter(Boolean);
+
+  const primaryAction = forwardAction || scanAction;
+  const hasActions = Boolean(primaryAction || secondaryActions.length || availableActions?.canRejectAssignment);
+
+  return (
+    <View className="gap-2.5 pt-1">
+      {hasActions || active.forward || active.scan || availableActions?.billingRestricted ? (
+        <SectionLabel>Actions</SectionLabel>
+      ) : null}
+
+      <View className="gap-2.5">
         {availableActions?.billingRestricted ? (
           <Notice tone="amber">
             {availableActions.reason || "Billing needs attention before requesting services."}
@@ -489,86 +554,35 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             descartar ni rechazar la asignacion. Va antes que el aviso de scan
             porque es la situacion mas restrictiva. */}
         {active.forward ? (
-          <View className="flex-row items-start gap-4 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-600">
-              <Truck size={20} color="#ffffff" />
-            </View>
-            <View className="min-w-0 flex-1">
-              <Text className="font-semibold text-emerald-950">Forwarding in progress</Text>
-              <Text className="mt-1 text-sm leading-5 text-emerald-800">
-                The center is preparing your shipment. No other services can be requested for
-                this item in the meantime.
-              </Text>
-            </View>
-          </View>
+          <ProgressNotice icon={Truck} title="Forwarding in progress">
+            The center is preparing your shipment. No other services can be requested for this item in the
+            meantime.
+          </ProgressNotice>
         ) : (
-          <View className="gap-3">
+          <>
             {/* Como en el portal web: el aviso del escaneo no sustituye a los
                 botones. Quien recibe correo ajeno no puede esperar a que termine
-                un escaneo para decir "Not mine"; lo que se pisa con el escaneo lo
-                quita el backend de availableActions, y Discard se aparta aqui. */}
+                un escaneo para decir "Not mine". */}
             {active.scan ? (
-              <View className="flex-row items-start gap-4 rounded-lg border-2 border-sky-300 bg-sky-50 p-4">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-sky-600">
-                  <ScanLine size={20} color="#ffffff" />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="font-semibold text-sky-950">Scan request in progress</Text>
-                  <Text className="mt-1 text-sm leading-5 text-sky-800">
-                    Your item is being processed. The scan will appear here once it is ready.
-                  </Text>
-                </View>
-              </View>
+              <ProgressNotice icon={ScanLine} title="Scan request in progress">
+                Your item is being processed. The scan will appear here once it is ready.
+              </ProgressNotice>
             ) : null}
 
-            {canScan ? (
-              <Button icon={<ScanLine size={18} color="#0f172a" />} disabled={anyPending} onPress={() => setNoticeService("scan")}>
-                Request Scan
-              </Button>
-            ) : null}
-
-            {availableActions?.canRequestForward ? (
-              <Button
-                icon={<Truck size={18} color="#0f172a" />}
-                disabled={anyPending}
-                onPress={() => {
-                  if (isLetter) {
-                    setLetterForwardKey((value) => value + 1);
-                    setLetterForwardOpen(true);
-                  } else {
-                    setForwardOpen(true);
-                  }
-                }}
-              >
-                {isLetter ? "Forward Letter" : "Forward Item"}
-              </Button>
-            ) : null}
-
-            {availableActions?.canRequestPickup ? (
-              <Button icon={<Store size={18} color="#0f172a" />} disabled={anyPending} onPress={() => setPickupOpen(true)}>
-                Pickup
-              </Button>
-            ) : null}
-
-            {availableActions?.canRequestDiscard && !active.scan ? (
-              <Button variant="destructive" icon={<Trash2 size={18} color="#ffffff" />} disabled={anyPending} onPress={() => setDiscardOpen(true)}>
-                Discard
-              </Button>
-            ) : null}
+            <ActionGrid primary={primaryAction} secondary={secondaryActions} />
 
             {availableActions?.canRejectAssignment ? (
-              <Button
-                variant="outline"
-                className="border-amber-300 bg-amber-50"
-                labelClassName="text-amber-900"
-                icon={<AlertCircle size={18} color="#78350f" />}
+              <ActionButton
+                variant="tertiary"
+                icon={Flag}
+                iconColor={brand.palette.sand}
                 disabled={anyPending}
                 onPress={() => setRejectOpen(true)}
               >
-                Not mine
-              </Button>
+                Not Mine (Report Incorrect Item)
+              </ActionButton>
             ) : null}
-          </View>
+          </>
         )}
 
         {/* Aviso de servicio de pago antes de crear la solicitud de escaneo */}
@@ -839,8 +853,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             Use this only if the item belongs to another tenant or was assigned to your mailbox by mistake.
           </Notice>
         </Modal>
-      </CardContent>
-    </Card>
+      </View>
+    </View>
   );
 }
 
@@ -852,6 +866,8 @@ export default function MailItemDetailScreen() {
   // ActionsCard, que es donde viven. Va aqui arriba porque mas abajo hay
   // returns condicionales y un hook no puede quedar detras de ellos.
   const isBusy = useIsMutating() > 0;
+  const [viewerUri, setViewerUri] = useState(null);
+  const [pdfMedia, setPdfMedia] = useState(null);
 
   const query = useQuery({
     queryKey: ["client-mail-item", id],
@@ -1007,15 +1023,32 @@ export default function MailItemDetailScreen() {
   }
 
   const statusDisplay = getItemStatusDisplay(item);
-  const statusColor = statusDisplay.label === formatStatusDisplay(item.status) ? itemStatusColor(item.status) : statusDisplay.color;
-  const currentColor = getCurrentStatusColor(item);
+  // Si no coincide con el estado del item es porque manda una solicitud
+  // rechazada o cancelada ("Forward Rejected").
+  const closedRequest = Boolean(item.status) && statusDisplay.label !== formatStatusDisplay(item.status);
+  const itemTitle = "Item " + (item.itemCode || item.id);
+  // El mas reciente arriba, como en el diseño.
+  const history = [...timeline].reverse().map((event, index) => ({
+    ...event,
+    key: index,
+    time: formatEventTime(event.at),
+  }));
   const photoUrl = primaryPhoto?.signedUrl || primaryPhoto?.url;
   const serviceNotices = normalizeBasicPlanServiceNotices(serviceNoticesQuery.data?.basicPlanServiceNotices);
   const supportEmail = serviceNoticesQuery.data?.supportEmail || "";
 
   return (
     <>
-      <Stack.Screen options={{ title: "Item " + (item.itemCode || item.id) }} />
+      <Stack.Screen
+        options={{
+          title: itemTitle,
+          headerTitleAlign: "center",
+          headerTitle: () => <ItemHeaderTitle title={itemTitle} />,
+          headerTintColor: brand.palette.ink,
+          headerStyle: { backgroundColor: "#ffffff" },
+          headerShadowVisible: true,
+        }}
+      />
 
       {/* Al enviar una solicitud el estado del item cambia, pero los datos
           tardan en llegar. Sin esto la pantalla se quedaba igual y parecia que
@@ -1031,8 +1064,8 @@ export default function MailItemDetailScreen() {
       ) : null}
 
       <ScrollView
-        className="flex-1 bg-background"
-        contentContainerClassName="gap-6 p-4 pb-24"
+        className="flex-1 bg-canvas"
+        contentContainerClassName="gap-5 px-4 pb-24 pt-6"
         refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={query.refetch} />}
       >
         {item.storageFeeNotice ? (
@@ -1041,47 +1074,51 @@ export default function MailItemDetailScreen() {
           </Notice>
         ) : null}
 
-        <Card>
-          <View className="relative bg-slate-100">
+        <DetailCard>
+          <View className="relative w-full bg-media" style={{ aspectRatio: 4 / 3 }}>
             {photoUrl ? (
-              <Pressable onPress={() => WebBrowser.openBrowserAsync(photoUrl)}>
-                <Image source={{ uri: photoUrl }} style={{ width: "100%", height: 262 }} contentFit="cover" />
+              <Pressable className="h-full w-full" onPress={() => setViewerUri(photoUrl)}>
+                <Image source={{ uri: photoUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
               </Pressable>
             ) : (
-              <View className="h-[220px] w-full items-center justify-center gap-3">
-                <ImageIcon size={48} color="#94a3b8" />
-                <Text className="text-sm font-medium text-muted-foreground">
+              <View className="h-full w-full items-center justify-center gap-3 px-6">
+                <ImageIcon size={44} color={brand.palette.glyph} />
+                <Text className="text-center font-hanken-medium text-[14px] text-ink/60">
                   {hiddenScanCount > 0 ? "Scan files will appear here after completion." : "No package photo available"}
                 </Text>
               </View>
             )}
 
             <View className="absolute right-3 top-3 items-end gap-1.5">
-              <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
-                {item.status ? statusDisplay.label : formatStatusDisplay("UNKNOWN")}
-              </Badge>
-              <Badge variant="outline" className={currentColor.container} labelClassName={currentColor.label}>
-                {getCurrentStatusLabel(item)}
-              </Badge>
+              <StatusPill
+                status={item.status}
+                closedRequest={closedRequest}
+                label={item.status ? statusDisplay.label : formatStatusDisplay("UNKNOWN")}
+              />
+              <ViewPill label={getCurrentStatusLabel(item)} />
             </View>
           </View>
+        </DetailCard>
 
-          <CardContent className="p-5 pt-5">
-            <Text className="mb-1 text-lg font-semibold text-foreground">Item Details</Text>
-            <DetailRow label="Mailbox" value={mailbox || "-"} />
-            <DetailRow label="Type" value={formatStatusDisplay(item.type)} />
-            {/* En cartas el peso no es del item: lo que se factura es el sobre
-                del centro, y ese peso lo pone el centro al prepararlo. */}
-            {item.type === "LETTER" ? null : <DetailRow label="Weight" value={formatItemWeight(item)} />}
-            {/* Sin remitente no se pinta la fila: "Not provided" ocupa sitio
-                sin decir nada, igual que carrier y tracking. */}
-            {hasDisplayValue(item.senderName) ? <DetailRow label="Sender" value={item.senderName} /> : null}
-            {hasDisplayValue(item.carrier) ? <DetailRow label="Carrier" value={item.carrier} /> : null}
-            {hasDisplayValue(item.trackingNumber) ? <DetailRow label="Tracking" value={item.trackingNumber} /> : null}
-            <DetailRow label="Last action" value={lastAction?.title || formatStatusDisplay(item.status || "Received")} />
-            <DetailRow label="Assigned" value={formatDate(item.receivedAt || item.createdAt)} last />
-          </CardContent>
-        </Card>
+        <DetailCard className="p-5">
+          <CardHeading className="mb-1">Item Details</CardHeading>
+          <DetailRow label="Mailbox">
+            {mailbox ? <MailboxChip>{mailbox}</MailboxChip> : <Text className="font-hanken-medium text-[14px] text-ink">-</Text>}
+          </DetailRow>
+          <DetailRow label="Type">
+            <TypeChip type={item.type} label={getMailTypeLabel(item.type)} />
+          </DetailRow>
+          {/* En cartas el peso no es del item: lo que se factura es el sobre
+              del centro, y ese peso lo pone el centro al prepararlo. */}
+          {item.type === "LETTER" ? null : <DetailRow label="Weight" value={formatItemWeight(item)} />}
+          {/* Sin remitente no se pinta la fila: "Not provided" ocupa sitio
+              sin decir nada, igual que carrier y tracking. */}
+          {hasDisplayValue(item.senderName) ? <DetailRow label="Sender" value={item.senderName} /> : null}
+          {hasDisplayValue(item.carrier) ? <DetailRow label="Carrier" value={item.carrier} /> : null}
+          {hasDisplayValue(item.trackingNumber) ? <DetailRow label="Tracking" value={item.trackingNumber} /> : null}
+          <DetailRow label="Last action" value={lastAction?.title || formatStatusDisplay(item.status || "Received")} />
+          <DetailRow label="Assigned" value={formatDate(item.receivedAt || item.createdAt)} last />
+        </DetailCard>
 
         {availableActions ? (
           <ActionsCard
@@ -1097,36 +1134,26 @@ export default function MailItemDetailScreen() {
         {/* Solo si el rechazo es lo ultimo que paso: si el cliente ya volvio a
             pedirlo, ensenar el rechazo viejo confunde sobre el estado actual. */}
         {lastAction?.kind === "SR_REJECTED" ? (
-          <Card className="border-rose-200 bg-rose-50">
-            <CardHeader>
-              <CardTitle className="text-base">
-                {formatStatusDisplay(lastAction.sr?.type || "Request")} request declined
-              </CardTitle>
-              <CardDescription>{formatDate(lastAction.at)}</CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <Text className="text-sm leading-6 text-foreground">{lastAction.description}</Text>
-            </CardContent>
-          </Card>
+          <NoticeCard
+            tone="rose"
+            title={formatStatusDisplay(lastAction.sr?.type || "Request") + " request declined"}
+            description={formatDate(lastAction.at)}
+          >
+            <Text className="font-hanken text-[14px] leading-6 text-ink">{lastAction.description}</Text>
+          </NoticeCard>
         ) : null}
 
         {completedScanRequest?.scanDetails ? (
-          <Card className="border-emerald-200 bg-emerald-50">
-            <CardHeader>
-              <CardTitle className="text-base">Scan Completed</CardTitle>
-              <CardDescription>Your scan is ready to view.</CardDescription>
-            </CardHeader>
-            <CardContent className="gap-1.5 p-5 pt-0">
-              <SummaryLine label="Pages" value={completedScanRequest.scanDetails.pageCount || 0} />
-              <SummaryLine label="Included" value={completedScanRequest.scanDetails.includedPages || 0} />
-              <SummaryLine label="Extra" value={completedScanRequest.scanDetails.extraPages || 0} />
-              <SummaryLine label="Paid" value={formatMoneyFromCents(completedScanRequest.scanDetails.quotedAmountCents)} />
-              <SummaryLine label="Paid At" value={formatDate(completedScanRequest.scanDetails.paidAt)} />
-              {completedScanRequest.scanDetails.quoteNotes ? (
-                <Text className="mt-2 text-sm text-muted-foreground">{completedScanRequest.scanDetails.quoteNotes}</Text>
-              ) : null}
-            </CardContent>
-          </Card>
+          <NoticeCard tone="emerald" title="Scan Completed" description="Your scan is ready to view.">
+            <SummaryLine label="Pages" value={completedScanRequest.scanDetails.pageCount || 0} />
+            <SummaryLine label="Included" value={completedScanRequest.scanDetails.includedPages || 0} />
+            <SummaryLine label="Extra" value={completedScanRequest.scanDetails.extraPages || 0} />
+            <SummaryLine label="Paid" value={formatMoneyFromCents(completedScanRequest.scanDetails.quotedAmountCents)} />
+            <SummaryLine label="Paid At" value={formatDate(completedScanRequest.scanDetails.paidAt)} />
+            {completedScanRequest.scanDetails.quoteNotes ? (
+              <Text className="mt-2 font-hanken text-[14px] text-ink/60">{completedScanRequest.scanDetails.quoteNotes}</Text>
+            ) : null}
+          </NoticeCard>
         ) : null}
 
         {payableForwardRequest?.forwardDetails ? (
@@ -1145,150 +1172,127 @@ export default function MailItemDetailScreen() {
         ) : null}
 
         {!payableForwardRequest && !trackingApprovalRequest && approvableForwardRequest?.forwardDetails ? (
-          <Card className="border-amber-200 bg-amber-50">
-            <CardHeader>
-              <CardTitle className="text-base">Forward Quote Ready</CardTitle>
-            </CardHeader>
-            <CardContent className="gap-1.5 p-5 pt-0">
-              <SummaryLine label="Carrier" value={approvableForwardRequest.forwardDetails.quotedCarrier} />
-              <SummaryLine label="Service" value={approvableForwardRequest.forwardDetails.quotedService} />
-              <SummaryLine label="Quote" value={formatMoneyFromCents(approvableForwardRequest.forwardDetails.quotedAmountCents)} />
-              <SummaryLine label="Quoted At" value={formatDate(approvableForwardRequest.forwardDetails.quotedAt)} />
-            </CardContent>
-          </Card>
+          <NoticeCard tone="amber" title="Forward Quote Ready">
+            <SummaryLine label="Carrier" value={approvableForwardRequest.forwardDetails.quotedCarrier} />
+            <SummaryLine label="Service" value={approvableForwardRequest.forwardDetails.quotedService} />
+            <SummaryLine label="Quote" value={formatMoneyFromCents(approvableForwardRequest.forwardDetails.quotedAmountCents)} />
+            <SummaryLine label="Quoted At" value={formatDate(approvableForwardRequest.forwardDetails.quotedAt)} />
+          </NoticeCard>
         ) : null}
 
         {!approvableForwardRequest && readyToShipForwardRequest?.forwardDetails ? (
-          <Card className="border-emerald-200 bg-emerald-50">
-            <CardHeader>
-              <CardTitle className="text-base">Forward Approved</CardTitle>
-              <CardDescription>Paid. The center can ship it.</CardDescription>
-            </CardHeader>
-            <CardContent className="gap-1.5 p-5 pt-0">
-              <SummaryLine label="Carrier" value={readyToShipForwardRequest.forwardDetails.quotedCarrier} />
-              <SummaryLine label="Service" value={readyToShipForwardRequest.forwardDetails.quotedService} />
-              <SummaryLine label="Paid" value={formatMoneyFromCents(readyToShipForwardRequest.forwardDetails.quotedAmountCents)} />
-              <SummaryLine label="Paid At" value={formatDate(readyToShipForwardRequest.forwardDetails.paidAt)} />
-            </CardContent>
-          </Card>
+          <NoticeCard tone="emerald" title="Forward Approved" description="Paid. The center can ship it.">
+            <SummaryLine label="Carrier" value={readyToShipForwardRequest.forwardDetails.quotedCarrier} />
+            <SummaryLine label="Service" value={readyToShipForwardRequest.forwardDetails.quotedService} />
+            <SummaryLine label="Paid" value={formatMoneyFromCents(readyToShipForwardRequest.forwardDetails.quotedAmountCents)} />
+            <SummaryLine label="Paid At" value={formatDate(readyToShipForwardRequest.forwardDetails.paidAt)} />
+          </NoticeCard>
         ) : null}
 
         {galleryMedia.length > 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Additional media</CardTitle>
-            </CardHeader>
-            <CardContent className="gap-3 p-5 pt-0">
-              {galleryMedia.map((media, index) => {
-                const url = media.signedUrl || media.url || "";
-                const isImage = (media.mimeType || "").startsWith("image/");
+          <DetailCard className="gap-3 p-5">
+            <CardHeading>Additional media</CardHeading>
+            {galleryMedia.map((media, index) => {
+              const url = media.signedUrl || media.url || "";
+              const isImage = (media.mimeType || "").startsWith("image/");
+              const isPdf = isPdfMedia(media);
 
-                return (
-                  <Pressable
-                    key={media.id || index}
-                    disabled={!url}
-                    onPress={() => (url.toLowerCase().endsWith(".pdf") ? Linking.openURL(url) : WebBrowser.openBrowserAsync(url))}
-                    className="overflow-hidden rounded-lg border border-border"
-                  >
-                    {isImage && url ? (
-                      <Image source={{ uri: url }} style={{ width: "100%", height: 160 }} contentFit="cover" />
-                    ) : (
-                      <View className="h-40 items-center justify-center bg-muted">
-                        <Text className="text-sm text-muted-foreground">{media.kind || "FILE"}</Text>
-                      </View>
-                    )}
-                    <View className="p-3">
-                      <Text className="text-xs text-muted-foreground">
-                        {media.kind} • {media.mimeType}
-                      </Text>
+              return (
+                <Pressable
+                  key={media.id || index}
+                  disabled={!url}
+                  onPress={() => {
+                    // Fotos y PDFs se ven dentro de la app; cualquier otro
+                    // archivo sigue abriendose fuera, que es quien sabe mostrarlo.
+                    if (isImage) setViewerUri(url);
+                    else if (isPdf) setPdfMedia(media);
+                    else WebBrowser.openBrowserAsync(url);
+                  }}
+                  className="overflow-hidden rounded-[10px] border border-ink/[0.12]"
+                >
+                  {isImage && url ? (
+                    <Image source={{ uri: url }} style={{ width: "100%", height: 160 }} contentFit="cover" />
+                  ) : isPdf && url ? (
+                    <PdfThumbnail media={media} />
+                  ) : (
+                    <View className="h-40 items-center justify-center bg-media">
+                      <Text className="font-hanken-medium text-[14px] text-ink/60">{media.kind || "FILE"}</Text>
                     </View>
-                  </Pressable>
-                );
-              })}
-            </CardContent>
-          </Card>
+                  )}
+                </Pressable>
+              );
+            })}
+          </DetailCard>
         ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>History</CardTitle>
-            <CardDescription>What has happened with this item</CardDescription>
-          </CardHeader>
-          <CardContent className="p-5 pt-0">
-            {timeline.length === 0 ? (
-              <Text className="text-sm text-muted-foreground">No events yet.</Text>
-            ) : (
-              <View className="gap-5 border-l border-border pl-4">
-                {timeline.map((event, index) => {
-                  const requestColor = event.sr?.status ? requestStatusColor(event.sr.status) : null;
+        <DetailCard className="p-5">
+          <CardHeading className="mb-4">History</CardHeading>
+          {history.length === 0 ? (
+            <Text className="font-hanken text-[14px] text-ink/60">No events yet.</Text>
+          ) : (
+            <Timeline
+              events={history}
+              renderExtra={(event) => {
+                const requestColor = event.sr?.status ? requestStatusColor(event.sr.status) : null;
 
-                  return (
-                    <View key={index} className="gap-1">
-                      <View
-                        className={
-                          index === 0
-                            ? "absolute -left-[21px] mt-1.5 h-3 w-3 rounded-full bg-primary"
-                            : "absolute -left-[21px] mt-1.5 h-3 w-3 rounded-full bg-slate-300"
-                        }
-                      />
-                      <View className="flex-row flex-wrap items-center gap-2">
-                        <Text className="text-sm font-medium text-foreground">{event.title}</Text>
-                        {requestColor ? (
-                          <Badge variant="outline" className={requestColor.container} labelClassName={requestColor.label}>
-                            {formatStatusDisplay(event.sr.status)}
-                          </Badge>
+                return (
+                  <>
+                    {requestColor ? (
+                      <Badge variant="outline" className={"mt-1.5 " + requestColor.container} labelClassName={requestColor.label}>
+                        {formatStatusDisplay(event.sr.status)}
+                      </Badge>
+                    ) : null}
+
+                    {event.sr?.type === "PICKUP" && hasDisplayValue(event.sr.pickupDetails?.pickupWindow) ? (
+                      <TimelineDetails>
+                        <TimelineDetailLine>Pickup Window: {event.sr.pickupDetails.pickupWindow}</TimelineDetailLine>
+                      </TimelineDetails>
+                    ) : null}
+
+                    {event.sr?.type === "FORWARD" && event.sr.forwardDetails ? (
+                      <TimelineDetails>
+                        {hasDisplayValue(event.sr.forwardDetails.destinationName) ? (
+                          <TimelineDetailLine>Recipient: {event.sr.forwardDetails.destinationName}</TimelineDetailLine>
                         ) : null}
-                      </View>
-                      <Text className="text-xs text-muted-foreground">{formatDate(event.at)}</Text>
-                      {event.description ? (
-                        <Text className="text-sm text-muted-foreground">{event.description}</Text>
-                      ) : null}
+                        {hasDisplayValue(event.sr.forwardDetails.quotedCarrier) ? (
+                          <TimelineDetailLine>Carrier: {event.sr.forwardDetails.quotedCarrier}</TimelineDetailLine>
+                        ) : null}
+                        {event.sr.forwardDetails.quotedAmountCents != null ? (
+                          <TimelineDetailLine>
+                            Quote: {formatMoneyFromCents(event.sr.forwardDetails.quotedAmountCents)}
+                          </TimelineDetailLine>
+                        ) : null}
+                        {hasDisplayValue(event.sr.forwardDetails.trackingNumber) ? (
+                          <TimelineDetailLine>Tracking: {event.sr.forwardDetails.trackingNumber}</TimelineDetailLine>
+                        ) : null}
+                      </TimelineDetails>
+                    ) : null}
 
-                      {event.sr?.type === "PICKUP" && hasDisplayValue(event.sr.pickupDetails?.pickupWindow) ? (
-                        <View className="mt-1 rounded-md border border-border bg-background p-2">
-                          <Text className="text-xs text-muted-foreground">
-                            Pickup Window: {event.sr.pickupDetails.pickupWindow}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      {event.sr?.type === "FORWARD" && event.sr.forwardDetails ? (
-                        <View className="mt-1 gap-0.5 rounded-md border border-border bg-background p-2">
-                          {hasDisplayValue(event.sr.forwardDetails.destinationName) ? (
-                            <Text className="text-xs text-muted-foreground">Recipient: {event.sr.forwardDetails.destinationName}</Text>
-                          ) : null}
-                          {hasDisplayValue(event.sr.forwardDetails.quotedCarrier) ? (
-                            <Text className="text-xs text-muted-foreground">Carrier: {event.sr.forwardDetails.quotedCarrier}</Text>
-                          ) : null}
-                          {event.sr.forwardDetails.quotedAmountCents != null ? (
-                            <Text className="text-xs text-muted-foreground">
-                              Quote: {formatMoneyFromCents(event.sr.forwardDetails.quotedAmountCents)}
-                            </Text>
-                          ) : null}
-                          {hasDisplayValue(event.sr.forwardDetails.trackingNumber) ? (
-                            <Text className="text-xs text-muted-foreground">Tracking: {event.sr.forwardDetails.trackingNumber}</Text>
-                          ) : null}
-                        </View>
-                      ) : null}
-
-                      {event.sr?.type === "SCAN" && event.sr.scanDetails?.pageCount > 0 ? (
-                        <View className="mt-1 gap-0.5 rounded-md border border-border bg-background p-2">
-                          <Text className="text-xs text-muted-foreground">Pages: {event.sr.scanDetails.pageCount}</Text>
-                          {event.sr.scanDetails.quotedAmountCents != null ? (
-                            <Text className="text-xs text-muted-foreground">
-                              Quote: {formatMoneyFromCents(event.sr.scanDetails.quotedAmountCents)}
-                            </Text>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </CardContent>
-        </Card>
+                    {event.sr?.type === "SCAN" && event.sr.scanDetails?.pageCount > 0 ? (
+                      <TimelineDetails>
+                        <TimelineDetailLine>Pages: {event.sr.scanDetails.pageCount}</TimelineDetailLine>
+                        {event.sr.scanDetails.quotedAmountCents != null ? (
+                          <TimelineDetailLine>
+                            Quote: {formatMoneyFromCents(event.sr.scanDetails.quotedAmountCents)}
+                          </TimelineDetailLine>
+                        ) : null}
+                      </TimelineDetails>
+                    ) : null}
+                  </>
+                );
+              }}
+            />
+          )}
+        </DetailCard>
       </ScrollView>
+
+      <ImageViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
+      <PdfViewer
+        media={pdfMedia}
+        title={"Scan · " + itemTitle}
+        fileName={(item.itemCode ? "Item-" + item.itemCode : "Item") + "-scan.pdf"}
+        onClose={() => setPdfMedia(null)}
+      />
     </>
   );
 }

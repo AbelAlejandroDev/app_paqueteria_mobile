@@ -2,6 +2,13 @@ import "@/global.css";
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import {
+  HankenGrotesk_400Regular,
+  HankenGrotesk_500Medium,
+  HankenGrotesk_600SemiBold,
+  HankenGrotesk_700Bold,
+  useFonts,
+} from "@expo-google-fonts/hanken-grotesk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
@@ -23,6 +30,15 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  // No se espera a que carguen: el texto sale con la del sistema y cambia al
+  // llegar, que es mejor que retener el arranque por una tipografia.
+  useFonts({
+    HankenGrotesk_400Regular,
+    HankenGrotesk_500Medium,
+    HankenGrotesk_600SemiBold,
+    HankenGrotesk_700Bold,
+  });
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {/* Con las metricas iniciales el primer render ya trae los insets reales

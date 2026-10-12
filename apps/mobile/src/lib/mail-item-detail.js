@@ -139,6 +139,31 @@ export function buildTimeline(item) {
   return events;
 }
 
+/**
+ * Hora de un evento del historial: "Today, 10:42 AM", "Yesterday, 9:15 AM" o
+ * "Mar 4, 9:15 AM" (con el año si no es el actual). `now` se recibe para poder
+ * probarlo sin depender del reloj.
+ */
+export function formatEventTime(value, now = new Date()) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "";
+
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+
+  if (days === 0) return "Today, " + time;
+  if (days === 1) return "Yesterday, " + time;
+
+  const day = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+
+  return day + ", " + time;
+}
+
 export function findRequest(requests, predicate, dateField = "createdAt") {
   return (
     (requests || [])

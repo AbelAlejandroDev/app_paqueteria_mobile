@@ -29,6 +29,15 @@
  *                 necesitan un fondo propio, y no siempre vale el de marca
  *                 (el de HDG es morado sobre morado).
  *   - `wordmarkOnDark` el lockup es claro y solo se lee sobre fondo oscuro.
+ *
+ * `palette` son los tonos que acompañan al primario en el detalle del item:
+ *   - `ink`     texto; los grises salen de el con opacidad, no de slate.
+ *   - `tint`    relleno suave de chips y avisos.
+ *   - `glyph`   iconos de los botones secundarios.
+ *   - `sand`    acento secundario (eventos antiguos, "Not mine").
+ *   - `success` estado recibido.
+ *   - `canvas`  fondo de la pantalla.
+ *   - `media`   fondo de la foto mientras carga o si no hay.
  */
 
 const BRANDS = {
@@ -47,6 +56,15 @@ const BRANDS = {
     // mascara.
     androidIconBackground: "#090A0D",
     markBackground: "#0e0d13",
+    palette: {
+      ink: "#2D2A26",
+      tint: "#A5E5D9",
+      glyph: "#4D7F71",
+      sand: "#C2BA98",
+      success: "#00A887",
+      canvas: "#F1FCFA",
+      media: "#EEF2F1",
+    },
     assets: {
       mark: "icon.png",
       wordmark: "the-worx-white-transparent.png",
@@ -65,6 +83,17 @@ const BRANDS = {
     splashBackground: "#ffffff",
     androidIconBackground: "#ffffff",
     markBackground: "#ffffff",
+    // Sin diseño propio todavia: los mismos papeles que The Worx, sobre su
+    // morado en vez del verde.
+    palette: {
+      ink: "#2D2A26",
+      tint: "#D9D4E6",
+      glyph: "#5F5971",
+      sand: "#B8B0C8",
+      success: "#00A887",
+      canvas: "#F8F7FB",
+      media: "#EFEEF3",
+    },
     assets: {
       mark: "hdg-icono-simple-transparent.png",
       wordmark: "logo-horizontal-transparent.png",

@@ -144,6 +144,7 @@ module.exports = {
         primaryColor: brand.primaryColor,
         primaryForeground: getForegroundForColor(brand.primaryColor),
         markBackground: brand.markBackground,
+        palette: brand.palette,
       },
     },
   },

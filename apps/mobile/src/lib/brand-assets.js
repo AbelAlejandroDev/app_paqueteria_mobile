@@ -14,6 +14,17 @@ const MARKS = {
 export const brandMark = MARKS[brand.id] || null;
 
 /**
+ * El simbolo en blanco sobre transparente, para pintarlo sobre el color de
+ * marca (la cabecera del detalle del item). HDG no lo tiene todavia y cae al
+ * `mark` sobre su fondo.
+ */
+const MONOCHROME_MARKS = {
+  the_worx: require("../../assets/brands/the_worx/monochrome-icon.png"),
+};
+
+export const brandMonochromeMark = MONOCHROME_MARKS[brand.id] || null;
+
+/**
  * Logotipo completo para fondo claro. El icono cuadrado (`mark`) se sigue
  * usando para el icono de la app; esto es la versión con el nombre, para
  * pintarla dentro de tarjetas blancas.
