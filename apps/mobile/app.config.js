@@ -107,6 +107,9 @@ module.exports = {
         },
       ],
       "expo-secure-store",
+      // Avisos push (Expo -> FCM/APNs). Expo pide declararlo para los builds de
+      // EAS; el color es el de la marca en la barra de notificaciones de Android.
+      ["expo-notifications", { color: brand.primaryColor }],
       [
         "expo-local-authentication",
         {

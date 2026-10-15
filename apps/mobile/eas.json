@@ -27,6 +27,9 @@
     "base-simulator": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
+      },
       "ios": {
         "simulator": true
       }
@@ -34,7 +37,10 @@
 
     "base-production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
+      }
     },
 
     "worx-development": {

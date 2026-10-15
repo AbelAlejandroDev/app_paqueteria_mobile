@@ -28,6 +28,7 @@ import {
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
+import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import EmptyState from "@/components/common/empty-state";
 import LetterForwardSheet from "@/components/common/letter-forward-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -860,6 +861,10 @@ export default function MailItemDetailScreen() {
       return response.data;
     },
     enabled: Boolean(id),
+    // Recien pagado un reenvio, la etiqueta llega unos segundos despues (la
+    // compra el worker). Mientras tanto se vuelve a pedir cada 5 s, y solo
+    // entonces: en cualquier otro estado no se sondea.
+    refetchInterval: (q) => (shouldPollForLabel(q.state.data?.item?.serviceRequests) ? 5000 : false),
   });
 
   const serviceNoticesQuery = useQuery({
@@ -919,6 +924,7 @@ export default function MailItemDetailScreen() {
       ),
     [serviceRequests]
   );
+  const paidForwardAwaitingLabel = useMemo(() => findPaidForwardAwaitingLabel(serviceRequests), [serviceRequests]);
   const readyToShipForwardRequest = useMemo(
     () => findRequest(serviceRequests, (r) => r?.type === "FORWARD" && r?.status === "READY_TO_SHIP"),
     [serviceRequests]
@@ -1154,6 +1160,21 @@ export default function MailItemDetailScreen() {
               <SummaryLine label="Service" value={approvableForwardRequest.forwardDetails.quotedService} />
               <SummaryLine label="Quote" value={formatMoneyFromCents(approvableForwardRequest.forwardDetails.quotedAmountCents)} />
               <SummaryLine label="Quoted At" value={formatDate(approvableForwardRequest.forwardDetails.quotedAt)} />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {paidForwardAwaitingLabel && !readyToShipForwardRequest ? (
+          <Card className="border-emerald-200 bg-emerald-50">
+            <CardHeader>
+              <CardTitle className="text-base">{describePaidForwardProgress(paidForwardAwaitingLabel).title}</CardTitle>
+              <CardDescription>{describePaidForwardProgress(paidForwardAwaitingLabel).description}</CardDescription>
+            </CardHeader>
+            <CardContent className="gap-1.5 p-5 pt-0">
+              <SummaryLine label="Carrier" value={paidForwardAwaitingLabel.forwardDetails.quotedCarrier} />
+              <SummaryLine label="Service" value={paidForwardAwaitingLabel.forwardDetails.quotedService} />
+              <SummaryLine label="Paid" value={formatMoneyFromCents(paidForwardAwaitingLabel.forwardDetails.quotedAmountCents)} />
+              <SummaryLine label="Paid At" value={formatDate(paidForwardAwaitingLabel.forwardDetails.paidAt)} />
             </CardContent>
           </Card>
         ) : null}

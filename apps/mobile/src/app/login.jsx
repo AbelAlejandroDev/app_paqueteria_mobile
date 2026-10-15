@@ -163,6 +163,10 @@ export default function LoginScreen() {
                 <Text className="text-center text-sm text-destructive">{formError}</Text>
               ) : null}
 
+              <TouchableOpacity className="items-end" onPress={() => router.push("/forgot-password")} hitSlop={8}>
+                <Text className="text-sm text-muted-foreground">Forgot password?</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 className={cn(
                   "mt-2 items-center justify-center rounded-lg bg-primary px-4 py-2",

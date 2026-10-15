@@ -29,6 +29,7 @@ import {
 import { formatErrorMessage } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 import FeeScheduleView, { FEE_SCHEDULE_QUERY_KEY } from "@/components/common/fee-schedule";
+import MembershipCancellation from "@/components/common/membership-cancellation";
 import PageTitle from "@/components/common/page-title";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -567,6 +568,8 @@ export default function BillingScreen() {
           isOpening={portalMutation.isPending}
         />
       ) : null}
+
+      {tab === "payment" ? <MembershipCancellation /> : null}
 
       {tab === "fees" ? <FeeScheduleView /> : null}
     </ScrollView>

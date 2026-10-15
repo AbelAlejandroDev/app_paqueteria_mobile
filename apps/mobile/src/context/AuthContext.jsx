@@ -14,6 +14,7 @@ import {
   setTokens,
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
+import { brand } from "@/lib/brand";
 import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
 import { clearBiometricLock } from "@/lib/security-preferences";
 import { clearPendingNavigation } from "@/lib/pending-navigation";
@@ -76,7 +77,10 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (email, password) => {
       try {
-        const response = await api.post("/auth/login", { email, password });
+        // La organizacion de esta app (the_worx / hdg). Sin ella el servidor la
+        // deduce del dominio, y core.theworxoffices.com es de The Worx: un
+        // cliente de HDG no podia entrar desde su propia app.
+        const response = await api.post("/auth/login", { email, password, tenantSlug: brand.tenantSlug });
         const data = response.data || {};
 
         await setTokens({
