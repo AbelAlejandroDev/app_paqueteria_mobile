@@ -58,7 +58,10 @@ export function availableActionsFor(item) {
   const hasActiveRequest = hasActive("SCAN") || hasActiveDisposition;
 
   return {
-    canRequestScan: item?.type !== "PACKAGE" && status !== "SCANNED" && !hasActiveRequest,
+    // Como el backend: una recogida en marcha no impide escanear (la pieza
+    // sigue en el centro). Lo impiden otro escaneo, un reenvio, un descarte o
+    // que ya este escaneada.
+    canRequestScan: item?.type !== "PACKAGE" && !isScanned(item) && !hasActive("SCAN") && !hasActive("FORWARD") && !hasActive("DISCARD"),
     canRequestForward: status !== "FORWARDED" && !hasActiveDisposition,
     canRequestPickup: status !== "PICKED_UP" && !hasActiveDisposition,
     canRequestDiscard: !hasActiveRequest,
@@ -82,6 +85,18 @@ export function canBulkRequest(item, action) {
   return false;
 }
 
+/**
+ * Escaneada: SCANNED, o con un escaneo completado aunque espere en el
+ * mostrador (el escaneo que termina durante una recogida la deja en
+ * READY_FOR_PICKUP).
+ */
+function isScanned(item) {
+  if (item?.status === "SCANNED") return true;
+  return (Array.isArray(item?.serviceRequests) ? item.serviceRequests : []).some(
+    (request) => request?.type === "SCAN" && request?.status === "COMPLETED"
+  );
+}
+
 function hasActiveRequest(item, types) {
   return (Array.isArray(item?.serviceRequests) ? item.serviceRequests : []).some(
     (request) => types.includes(request?.type) && ACTIVE_REQUEST_STATUSES.includes(request?.status)
@@ -101,7 +116,7 @@ export function bulkBlockReason(item, action) {
   }
   if (action === "SCAN") {
     if (item?.type === "PACKAGE") return "PACKAGE_NO_SCAN";
-    if (item?.status === "SCANNED") return "ALREADY_SCANNED";
+    if (isScanned(item)) return "ALREADY_SCANNED";
     if (hasActiveRequest(item, ["SCAN"])) return "SCAN_IN_PROGRESS";
     return "REQUEST_IN_PROGRESS";
   }

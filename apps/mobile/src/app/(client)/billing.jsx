@@ -32,6 +32,7 @@ import { formatErrorMessage } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 import FeeScheduleView, { FEE_SCHEDULE_QUERY_KEY } from "@/components/common/fee-schedule";
 import { ActionButton, CardHeading, CardSubheading, DetailCard, MailboxChip } from "@/components/common/mail-item-detail-ui";
+import MembershipCancellation from "@/components/common/membership-cancellation";
 import { Badge } from "@/components/ui/badge";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -561,6 +562,8 @@ export default function BillingScreen() {
           isOpening={portalMutation.isPending}
         />
       ) : null}
+
+      {tab === "payment" ? <MembershipCancellation /> : null}
 
       {tab === "fees" ? <FeeScheduleView /> : null}
     </ScrollView>
