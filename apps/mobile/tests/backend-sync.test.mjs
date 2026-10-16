@@ -100,3 +100,67 @@ test("baja: si el servidor dice que no se puede, se muestra su motivo", () => {
   const view = describeCancellationPreview({ canRequest: false, message: "No active subscription." });
   assert.deepEqual(view, { kind: "unavailable", lines: ["No active subscription."], canRequest: false });
 });
+
+// --- recogida lista al pedirla ---------------------------------------------
+
+const pickupReady = await import("../src/lib/pickup-ready.js");
+
+test("16. app: la pieza pasa a READY_FOR_PICKUP con la respuesta del servidor y se cierran las demas acciones", () => {
+  const before = {
+    item: { id: "mi-1", status: "RECEIVED", serviceRequests: [] },
+    availableActions: {
+      canRequestScan: true, canRequestForward: true, canRequestPickup: true, canRequestDiscard: true,
+      hasActiveRequest: false, hasActiveDisposition: false,
+      activeRequests: { scan: false, forward: false, pickup: false, discard: false },
+    },
+  };
+  const response = { created: { id: "sr-1", type: "PICKUP", status: "IN_PROGRESS" }, mailItem: { id: "mi-1", status: "READY_FOR_PICKUP" } };
+  const after = pickupReady.applyReadyPickup(before, response);
+
+  assert.equal(after.item.status, "READY_FOR_PICKUP");
+  assert.equal(after.item.serviceRequests[0].status, "IN_PROGRESS");
+  assert.deepEqual(
+    [after.availableActions.canRequestPickup, after.availableActions.canRequestForward, after.availableActions.canRequestDiscard],
+    [false, false, false],
+  );
+  assert.equal(after.availableActions.canRequestScan, true, "una recogida no impide escanear");
+  assert.equal(after.availableActions.activeRequests.pickup, true);
+  assert.equal(pickupReady.applyReadyPickup(after, response).item.serviceRequests.length, 1);
+});
+
+test("app: los mismos textos que la web, sin esperar a que el centro apruebe nada", () => {
+  assert.match(pickupReady.PICKUP_READY_CONFIRMATION, /^Your mail is ready for pickup\. Please bring a valid photo ID/);
+  for (const text of [pickupReady.PICKUP_READY_CONFIRMATION, pickupReady.PICKUP_DIALOG_DESCRIPTION]) {
+    assert.doesNotMatch(text, /approv|will have it ready|prepar|wait/i);
+  }
+  const screen = fs.readFileSync(path.join(root, "src/app/(client)/mail-items/[id].jsx"), "utf8");
+  assert.match(screen, /onPickupReady=\{\(data\) => queryClient\.setQueryData\(\["client-mail-item", id\], \(previous\) => applyReadyPickup\(previous, data\)\)\}/);
+  assert.match(screen, /Alert\.alert\(PICKUP_READY_TITLE, PICKUP_READY_CONFIRMATION\)/);
+  assert.doesNotMatch(screen, /Schedule Pickup/);
+  // El campo opcional de la ventana horaria se queda como estaba.
+  assert.match(screen, /Pickup window \(optional\)/);
+});
+
+// --- aviso de pago del franqueo ---------------------------------------------
+
+const routing = await import("../src/lib/notification-routing.js");
+
+test("12. app: el push de pago abre la pieza donde se paga, no el detalle del aviso", () => {
+  const data = { type: "FORWARD_PAYMENT_REQUIRED", notificationId: "n-1", serviceRequestId: "sr-1", mailItemId: "mi-12" };
+  assert.deepEqual(routing.routeForNotification(data), { pathname: "/mail-items/[id]", params: { id: "mi-12" } });
+  assert.equal(routing.isItemActionNotification(data), true);
+  // El resto sigue abriendo su detalle.
+  assert.deepEqual(routing.routeForNotification({ type: "PICKUP_COMPLETED", notificationId: "n-2", mailItemId: "mi-1" }),
+    { pathname: "/notifications/[id]", params: { id: "n-2" } });
+  assert.equal(routing.isItemActionNotification({ type: "FORWARD_PAYMENT_REQUIRED" }), false, "sin pieza no hay donde llevar");
+
+  const list = fs.readFileSync(path.join(root, "src/app/(client)/notifications/index.jsx"), "utf8");
+  assert.match(list, /if \(isItemActionNotification\(data\)\) \{\s*router\.push\(routeForNotification\(data\)\)/, "la lista va al mismo sitio");
+});
+
+test("app: se puede pagar cualquier envio con tarifa, no solo paquetes (cartas del mes incluidas)", () => {
+  const screen = fs.readFileSync(path.join(root, "src/app/(client)/mail-items/[id].jsx"), "utf8");
+  assert.doesNotMatch(screen, /item\?\.type !== "PACKAGE"\) return false/);
+  assert.match(screen, /&& amount > 0/, "sigue haciendo falta un importe real");
+  assert.match(screen, /checkout-session/, "el mismo pago de siempre (Stripe Checkout)");
+});

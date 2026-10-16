@@ -147,3 +147,56 @@ test("las availableActions del servidor mandan sobre el calculo local", async ()
     false
   );
 });
+
+// --- Fase 3C: escanear durante una recogida --------------------------------
+
+const ready = (extra = {}) => item("ready", { status: "READY_FOR_PICKUP", serviceRequests: [req("PICKUP", "IN_PROGRESS")], ...extra });
+
+test("3C-9 a 12. con la recogida en marcha: se puede escanear; no reenviar, ni descartar, ni otra recogida", async () => {
+  const { bulkBlockReason } = await import("../src/lib/mail-selection.js");
+  const actions = availableActionsFor(ready());
+  assert.equal(actions.canRequestScan, true, "el escaneo no saca la pieza del centro");
+  assert.equal(actions.canRequestForward, false);
+  assert.equal(actions.canRequestDiscard, false);
+  assert.equal(actions.canRequestPickup, false);
+
+  assert.equal(canBulkRequest(ready(), "SCAN"), true);
+  assert.equal(canBulkRequest(ready(), "FORWARD"), false);
+  assert.equal(canBulkRequest(ready(), "DISCARD"), false);
+  assert.equal(bulkBlockReason(ready(), "FORWARD"), "REQUEST_IN_PROGRESS");
+  assert.equal(bulkBlockReason(ready(), "DISCARD"), "REQUEST_IN_PROGRESS");
+  assert.equal(isSelectable(ready()), true, "se puede marcar para escanear");
+});
+
+test("3C-13. no se ofrece un segundo escaneo: en marcha o ya hecho durante la recogida", async () => {
+  const { bulkBlockReason } = await import("../src/lib/mail-selection.js");
+  const scanning = ready({ serviceRequests: [req("PICKUP", "IN_PROGRESS"), req("SCAN", "OPEN")] });
+  assert.equal(canBulkRequest(scanning, "SCAN"), false);
+  assert.equal(bulkBlockReason(scanning, "SCAN"), "SCAN_IN_PROGRESS");
+
+  // Escaneada mientras esperaba en el mostrador: sigue READY_FOR_PICKUP.
+  const scanned = ready({ serviceRequests: [req("PICKUP", "IN_PROGRESS"), req("SCAN", "COMPLETED")] });
+  assert.equal(canBulkRequest(scanned, "SCAN"), false);
+  assert.equal(bulkBlockReason(scanned, "SCAN"), "ALREADY_SCANNED");
+
+  // Un reenvio o un descarte en marcha si lo siguen impidiendo.
+  assert.equal(availableActionsFor(item("f", { serviceRequests: [req("FORWARD", "OPEN")] })).canRequestScan, false);
+  assert.equal(availableActionsFor(item("d", { serviceRequests: [req("DISCARD", "OPEN")] })).canRequestScan, false);
+});
+
+test("3C-16. en grupo: las que esperan recogida entran en el escaneo y quedan fuera de reenvio y descarte", () => {
+  const items = [item("a"), ready(), item("p", { type: "PACKAGE" })];
+  const summary = Object.fromEntries(bulkActionSummary(items).map((row) => [row.action, row]));
+  assert.deepEqual(summary.SCAN.eligible.map((i) => i.id), ["a", "ready"]);
+  assert.deepEqual(summary.FORWARD.eligible.map((i) => i.id), ["a"]);
+  assert.deepEqual(summary.DISCARD.eligible.map((i) => i.id), ["a", "p"]);
+  assert.match(summary.DISCARD.reasons[0].text, /pickup, forward or discard in progress/);
+  // Y la peticion es la de siempre: el servidor vuelve a comprobarlo todo.
+  assert.deepEqual(bulkRequestBody("SCAN", summary.SCAN.eligible), { type: "SCAN", mailItemId: "a", mailItemIds: ["a", "ready"], chargeConsent: true });
+});
+
+test("3C-16. con las availableActions del servidor, se usan tal cual (pieza suelta o en grupo)", () => {
+  const fromServer = ready({ availableActions: { canRequestScan: true, canRequestForward: false, canRequestPickup: false, canRequestDiscard: false, hasActiveDisposition: true } });
+  assert.equal(canBulkRequest(fromServer, "SCAN"), true);
+  assert.equal(canBulkRequest(fromServer, "DISCARD"), false);
+});

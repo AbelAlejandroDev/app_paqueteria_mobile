@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
-import { NOTIFICATIONS_QUERY_KEY } from "@/lib/notification-routing";
+import { NOTIFICATIONS_QUERY_KEY, isItemActionNotification, routeForNotification } from "@/lib/notification-routing";
 import {
   isMailReceived,
   notificationDisplay,
@@ -62,6 +62,19 @@ export default function NotificationsScreen() {
    * leidos todos los que apila. El resto abre su detalle, que los marca alli.
    */
   const openNotification = (notification) => {
+    // El de pagar el franqueo abre la pieza, donde esta el pago (el mismo
+    // destino que el push). Se marca leido aqui porque no pasa por el detalle.
+    const data = { ...(notification.data || {}), type: notification.type };
+    if (isItemActionNotification(data)) {
+      router.push(routeForNotification(data));
+      if (!notification.readAt) {
+        api.patch("/client/notifications/" + encodeURIComponent(notification.id) + "/read")
+          .then(() => queryClient.invalidateQueries({ queryKey: ["client-notifications"] }))
+          .catch(() => {});
+      }
+      return;
+    }
+
     if (!isMailReceived(notification)) {
       router.push({ pathname: "/notifications/[id]", params: { id: notification.id } });
       return;

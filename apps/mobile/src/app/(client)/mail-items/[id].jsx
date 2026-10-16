@@ -29,6 +29,7 @@ import {
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
+import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
 import EmptyState from "@/components/common/empty-state";
 import LetterForwardSheet from "@/components/common/letter-forward-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -250,7 +251,7 @@ function TrackingApprovalCard({ request, onRefresh }) {
   );
 }
 
-function ActionsCard({ item, mailItemId, availableActions, serviceNotices, supportEmail, onRefresh }) {
+function ActionsCard({ item, mailItemId, availableActions, serviceNotices, supportEmail, onRefresh, onPickupReady }) {
   const [forwardOpen, setForwardOpen] = useState(false);
   // Cada apertura monta la hoja de nuevo (key distinta): empieza siempre por el
   // aviso del recargo y sin lo que se escribio la vez anterior.
@@ -318,8 +319,15 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       const response = await api.post("/client/service-requests", { mailItemId, type, ...(payload || {}) });
       return response.data;
     },
-    onSuccess: async () => {
-      Alert.alert("Request created", "Your request was sent to the center.");
+    onSuccess: async (data, { type }) => {
+      // La recogida ya esta lista: se pinta con lo que devolvio el servidor
+      // antes de recargar el resto.
+      if (type === "PICKUP") {
+        onPickupReady?.(data);
+        Alert.alert(PICKUP_READY_TITLE, PICKUP_READY_CONFIRMATION);
+      } else {
+        Alert.alert("Request created", "Your request was sent to the center.");
+      }
       setForwardOpen(false);
       setPickupOpen(false);
       setDiscardOpen(false);
@@ -782,7 +790,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
         <Modal
           visible={pickupOpen}
           onClose={() => setPickupOpen(false)}
-          title="Schedule Pickup"
+          title="Pick up your mail"
           footer={
             <>
               <Button loading={createRequest.isPending} onPress={submitPickup}>
@@ -794,6 +802,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             </>
           }
         >
+          <Notice tone="emerald">{PICKUP_DIALOG_DESCRIPTION}</Notice>
           <Field label="Pickup window (optional)">
             <Input placeholder="e.g. 9:00-11:00" value={pickupWindow} onChangeText={setPickupWindow} />
           </Field>
@@ -932,19 +941,16 @@ export default function MailItemDetailScreen() {
   /**
    * Reenvio pendiente de pago por el cliente.
    *
-   * Solo ocurre con paquetes: ahi el cliente elige la tarifa y acepta el
-   * importe en el momento, porque el peso ya esta registrado. Una carta o un
-   * sobre se mandan como peticion sin cotizar, asi que nada mas crearla
-   * cumplia el filtro (OPEN + NOT_STARTED) y aparecia una tarjeta de pago con
-   * "Accepted quote: -" sin haber importe alguno.
-   *
-   * Se exige ademas un importe real: sin tarifa aceptada no hay nada que
-   * pagar, sea cual sea el tipo.
+   * Lo que decide es que haya una tarifa elegida con importe: un paquete que
+   * el cliente cotizo, o cualquier envio que preparo el centro (el del mes,
+   * cartas en un sobre incluidas) y que espera su pago. Una carta pedida sin
+   * cotizar no tiene importe y no enseña tarjeta: es lo que evitaba antes el
+   * filtro por paquete, que dejaba sin forma de pagar los envios del centro.
    */
   const payableForwardRequest = useMemo(
     () =>
       findRequest(serviceRequests, (r) => {
-        if (r?.type !== "FORWARD" || item?.type !== "PACKAGE") return false;
+        if (r?.type !== "FORWARD") return false;
 
         const paymentStatus = r?.forwardDetails?.paymentStatus || "NOT_STARTED";
         const amount = Number(r?.forwardDetails?.quotedAmountCents || 0);
@@ -955,7 +961,7 @@ export default function MailItemDetailScreen() {
           && amount > 0
         );
       }),
-    [serviceRequests, item?.type]
+    [serviceRequests]
   );
 
   const lastAction = timeline.length > 0 ? timeline[timeline.length - 1] : null;
@@ -1097,6 +1103,7 @@ export default function MailItemDetailScreen() {
             serviceNotices={serviceNotices}
             supportEmail={supportEmail}
             onRefresh={() => query.refetch()}
+            onPickupReady={(data) => queryClient.setQueryData(["client-mail-item", id], (previous) => applyReadyPickup(previous, data))}
           />
         ) : null}
 

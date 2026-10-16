@@ -30,6 +30,22 @@ export async function loadNotificationDetail(api, id) {
   return response.data?.notification || null;
 }
 
+/**
+ * Avisos que piden al cliente hacer algo en una pieza: se abren en esa pieza,
+ * donde esta el boton, y no en el detalle del aviso (que no tiene ninguno).
+ * El de pago del franqueo lleva a la pieza principal del envio, que es donde
+ * se paga, tambien para las cartas que van en el mismo sobre.
+ */
+const ITEM_ACTION_TYPES = new Set(["FORWARD_PAYMENT_REQUIRED"]);
+
+export function isItemActionNotification(data) {
+  return Boolean(data && ITEM_ACTION_TYPES.has(data.type) && data.mailItemId);
+}
+
+function itemRoute(mailItemId) {
+  return { pathname: "/mail-items/[id]", params: { id: String(mailItemId) } };
+}
+
 function detailRoute(id) {
   return { pathname: "/notifications/[id]", params: { id: String(id) } };
 }
@@ -41,13 +57,14 @@ export function routeForNotification(data) {
   // Va antes que notificationId porque el detalle del aviso no ensena las piezas.
   if (isMailReceived(data)) return routeForMailReceived(data);
 
+  // Un aviso que pide pagar va a donde se paga.
+  if (isItemActionNotification(data)) return itemRoute(data.mailItemId);
+
   // El caso normal: el backend manda el id exacto.
   if (data.notificationId) return detailRoute(data.notificationId);
 
   // El resto de avisos hablan de una pieza concreta: su sitio es esa pieza.
-  if (data.mailItemId) {
-    return { pathname: "/mail-items/[id]", params: { id: String(data.mailItemId) } };
-  }
+  if (data.mailItemId) return itemRoute(data.mailItemId);
 
   return legacyRouteWithoutId(data);
 }
