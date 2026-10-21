@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 // Construye el deep link de vuelta del pago de Stripe.
 import * as ExpoLinking from "expo-linking";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
+import { ChevronRight, Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
+import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
 import EmptyState from "@/components/common/empty-state";
@@ -98,6 +99,55 @@ function NoticeCard({ tone, title, description, children }) {
       <CardHeading className="text-[16px]">{title}</CardHeading>
       {description ? <CardSubheading className="mb-1">{description}</CardSubheading> : null}
       {children}
+    </DetailCard>
+  );
+}
+
+/**
+ * La recogida de esta pieza y, si el centro agrupo varias en una, cuales son.
+ * Cada otra pieza abre su propio detalle (el backend la vuelve a comprobar
+ * contra el buzon del cliente). Ver lib/pickup-group.
+ */
+function PickupRequestCard({ group }) {
+  return (
+    <DetailCard className="p-5">
+      <CardHeading className="mb-1">Pickup Request</CardHeading>
+      <DetailRow label="Status" value={group.statusLabel} last={!group.grouped} />
+
+      {group.grouped ? (
+        <View className="mt-3">
+          <SectionLabel>{`Included Mail Items (${group.items.length})`}</SectionLabel>
+          {group.items.map((entry, index) => {
+            const label = getMailTypeLabel(entry.type) + (entry.itemCode ? " #" + entry.itemCode : "");
+            const last = index === group.items.length - 1;
+
+            if (entry.isCurrent) {
+              return (
+                <DetailRow key={entry.id} label={label} last={last}>
+                  <Text className="font-brand-medium text-[14px] text-ink/60">This item</Text>
+                </DetailRow>
+              );
+            }
+
+            return (
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                accessibilityLabel={"Open " + label}
+                onPress={() => router.push({ pathname: "/mail-items/[id]", params: { id: entry.id } })}
+                className="active:opacity-70"
+              >
+                <DetailRow label={label} last={last}>
+                  <View className="flex-row items-center gap-1">
+                    <Text className="font-brand-medium text-[14px] text-ink">{formatStatusDisplay(entry.status)}</Text>
+                    <ChevronRight size={16} color={brand.palette.glyph} />
+                  </View>
+                </DetailRow>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </DetailCard>
   );
 }
@@ -903,7 +953,12 @@ export default function MailItemDetailScreen() {
   const mailbox = query.data?.mailbox || "";
   const item = query.data?.item || null;
   const availableActions = query.data?.availableActions || null;
-  const serviceRequests = Array.isArray(item?.serviceRequests) ? item.serviceRequests : [];
+  // Memorizado: un [] nuevo en cada render invalidaria todos los useMemo que
+  // dependen de el.
+  const serviceRequests = useMemo(
+    () => (Array.isArray(item?.serviceRequests) ? item.serviceRequests : []),
+    [item]
+  );
 
   const timeline = useMemo(() => (item ? buildTimeline(item) : []), [item]);
   const visibleMedia = useMemo(() => getVisibleMedia(item), [item]);
@@ -949,6 +1004,7 @@ export default function MailItemDetailScreen() {
     [serviceRequests]
   );
   const paidForwardAwaitingLabel = useMemo(() => findPaidForwardAwaitingLabel(serviceRequests), [serviceRequests]);
+  const pickupGroup = useMemo(() => describePickupGroup(serviceRequests, item), [serviceRequests, item]);
   const readyToShipForwardRequest = useMemo(
     () => findRequest(serviceRequests, (r) => r?.type === "FORWARD" && r?.status === "READY_TO_SHIP"),
     [serviceRequests]
@@ -1130,6 +1186,8 @@ export default function MailItemDetailScreen() {
           <DetailRow label="Last action" value={lastAction?.title || formatStatusDisplay(item.status || "Received")} />
           <DetailRow label="Assigned" value={formatDate(item.receivedAt || item.createdAt)} last />
         </DetailCard>
+
+        {pickupGroup ? <PickupRequestCard group={pickupGroup} /> : null}
 
         {availableActions ? (
           <ActionsCard
