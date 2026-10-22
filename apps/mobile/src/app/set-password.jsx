@@ -67,7 +67,7 @@ function PasswordField({ control, name, label, error }) {
           name={name}
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              className="ml-2.5 flex-1 self-stretch font-hanken text-base text-foreground"
+              className="ml-2.5 flex-1 self-stretch font-brand text-base text-foreground"
               style={inputTextStyle}
               placeholder="••••••••"
               placeholderTextColor="#A3A19E"
@@ -86,7 +86,7 @@ function PasswordField({ control, name, label, error }) {
           {hidden ? <EyeOff size={18} color="#A3A19E" /> : <Eye size={18} color="#A3A19E" />}
         </Pressable>
       </View>
-      {error ? <Text className="ml-1 font-hanken text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text className="ml-1 font-brand text-sm text-destructive">{error}</Text> : null}
     </View>
   );
 }
@@ -106,7 +106,7 @@ function Shell({ children }) {
         >
           <View
             className={cn("rounded-2xl border border-border bg-card", compact ? "px-5 py-6" : "p-6")}
-            style={{ shadowColor: "#1D4E4A", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
+            style={{ shadowColor: brand.palette.shadow, shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
           >
             <BrandIdentity centered className="mb-6" />
             {children}
@@ -189,10 +189,10 @@ export default function SetPasswordScreen() {
           <View className="h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
             <CheckCircle2 size={40} color="#059669" />
           </View>
-          <Text className="font-hanken-bold text-xl text-foreground">
+          <Text className="font-brand-bold text-xl text-foreground">
             {isReset ? "Password updated" : "Account activated"}
           </Text>
-          <Text className="text-center font-hanken text-sm leading-6 text-muted-foreground">
+          <Text className="text-center font-brand text-sm leading-6 text-muted-foreground">
             {isReset
               ? "Your new password is set. Use it the next time you sign in."
               : "Your password was created. You can now sign in to your mailbox."}
@@ -212,8 +212,8 @@ export default function SetPasswordScreen() {
           <View className="h-20 w-20 items-center justify-center rounded-full bg-amber-100">
             <AlertCircle size={40} color="#b45309" />
           </View>
-          <Text className="font-hanken-bold text-xl text-foreground">Invalid link</Text>
-          <Text className="text-center font-hanken text-sm leading-6 text-muted-foreground">
+          <Text className="font-brand-bold text-xl text-foreground">Invalid link</Text>
+          <Text className="text-center font-brand text-sm leading-6 text-muted-foreground">
             {isReset
               ? "This reset link is missing or incomplete. Open the full link from your email, or request a new one."
               : "The activation token is missing or invalid. Open the full link you received by email, or ask your center to send it again."}
@@ -236,7 +236,7 @@ export default function SetPasswordScreen() {
       <View className="gap-4">
         <View className="flex-row gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
           <KeyRound size={20} color="#c2410c" />
-          <Text className="flex-1 font-hanken text-sm leading-5 text-orange-900">
+          <Text className="flex-1 font-brand text-sm leading-5 text-orange-900">
             {isReset
               ? "Choose a new password for your account."
               : "Create a password for your account using this secure activation link."}
@@ -258,7 +258,7 @@ export default function SetPasswordScreen() {
 
         <View className="flex-row gap-3 rounded-xl p-3" style={{ backgroundColor: palette.tint + "40" }}>
           <ShieldCheck size={20} color={palette.glyph} />
-          <Text className="flex-1 font-hanken text-xs leading-5 text-foreground">
+          <Text className="flex-1 font-brand text-xs leading-5 text-foreground">
             {"At least " +
               PASSWORD_MIN +
               " characters, with a letter and a number. This link is unique to your account and expires for security reasons."}
@@ -267,10 +267,10 @@ export default function SetPasswordScreen() {
 
         {formError ? (
           <View className="gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3" accessibilityRole="alert">
-            <Text className="font-hanken-semibold text-sm leading-5 text-rose-800">{formError}</Text>
+            <Text className="font-brand-semibold text-sm leading-5 text-rose-800">{formError}</Text>
             {linkExpired ? (
               <Pressable onPress={() => router.replace("/forgot-password")} accessibilityRole="link">
-                <Text className="font-hanken-bold text-sm text-rose-800 underline">Request a new link</Text>
+                <Text className="font-brand-bold text-sm text-rose-800 underline">Request a new link</Text>
               </Pressable>
             ) : null}
           </View>
@@ -285,7 +285,7 @@ export default function SetPasswordScreen() {
           onPress={() => router.replace("/login")}
         >
           <ArrowLeft size={16} color={palette.glyph} />
-          <Text className="font-hanken-semibold text-sm" style={{ color: palette.glyph }}>
+          <Text className="font-brand-semibold text-sm" style={{ color: palette.glyph }}>
             Back to sign in
           </Text>
         </Pressable>

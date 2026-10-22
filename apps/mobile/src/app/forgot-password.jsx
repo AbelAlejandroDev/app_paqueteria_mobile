@@ -41,7 +41,7 @@ function Shell({ children }) {
         >
           <View
             className={cn("rounded-2xl border border-border bg-card", compact ? "px-5 py-6" : "p-6")}
-            style={{ shadowColor: "#1D4E4A", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
+            style={{ shadowColor: brand.palette.shadow, shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
           >
             <BrandIdentity centered className="mb-6" />
             {children}
@@ -60,7 +60,7 @@ function BackToSignIn() {
       accessibilityRole="link"
     >
       <ArrowLeft size={16} color={palette.glyph} />
-      <Text className="font-hanken-semibold text-sm" style={{ color: palette.glyph }}>
+      <Text className="font-brand-semibold text-sm" style={{ color: palette.glyph }}>
         Back to sign in
       </Text>
     </Pressable>
@@ -127,9 +127,9 @@ export default function ForgotPasswordScreen() {
           >
             <MailCheck size={38} color={palette.glyph} />
           </View>
-          <Text className="text-center font-hanken-bold text-xl text-foreground">Check your email</Text>
-          <Text className="text-center font-hanken text-sm leading-6 text-muted-foreground">{outcome.message}</Text>
-          <Text className="text-center font-hanken-semibold text-sm text-foreground">{getValues("email")}</Text>
+          <Text className="text-center font-brand-bold text-xl text-foreground">Check your email</Text>
+          <Text className="text-center font-brand text-sm leading-6 text-muted-foreground">{outcome.message}</Text>
+          <Text className="text-center font-brand-semibold text-sm text-foreground">{getValues("email")}</Text>
 
           {/* Como funciona el enlace, segun el backend: se abre en el
               navegador, caduca en 60 minutos y pedir otro anula el anterior. */}
@@ -141,7 +141,7 @@ export default function ForgotPasswordScreen() {
             ].map((line) => (
               <View key={line} className="flex-row gap-2">
                 <View className="mt-[7px] h-1.5 w-1.5 rounded-full" style={{ backgroundColor: palette.glyph }} />
-                <Text className="flex-1 font-hanken text-xs leading-5 text-foreground">{line}</Text>
+                <Text className="flex-1 font-brand text-xs leading-5 text-foreground">{line}</Text>
               </View>
             ))}
           </View>
@@ -168,8 +168,8 @@ export default function ForgotPasswordScreen() {
           <View className="h-20 w-20 items-center justify-center rounded-full bg-amber-100">
             <Info size={38} color="#B45309" />
           </View>
-          <Text className="text-center font-hanken-bold text-xl text-foreground">Contact your center</Text>
-          <Text className="text-center font-hanken text-sm leading-6 text-muted-foreground">{outcome.message}</Text>
+          <Text className="text-center font-brand-bold text-xl text-foreground">Contact your center</Text>
+          <Text className="text-center font-brand text-sm leading-6 text-muted-foreground">{outcome.message}</Text>
           <BackToSignIn />
         </View>
       </Shell>
@@ -180,8 +180,8 @@ export default function ForgotPasswordScreen() {
     <Shell>
       <View className="gap-4">
         <View className="gap-1.5">
-          <Text className="text-center font-hanken-bold text-xl text-foreground">Forgot your password?</Text>
-          <Text className="text-center font-hanken text-sm leading-6 text-muted-foreground">
+          <Text className="text-center font-brand-bold text-xl text-foreground">Forgot your password?</Text>
+          <Text className="text-center font-brand text-sm leading-6 text-muted-foreground">
             {"Enter the email you use to sign in and we'll send you a link to create a new password."}
           </Text>
         </View>
@@ -200,7 +200,7 @@ export default function ForgotPasswordScreen() {
               name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
-                  className="ml-2.5 flex-1 self-stretch font-hanken text-base text-foreground"
+                  className="ml-2.5 flex-1 self-stretch font-brand text-base text-foreground"
                   style={inputTextStyle}
                   placeholder="Email"
                   placeholderTextColor="#A3A19E"
@@ -218,14 +218,14 @@ export default function ForgotPasswordScreen() {
             />
           </View>
           {errors.email ? (
-            <Text className="ml-1 font-hanken text-sm text-destructive">{errors.email.message}</Text>
+            <Text className="ml-1 font-brand text-sm text-destructive">{errors.email.message}</Text>
           ) : null}
         </View>
 
         {outcome?.kind === "error" ? (
           <View className="flex-row gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3" accessibilityRole="alert">
             <AlertCircle size={18} color="#BE123C" />
-            <Text className="flex-1 font-hanken-semibold text-sm leading-5 text-rose-800">{outcome.message}</Text>
+            <Text className="flex-1 font-brand-semibold text-sm leading-5 text-rose-800">{outcome.message}</Text>
           </View>
         ) : null}
 
@@ -235,7 +235,7 @@ export default function ForgotPasswordScreen() {
 
         <View className="flex-row gap-3 rounded-xl p-3" style={{ backgroundColor: palette.tint + "40" }}>
           <ShieldCheck size={20} color={palette.glyph} />
-          <Text className="flex-1 font-hanken text-xs leading-5 text-foreground">
+          <Text className="flex-1 font-brand text-xs leading-5 text-foreground">
             For your security, the link works only once and expires in 60 minutes. We never ask for your
             password by email or phone.
           </Text>
@@ -243,7 +243,7 @@ export default function ForgotPasswordScreen() {
 
         {/* El personal del centro no recibe este correo (el backend responde
             igual a todos): su camino es el administrador. */}
-        <Text className="text-center font-hanken text-xs leading-5 text-muted-foreground">
+        <Text className="text-center font-brand text-xs leading-5 text-muted-foreground">
           Are you center staff? Ask your administrator to send you a reset link.
         </Text>
 

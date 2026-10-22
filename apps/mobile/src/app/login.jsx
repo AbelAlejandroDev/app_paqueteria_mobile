@@ -47,7 +47,7 @@ function Field({ control, name, placeholder, icon: Icon, error, secure, ...input
           name={name}
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              className="ml-2.5 flex-1 self-stretch font-hanken text-base text-foreground"
+              className="ml-2.5 flex-1 self-stretch font-brand text-base text-foreground"
               style={inputTextStyle}
               placeholder={placeholder}
               placeholderTextColor="#94a3b8"
@@ -65,7 +65,7 @@ function Field({ control, name, placeholder, icon: Icon, error, secure, ...input
           </TouchableOpacity>
         ) : null}
       </View>
-      {error ? <Text className="ml-1 font-hanken text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text className="ml-1 font-brand text-sm text-destructive">{error}</Text> : null}
     </View>
   );
 }
@@ -126,10 +126,10 @@ export default function LoginScreen() {
         >
           <View
             className={cn("rounded-2xl border border-border bg-card", compact ? "px-5 py-6" : "p-6")}
-            style={{ shadowColor: "#1D4E4A", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
+            style={{ shadowColor: brand.palette.shadow, shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}
           >
             <BrandIdentity centered className="mb-2" />
-            <Text className="mb-8 text-center font-hanken text-sm text-muted-foreground">
+            <Text className="mb-8 text-center font-brand text-sm text-muted-foreground">
               Sign in to your mailbox
             </Text>
 
@@ -161,7 +161,7 @@ export default function LoginScreen() {
               <View className="-mt-1 items-end">
                 <Link href="/forgot-password" asChild>
                   <TouchableOpacity hitSlop={8} accessibilityRole="link">
-                    <Text className="font-hanken-semibold text-sm" style={{ color: brand.palette.glyph }}>
+                    <Text className="font-brand-semibold text-sm" style={{ color: brand.palette.glyph }}>
                       Forgot password?
                     </Text>
                   </TouchableOpacity>
@@ -171,14 +171,14 @@ export default function LoginScreen() {
               {sessionNotice && !formError ? (
                 <View className="flex-row gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3" accessibilityRole="alert">
                   <AlertCircle size={18} color="#B45309" />
-                  <Text className="flex-1 font-hanken text-sm leading-5 text-amber-900">{sessionNotice}</Text>
+                  <Text className="flex-1 font-brand text-sm leading-5 text-amber-900">{sessionNotice}</Text>
                 </View>
               ) : null}
 
               {activationMessage ? (
                 <View className="flex-row gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <AlertCircle size={18} color="#B45309" />
-                  <Text className="flex-1 font-hanken text-sm leading-5 text-amber-900">
+                  <Text className="flex-1 font-brand text-sm leading-5 text-amber-900">
                     {activationMessage}
                   </Text>
                 </View>
@@ -193,7 +193,7 @@ export default function LoginScreen() {
                   accessibilityLiveRegion="polite"
                 >
                   <AlertCircle size={18} color="#BE123C" />
-                  <Text className="flex-1 font-hanken-semibold text-sm leading-5 text-rose-800">{formError}</Text>
+                  <Text className="flex-1 font-brand-semibold text-sm leading-5 text-rose-800">{formError}</Text>
                 </View>
               ) : null}
 
@@ -210,7 +210,7 @@ export default function LoginScreen() {
                 {isSubmitting ? (
                   <ActivityIndicator color={brand.primaryForeground} />
                 ) : (
-                  <Text className="font-hanken-bold text-base text-primary-foreground">
+                  <Text className="font-brand-bold text-base text-primary-foreground">
                     Sign in
                   </Text>
                 )}

@@ -10,9 +10,13 @@ const NETWORK_MESSAGE =
 export function loginErrorMessage(result) {
   if (result?.network) return NETWORK_MESSAGE;
   if (result?.status === 429) return "Too many sign-in attempts. Please wait a few minutes and try again.";
-  if (result?.status === 401 || result?.code === "Invalid credentials") {
+  // 400 tambien es "credenciales incorrectas": el backend rechaza con "Invalid
+  // body" una contraseña de menos de 6 caracteres antes de comprobar nada, y
+  // para el cliente es lo mismo que una contraseña mal escrita.
+  if (result?.status === 401 || result?.status === 400 || result?.code === "Invalid credentials") {
     return "The email or password is incorrect. Please try again.";
   }
+  if (result?.status >= 500) return "Something went wrong on our side. Please try again in a moment.";
   return result?.message || "We couldn't sign you in. Please try again.";
 }
 
