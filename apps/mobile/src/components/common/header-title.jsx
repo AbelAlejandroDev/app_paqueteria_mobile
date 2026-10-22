@@ -5,7 +5,7 @@ import { brand } from "@/lib/brand";
 /** Titulo de cabecera en la letra y el color del resto del diseño. */
 export function HeaderTitle({ children }) {
   return (
-    <Text className="font-hanken-bold text-[20px] tracking-tight text-ink" numberOfLines={1}>
+    <Text className="font-brand-bold text-[20px] tracking-tight text-ink" numberOfLines={1}>
       {children}
     </Text>
   );

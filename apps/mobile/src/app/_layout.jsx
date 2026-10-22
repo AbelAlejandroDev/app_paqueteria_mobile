@@ -1,14 +1,10 @@
 import "@/global.css";
 
+import { useEffect } from "react";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import {
-  HankenGrotesk_400Regular,
-  HankenGrotesk_500Medium,
-  HankenGrotesk_600SemiBold,
-  HankenGrotesk_700Bold,
-  useFonts,
-} from "@expo-google-fonts/hanken-grotesk";
+import { useFonts } from "expo-font";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
@@ -16,10 +12,14 @@ import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-c
 import { AuthProvider } from "@/context/AuthContext";
 import PushIntentCapture from "@/components/common/push-intent-capture";
 import { setupStorage } from "@/lib/storage";
+import { brandFontFiles } from "@/lib/brand-fonts";
 
 // Conecta el storage nativo (SecureStore + AsyncStorage) al paquete core.
 // Debe ejecutarse antes de la primera petición.
 setupStorage();
+
+// La pantalla de carga se queda hasta tener la tipografia de la marca.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,14 +30,19 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
-  // No se espera a que carguen: el texto sale con la del sistema y cambia al
-  // llegar, que es mejor que retener el arranque por una tipografia.
-  useFonts({
-    HankenGrotesk_400Regular,
-    HankenGrotesk_500Medium,
-    HankenGrotesk_600SemiBold,
-    HankenGrotesk_700Bold,
-  });
+  // Se espera a la tipografia antes de pintar: Android mide el texto con la
+  // fuente que haya y no lo vuelve a medir al llegar la de la marca. Con una
+  // mas ancha que la del sistema (Poppins, en HDG) el texto salia cortado:
+  // "Sign" en vez de "Sign in". Va empaquetada, asi que la espera es minima;
+  // si fallara, se sigue con la del sistema antes que bloquear la app.
+  const [fontsLoaded, fontsError] = useFonts(brandFontFiles);
+  const fontsReady = fontsLoaded || Boolean(fontsError);
+
+  useEffect(() => {
+    if (fontsReady) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsReady]);
+
+  if (!fontsReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

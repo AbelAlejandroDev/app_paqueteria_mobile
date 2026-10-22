@@ -55,7 +55,7 @@ export function Button({
       ) : (
         <>
           {icon ? <View>{icon}</View> : null}
-          <Text className={cn("shrink text-center font-hanken-bold", styles.label, sizing.label, labelClassName)}>{children}</Text>
+          <Text className={cn("shrink text-center font-brand-bold", styles.label, sizing.label, labelClassName)}>{children}</Text>
         </>
       )}
     </Pressable>

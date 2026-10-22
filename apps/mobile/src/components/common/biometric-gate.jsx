@@ -48,7 +48,7 @@ function LockScreen({ onUnlock, unlocking, message, onSignOut }) {
       <View className="gap-2">
         <Text className="text-center text-xl font-semibold text-foreground">App locked</Text>
         <Text className="text-center text-sm leading-6 text-muted-foreground">
-          {message || "Unlock to open your mailbox."}
+          {message || `Unlock to open ${brand.appName || "your mailbox"}.`}
         </Text>
       </View>
 

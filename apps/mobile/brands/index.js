@@ -17,6 +17,10 @@
  * uno solo, las notificaciones de una llegarían a los clientes de la otra.
  * Sin él, la app no puede pedir el token push y no registra el dispositivo.
  *
+ * `name` es la empresa (el logo, la cabecera del panel); `appName` es el
+ * producto, lo que el telefono muestra bajo el icono. Cambiar `appName` toca lo
+ * nativo: un OTA no renombra una app ya instalada, hace falta un build.
+ *
  * `tenantSlug` debe coincidir con la clave de BRAND_EMAIL_CONFIG del backend
  * (src/config/brandEmailConfig.js), que es lo que decide el remitente de los
  * correos de alta.
@@ -41,6 +45,12 @@
  *   - `onPrimary` texto e iconos sobre el color primario. El diseño de The
  *                 Worx usa blanco sobre su verde aunque el contraste calculado
  *                 pediria oscuro.
+ *   - `heroFrom` / `heroTo` el fondo oscuro de la tarjeta de bienvenida del
+ *                 panel y de la tarjeta de pago (de izquierda a derecha).
+ *   - `shadow`  el tinte de las sombras suaves.
+ *
+ * `fonts` son las familias de la marca, una por peso: Android no sintetiza la
+ * negrita de una fuente cargada a mano, asi que cada peso es su propia familia.
  */
 
 const BRANDS = {
@@ -48,6 +58,10 @@ const BRANDS = {
     id: "the_worx",
     tenantSlug: "the_worx",
     name: "The Worx Offices",
+    // El producto: el nombre bajo el icono, en la instalacion y en los avisos.
+    appName: "My Worx Mail",
+    // Como se nombra la marca en una frase ("Welcome to The Worx").
+    shortName: "The Worx",
     slug: "worx-client",
     scheme: "worxclient",
     bundleId: "com.theworxoffices.clientportal",
@@ -68,6 +82,15 @@ const BRANDS = {
       canvas: "#F1FCFA",
       media: "#EEF2F1",
       onPrimary: "#FFFFFF",
+      heroFrom: "#0F3A33",
+      heroTo: "#2F6F62",
+      shadow: "#1D4E4A",
+    },
+    fonts: {
+      regular: "HankenGrotesk_400Regular",
+      medium: "HankenGrotesk_500Medium",
+      semibold: "HankenGrotesk_600SemiBold",
+      bold: "HankenGrotesk_700Bold",
     },
     assets: {
       mark: "icon.png",
@@ -79,31 +102,54 @@ const BRANDS = {
     id: "hdg",
     tenantSlug: "hdg",
     name: "HDG Executive Suites",
+    appName: "My HDG Mail",
+    shortName: "HDG Executive Suites",
     slug: "hdg-client",
     scheme: "hdgclient",
     bundleId: "com.hdgexecutivesuites.clientportal",
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
-    primaryColor: "#5f5971",
-    splashBackground: "#ffffff",
-    androidIconBackground: "#ffffff",
-    markBackground: "#ffffff",
-    // Sin diseño propio todavia: los mismos papeles que The Worx, sobre su
-    // morado en vez del verde.
+    // Manual de marca de HDG: Primary #2F4157, Secondary #577C8E, Accent
+    // #C7D9E5, Background #F4EFEB; complementarios Dark Navy #12203A, Muted
+    // Blue #66809B, Light Gray Blue #DCE2EE, Neutral Gray #727375.
+    primaryColor: "#2F4157",
+    // Splash sobre el Background del manual; el icono y el distintivo, sobre
+    // el Primary (el simbolo blanco va encima).
+    splashBackground: "#F4EFEB",
+    androidIconBackground: "#2F4157",
+    markBackground: "#2F4157",
+    // Cada papel con un color del manual. "success" es el verde de estado
+    // (recibido, completado): es funcional, no de marca, y se comparte.
     palette: {
-      ink: "#2D2A26",
-      tint: "#D9D4E6",
-      glyph: "#5F5971",
-      sand: "#B8B0C8",
+      ink: "#12203A", // Dark Navy: texto
+      tint: "#C7D9E5", // Accent: rellenos suaves y chips
+      glyph: "#577C8E", // Secondary: iconos
+      sand: "#66809B", // Muted Blue: acento secundario
       success: "#00A887",
-      canvas: "#F8F7FB",
-      media: "#EFEEF3",
+      canvas: "#F4EFEB", // Background
+      media: "#DCE2EE", // Light Gray Blue: fondo de fotos
       onPrimary: "#FFFFFF",
+      heroFrom: "#12203A", // Dark Navy -> Primary, ambos del manual
+      heroTo: "#2F4157",
+      shadow: "#12203A",
     },
+    fonts: {
+      regular: "Poppins_400Regular",
+      medium: "Poppins_500Medium",
+      semibold: "Poppins_600SemiBold",
+      bold: "Poppins_700Bold",
+    },
+    // Recursos oficiales (oct. 2026). icon.png, adaptive-icon.png y
+    // monochrome-icon.png salen del icono oficial
+    // (hdg-icono-simple-background-white.webp): el simbolo blanco recortado,
+    // sin redibujarlo, sobre el Primary. Los anteriores estan en old/.
     assets: {
-      mark: "hdg-icono-simple-transparent.png",
-      wordmark: "logo-horizontal-transparent.png",
+      mark: "icon.png",
+      wordmark: "hdg-logo-completo-transparent.png",
       wordmarkOnDark: false,
     },
+    // Login, recuperar y crear contraseña con el logo horizontal oficial en
+    // vez del simbolo con el nombre en texto (el logo ya lleva el nombre).
+    authLogo: "wordmark",
   },
 };
 

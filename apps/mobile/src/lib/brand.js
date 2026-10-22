@@ -4,6 +4,8 @@ const FALLBACK = {
   id: "the_worx",
   tenantSlug: "the_worx",
   name: "Client Portal",
+  appName: "Client Portal",
+  shortName: "Client Portal",
   primaryColor: "#65baaf",
   primaryForeground: "#FFFFFF",
   markBackground: "#0e0d13",
@@ -16,6 +18,15 @@ const FALLBACK = {
     canvas: "#F1FCFA",
     media: "#EEF2F1",
     onPrimary: "#FFFFFF",
+    heroFrom: "#0F3A33",
+    heroTo: "#2F6F62",
+    shadow: "#1D4E4A",
+  },
+  fonts: {
+    regular: "HankenGrotesk_400Regular",
+    medium: "HankenGrotesk_500Medium",
+    semibold: "HankenGrotesk_600SemiBold",
+    bold: "HankenGrotesk_700Bold",
   },
 };
 

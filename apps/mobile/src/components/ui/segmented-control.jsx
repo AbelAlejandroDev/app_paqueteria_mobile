@@ -26,7 +26,7 @@ export function SegmentedControl({ options, value, onChange, className }) {
       contentContainerStyle={{ flexGrow: 1, padding: 6, gap: 6 }}
       // Barra blanca con la sombra suave del resto del diseño.
       style={{
-        shadowColor: "#1D4E4A",
+        shadowColor: brand.palette.shadow,
         shadowOpacity: 0.06,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 3 },
@@ -48,7 +48,7 @@ export function SegmentedControl({ options, value, onChange, className }) {
           >
             <Text
               numberOfLines={1}
-              className={cn("text-sm", active ? "font-hanken-bold text-white" : "font-hanken-semibold text-ink")}
+              className={cn("text-sm", active ? "font-brand-bold text-white" : "font-brand-semibold text-ink")}
             >
               {option.label}
             </Text>

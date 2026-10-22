@@ -1,10 +1,11 @@
 import { Text, View } from "react-native";
 
+import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 /** La sombra suave del diseño, teñida del verde oscuro de la marca. */
 const CARD_SHADOW = {
-  shadowColor: "#1D4E4A",
+  shadowColor: brand.palette.shadow,
   shadowOpacity: 0.06,
   shadowRadius: 14,
   shadowOffset: { width: 0, height: 3 },
@@ -26,11 +27,11 @@ export function CardHeader({ className, ...props }) {
 }
 
 export function CardTitle({ className, ...props }) {
-  return <Text className={cn("font-hanken-bold text-base text-foreground", className)} {...props} />;
+  return <Text className={cn("font-brand-bold text-base text-foreground", className)} {...props} />;
 }
 
 export function CardDescription({ className, ...props }) {
-  return <Text className={cn("font-hanken text-sm leading-5 text-muted-foreground", className)} {...props} />;
+  return <Text className={cn("font-brand text-sm leading-5 text-muted-foreground", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }) {

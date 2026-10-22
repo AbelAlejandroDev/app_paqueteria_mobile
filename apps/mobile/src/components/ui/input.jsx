@@ -23,13 +23,13 @@ export const inputTextStyle = {
 };
 
 export function Label({ className, children }) {
-  return <Text className={cn("font-hanken-semibold text-sm text-foreground", className)}>{children}</Text>;
+  return <Text className={cn("font-brand-semibold text-sm text-foreground", className)}>{children}</Text>;
 }
 
 export function Input({ className, style, ...props }) {
   return (
     <TextInput
-      className={cn("rounded-[10px] border border-input bg-card px-3 font-hanken text-base text-foreground", className)}
+      className={cn("rounded-[10px] border border-input bg-card px-3 font-brand text-base text-foreground", className)}
       style={[{ minHeight: INPUT_MIN_HEIGHT }, inputTextStyle, style]}
       placeholderTextColor="#A3A19E"
       {...props}
@@ -42,7 +42,7 @@ export function Textarea({ className, style, ...props }) {
     <TextInput
       multiline
       textAlignVertical="top"
-      className={cn("min-h-[88px] rounded-[10px] border border-input bg-card p-3 font-hanken text-base text-foreground", className)}
+      className={cn("min-h-[88px] rounded-[10px] border border-input bg-card p-3 font-brand text-base text-foreground", className)}
       style={[{ includeFontPadding: false }, style]}
       placeholderTextColor="#A3A19E"
       {...props}

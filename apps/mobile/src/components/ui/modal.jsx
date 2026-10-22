@@ -49,9 +49,9 @@ export function Modal({ visible, onClose, title, description, children, footer }
           <View className="max-h-[80%] rounded-t-2xl border-t border-border bg-card">
             <View className="flex-row items-start gap-3 border-b border-border p-5">
               <View className="min-w-0 flex-1">
-                <Text className="font-hanken-bold text-lg text-foreground">{title}</Text>
+                <Text className="font-brand-bold text-lg text-foreground">{title}</Text>
                 {description ? (
-                  <Text className="mt-1 font-hanken text-sm leading-5 text-muted-foreground">{description}</Text>
+                  <Text className="mt-1 font-brand text-sm leading-5 text-muted-foreground">{description}</Text>
                 ) : null}
               </View>
               <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Close">
@@ -95,7 +95,7 @@ export function Notice({ tone = "amber", className, children }) {
 
   return (
     <View className={cn("rounded-xl border p-4", styles.container, className)}>
-      <Text className={cn("font-hanken text-sm leading-5", styles.label)}>{children}</Text>
+      <Text className={cn("font-brand text-sm leading-5", styles.label)}>{children}</Text>
     </View>
   );
 }

@@ -60,13 +60,15 @@ module.exports = {
         canvas: brand.palette.canvas,
         media: brand.palette.media,
       },
-      // Una familia por peso: con una fuente cargada a mano, Android no
-      // sintetiza la negrita a partir de fontWeight y la dejaria en regular.
+      // La tipografia de la marca, una familia por peso: con una fuente
+      // cargada a mano, Android no sintetiza la negrita a partir de
+      // fontWeight y la dejaria en regular. The Worx usa Hanken Grotesk y HDG
+      // Poppins; las clases son las mismas (font-brand-*).
       fontFamily: {
-        hanken: ["HankenGrotesk_400Regular"],
-        "hanken-medium": ["HankenGrotesk_500Medium"],
-        "hanken-semibold": ["HankenGrotesk_600SemiBold"],
-        "hanken-bold": ["HankenGrotesk_700Bold"],
+        brand: [brand.fonts.regular],
+        "brand-medium": [brand.fonts.medium],
+        "brand-semibold": [brand.fonts.semibold],
+        "brand-bold": [brand.fonts.bold],
       },
       borderRadius: {
         sm: "2px",
