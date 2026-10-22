@@ -9,10 +9,31 @@ import TermsGate from "@/components/common/terms-gate";
 import BiometricGate from "@/components/common/biometric-gate";
 import NotificationTapHandler from "@/components/common/notification-tap-handler";
 import { canvasHeaderOptions } from "@/components/common/header-title";
+import { brandFont } from "@/lib/brand-fonts";
+import { overWhite } from "@/lib/colors";
+import OnboardingProvider from "@/components/onboarding/onboarding-provider";
+import { TourAnchor } from "@/components/onboarding/tour-anchor";
+// El boton por defecto de las pestañas; se envuelve para que el recorrido pueda
+// medirlo, sin cambiar como se ve ni como responde.
+import { PlatformPressable } from "expo-router/build/react-navigation/elements";
 
 const ACTIVE_COLOR = brand.primaryColor;
-// La tinta de la marca atenuada, no el gris azulado de antes.
-const INACTIVE_COLOR = "#7D7B78";
+// La tinta de cada marca atenuada (The Worx la tiene calida; HDG, azul marino).
+const INACTIVE_COLOR = overWhite(brand.palette.ink, 0.62);
+
+/** Pestaña con ancla para el recorrido: mismo boton, envuelto en una vista medible. */
+function anchoredTabButton(id) {
+  function AnchoredTabButton(props) {
+    return (
+      // alignSelf: la fila de pestañas no estira a sus hijos en alto, y el
+      // ancla media casi cero; asi ocupa la pestaña entera.
+      <TourAnchor id={id} style={{ flex: 1, alignSelf: "stretch" }}>
+        <PlatformPressable {...props} />
+      </TourAnchor>
+    );
+  }
+  return AnchoredTabButton;
+}
 
 /**
  * Equivalente de ClientLayout + ProtectedRoute allow={["CLIENT"]} del web.
@@ -50,11 +71,14 @@ export default function ClientLayout() {
             desbloqueada y las pestanas montadas. */}
         <NotificationTapHandler />
 
+        {/* Dentro de la puerta de terminos y del bloqueo: el tutorial nunca sale
+            en el login, la activacion, el reset ni encima de los terminos. */}
+        <OnboardingProvider>
         <Tabs
           screenOptions={{
             tabBarActiveTintColor: ACTIVE_COLOR,
             tabBarInactiveTintColor: INACTIVE_COLOR,
-            tabBarLabelStyle: { fontFamily: "HankenGrotesk_600SemiBold", fontSize: 11 },
+            tabBarLabelStyle: { fontFamily: brandFont("semibold"), fontSize: 11 },
           }}
         >
           <Tabs.Screen
@@ -73,6 +97,7 @@ export default function ClientLayout() {
             options={{
               title: "Mail",
               headerShown: false,
+              tabBarButton: anchoredTabButton("tab-mail"),
               tabBarIcon: ({ color, size }) => <Mail color={color} size={size} />,
             }}
           />
@@ -83,6 +108,7 @@ export default function ClientLayout() {
               // Centrada y sobre el fondo de lienzo, como Mail y Notifications.
               // La pantalla no repite el titulo debajo.
               ...canvasHeaderOptions,
+              tabBarButton: anchoredTabButton("tab-billing"),
               tabBarIcon: ({ color, size }) => <CreditCard color={color} size={size} />,
             }}
           />
@@ -99,6 +125,7 @@ export default function ClientLayout() {
             name="help"
             options={{
               title: "Help",
+              tabBarButton: anchoredTabButton("tab-help"),
               tabBarIcon: ({ color, size }) => <CircleHelp color={color} size={size} />,
             }}
           />
@@ -108,6 +135,7 @@ export default function ClientLayout() {
           <Tabs.Screen name="notifications" options={{ href: null, headerShown: false, title: "Notifications" }} />
           <Tabs.Screen name="service-requests/new" options={{ href: null, title: "New Request" }} />
         </Tabs>
+        </OnboardingProvider>
       </TermsGate>
     </BiometricGate>
   );

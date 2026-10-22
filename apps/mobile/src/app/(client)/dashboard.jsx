@@ -12,17 +12,18 @@ import { brand } from "@/lib/brand";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { formatCenterAddress, getCenterLabel, getClientName, getMailboxCode } from "@/lib/client-profile";
-import { brandHomeHero, brandWordmarkOnLight } from "@/lib/brand-assets";
+import { brandWordmarkOnLight, homeHeroFor } from "@/lib/brand-assets";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 import { DetailCard } from "@/components/common/mail-item-detail-ui";
 import AccountAlerts from "@/components/common/account-alerts";
+import { TourAnchor } from "@/components/onboarding/tour-anchor";
 
 const CONFERENCE_ROOM_URL = "https://orlando.theworxoffices.com/conference-room/";
 
 /** Verde oscuro de la tarjeta de bienvenida, de izquierda a derecha. */
-const HERO_FROM = "#0F3A33";
-const HERO_TO = "#2F6F62";
+const HERO_FROM = brand.palette.heroFrom;
+const HERO_TO = brand.palette.heroTo;
 
 /** Tonos de "Action Required" cuando hay algo pendiente. */
 const ATTENTION = { icon: "#D97706" };
@@ -51,13 +52,13 @@ function AccessCard({ title, icon: Icon, onPress, notificationCount = 0, externa
             </View>
             {badgeCount > 0 ? (
               <View className="absolute -right-2 -top-2 h-6 min-w-[24px] items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1">
-                <Text className="font-hanken-bold text-[12px] leading-none text-white">
+                <Text className="font-brand-bold text-[12px] leading-none text-white">
                   {badgeCount > 99 ? "99+" : badgeCount}
                 </Text>
               </View>
             ) : null}
           </View>
-          <Text className="flex-1 font-hanken-bold text-[16px] text-ink">{title}</Text>
+          <Text className="flex-1 font-brand-bold text-[16px] text-ink">{title}</Text>
         </View>
         {external ? (
           <ExternalLink size={17} color={brand.palette.ink} />
@@ -83,14 +84,14 @@ function HomeHeader({ centerLabel, hasUnread }) {
             accessibilityLabel={brand.name}
           />
         ) : (
-          <Text className="font-hanken-bold text-[22px] text-ink">{brand.name}</Text>
+          <Text className="font-brand-bold text-[22px] text-ink">{brand.name}</Text>
         )}
 
         {/* Como el logo -mayusculas, negrita, muy espaciado y casi negro- para
             que se lea como parte de el y no como un subtitulo. */}
         {centerLabel ? (
           <Text
-            className="mt-1.5 font-hanken-bold text-[16px] uppercase text-[#141414]"
+            className="mt-1.5 font-brand-bold text-[16px] uppercase text-[#141414]"
             style={{ letterSpacing: 4 }}
             numberOfLines={1}
             adjustsFontSizeToFit
@@ -101,13 +102,14 @@ function HomeHeader({ centerLabel, hasUnread }) {
         ) : null}
       </View>
 
+      <TourAnchor id="notifications-bell" className="rounded-full">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={hasUnread ? "Notifications, unread" : "Notifications"}
         onPress={() => router.push("/notifications")}
         className="h-14 w-14 items-center justify-center rounded-full bg-white active:opacity-80"
         style={{
-          shadowColor: "#1D4E4A",
+          shadowColor: brand.palette.shadow,
           shadowOpacity: 0.1,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },
@@ -119,6 +121,7 @@ function HomeHeader({ centerLabel, hasUnread }) {
           <View className="absolute right-3 top-3 h-3 w-3 rounded-full border-2 border-white bg-rose-600" />
         ) : null}
       </Pressable>
+      </TourAnchor>
     </View>
   );
 }
@@ -127,25 +130,25 @@ function HomeHeader({ centerLabel, hasUnread }) {
  * Tarjeta de bienvenida: nombre del cliente, donde esta su buzon y el numero.
  *
  * El fondo es un degradado verde dibujado con SVG (ya viene con lucide, no
- * añade nada nativo). Si la marca trae foto del edificio se pone encima, con
+ * añade nada nativo). Si el centro del cliente tiene foto se pone encima, con
  * el degradado por delante para que el texto blanco se siga leyendo.
  */
-function WelcomeCard({ clientName, location, mailboxCode }) {
+function WelcomeCard({ clientName, location, mailboxCode, hero }) {
   return (
     <View
       className="overflow-hidden rounded-2xl"
       style={{
         backgroundColor: HERO_FROM,
-        shadowColor: "#0F3A33",
+        shadowColor: brand.palette.heroFrom,
         shadowOpacity: 0.18,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: 6 },
         elevation: 4,
       }}
     >
-      {brandHomeHero ? (
+      {hero ? (
         <Image
-          source={brandHomeHero}
+          source={hero}
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
           contentFit="cover"
           contentPosition="right"
@@ -156,8 +159,8 @@ function WelcomeCard({ clientName, location, mailboxCode }) {
         <Defs>
           <LinearGradient id="welcome" x1="0" y1="0" x2="1" y2="0.35">
             <Stop offset="0" stopColor={HERO_FROM} stopOpacity="1" />
-            <Stop offset="0.55" stopColor={HERO_FROM} stopOpacity={brandHomeHero ? "0.88" : "1"} />
-            <Stop offset="1" stopColor={HERO_TO} stopOpacity={brandHomeHero ? "0.35" : "1"} />
+            <Stop offset="0.55" stopColor={HERO_FROM} stopOpacity={hero ? "0.88" : "1"} />
+            <Stop offset="1" stopColor={HERO_TO} stopOpacity={hero ? "0.35" : "1"} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#welcome)" />
@@ -165,9 +168,9 @@ function WelcomeCard({ clientName, location, mailboxCode }) {
 
       <View className="flex-row items-end gap-3 px-5 py-6">
         <View className="min-w-0 flex-1 gap-1.5">
-          <Text className="font-hanken text-[16px] text-white/85">Welcome back</Text>
+          <Text className="font-brand text-[16px] text-white/85">Welcome back</Text>
           <Text
-            className="font-hanken-bold text-[28px] leading-[34px] tracking-tight text-white"
+            className="font-brand-bold text-[28px] leading-[34px] tracking-tight text-white"
             numberOfLines={2}
             adjustsFontSizeToFit
             minimumFontScale={0.7}
@@ -177,7 +180,7 @@ function WelcomeCard({ clientName, location, mailboxCode }) {
           {location ? (
             <View className="mt-1 flex-row items-start gap-1.5">
               <MapPin size={17} color="#ffffff" style={{ marginTop: 2 }} />
-              <Text className="shrink font-hanken text-[15px] leading-5 text-white/90" numberOfLines={2}>
+              <Text className="shrink font-brand text-[15px] leading-5 text-white/90" numberOfLines={2}>
                 {location}
               </Text>
             </View>
@@ -186,8 +189,8 @@ function WelcomeCard({ clientName, location, mailboxCode }) {
 
         {mailboxCode ? (
           <View className="items-center rounded-2xl border border-white/25 bg-white/15 px-4 py-3">
-            <Text className="font-hanken text-[13px] text-white/85">Mailbox</Text>
-            <Text className="font-hanken-bold text-[22px] text-white">{mailboxCode}</Text>
+            <Text className="font-brand text-[13px] text-white/85">Mailbox</Text>
+            <Text className="font-brand-bold text-[22px] text-white">{mailboxCode}</Text>
           </View>
         ) : null}
       </View>
@@ -242,11 +245,15 @@ export default function DashboardScreen() {
     >
       <HomeHeader centerLabel={getCenterLabel(user)} hasUnread={Boolean(unreadQuery.data)} />
 
-      <WelcomeCard
-        clientName={getClientName(user)}
-        location={formatCenterAddress(user)}
-        mailboxCode={getMailboxCode(user)}
-      />
+      {/* El recorrido de bienvenida empieza resaltando esta tarjeta. */}
+      <TourAnchor id="home-overview">
+        <WelcomeCard
+          clientName={getClientName(user)}
+          location={formatCenterAddress(user)}
+          mailboxCode={getMailboxCode(user)}
+          hero={homeHeroFor(user)}
+        />
+      </TourAnchor>
 
       <AccountAlerts />
 
