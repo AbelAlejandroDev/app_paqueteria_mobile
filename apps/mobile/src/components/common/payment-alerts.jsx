@@ -9,6 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Modal, Notice } from "@/components/ui/modal";
 
 /**
+ * La consulta de avisos de pago, compartida: el tutorial de bienvenida la usa
+ * para no abrirse encima de este aviso. Misma clave y misma funcion, asi que
+ * es una sola peticion en cache para los dos.
+ */
+export const paymentAlertsQuery = {
+  queryKey: ["client-payment-alerts"],
+  queryFn: async () => (await api.get("/client/payment-alerts")).data?.alerts || [],
+  // Si falla no se reintenta en bucle: quedarse sin el aviso es malo, pero
+  // machacar la API en cada pantalla es peor.
+  retry: 1,
+};
+
+/**
  * Aviso de cobro fallido, en una ventana al entrar.
  *
  * Un pago que falla deja el servicio parado, asi que no puede esperar a que el
@@ -22,13 +35,7 @@ export default function PaymentAlerts() {
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState(() => new Set());
 
-  const query = useQuery({
-    queryKey: ["client-payment-alerts"],
-    queryFn: async () => (await api.get("/client/payment-alerts")).data?.alerts || [],
-    // Si falla no se reintenta en bucle: quedarse sin el aviso es malo, pero
-    // machacar la API en cada pantalla es peor.
-    retry: 1,
-  });
+  const query = useQuery(paymentAlertsQuery);
 
   const acknowledge = useMutation({
     mutationFn: async (id) => (await api.patch("/client/notifications/" + id + "/acknowledge")).data,

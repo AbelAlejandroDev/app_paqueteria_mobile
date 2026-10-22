@@ -27,6 +27,7 @@ import {
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
+import { stripeReturnBody } from "@/lib/stripe-return";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -85,8 +86,8 @@ function SummaryLine({ label, value }) {
   if (!hasDisplayValue(value)) return null;
 
   return (
-    <Text className="font-hanken text-[14px] text-ink">
-      <Text className="font-hanken-semibold">{label}: </Text>
+    <Text className="font-brand text-[14px] text-ink">
+      <Text className="font-brand-semibold">{label}: </Text>
       {value}
     </Text>
   );
@@ -184,12 +185,14 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   const pay = useMutation({
     mutationFn: async () => {
       // La misma URL para las dos salidas: la app no distingue entre pagar y
-      // desistir, y en ambos casos hay que volver al item y recargar.
+      // desistir, y en ambos casos hay que volver al item y recargar. A Stripe
+      // no se le manda el deep link (lib/stripe-return): vuelve al portal web
+      // del centro por https, y el navegador lo cierra el cliente.
       const returnUrl = ExpoLinking.createURL("/mail-items/" + mailItemId);
-      const response = await api.post("/client/forwarding/" + request.id + "/checkout-session", {
-        successUrl: returnUrl,
-        cancelUrl: returnUrl,
-      });
+      const response = await api.post(
+        "/client/forwarding/" + request.id + "/checkout-session",
+        stripeReturnBody({ successUrl: returnUrl, cancelUrl: returnUrl })
+      );
 
       const url = response.data?.url;
       if (!url) throw new Error("Stripe did not return a payment URL.");
@@ -227,7 +230,7 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
         {needsAuthentication ? "Verify and pay" : "Pay now"}
       </Button>
 
-      <Text className="mt-1 font-hanken text-[12px] leading-4 text-ink/60">
+      <Text className="mt-1 font-brand text-[12px] leading-4 text-ink/60">
         Payment opens in a secure Stripe page. It can take a moment to show as paid here.
       </Text>
     </NoticeCard>
@@ -299,7 +302,7 @@ function TrackingApprovalCard({ request, onRefresh }) {
         }
       />
 
-      <Text className="mt-2 font-hanken text-[14px] leading-6 text-ink">
+      <Text className="mt-2 font-brand text-[14px] leading-6 text-ink">
         {details.trackingApprovalEstimateCents != null
           ? "This is an estimate. You will see the final price before paying."
           : "The center will price it and show you the final amount before you pay."}
@@ -1150,7 +1153,7 @@ export default function MailItemDetailScreen() {
             ) : (
               <View className="h-full w-full items-center justify-center gap-3 px-6">
                 <ImageIcon size={44} color={brand.palette.glyph} />
-                <Text className="text-center font-hanken-medium text-[14px] text-ink/60">
+                <Text className="text-center font-brand-medium text-[14px] text-ink/60">
                   {hiddenScanCount > 0 ? "Scan files will appear here after completion." : "No package photo available"}
                 </Text>
               </View>
@@ -1170,7 +1173,7 @@ export default function MailItemDetailScreen() {
         <DetailCard className="p-5">
           <CardHeading className="mb-1">Item Details</CardHeading>
           <DetailRow label="Mailbox">
-            {mailbox ? <MailboxChip>{mailbox}</MailboxChip> : <Text className="font-hanken-medium text-[14px] text-ink">-</Text>}
+            {mailbox ? <MailboxChip>{mailbox}</MailboxChip> : <Text className="font-brand-medium text-[14px] text-ink">-</Text>}
           </DetailRow>
           <DetailRow label="Type">
             <TypeChip type={item.type} label={getMailTypeLabel(item.type)} />
@@ -1209,7 +1212,7 @@ export default function MailItemDetailScreen() {
             title={formatStatusDisplay(lastAction.sr?.type || "Request") + " request declined"}
             description={formatDate(lastAction.at)}
           >
-            <Text className="font-hanken text-[14px] leading-6 text-ink">{lastAction.description}</Text>
+            <Text className="font-brand text-[14px] leading-6 text-ink">{lastAction.description}</Text>
           </NoticeCard>
         ) : null}
 
@@ -1221,7 +1224,7 @@ export default function MailItemDetailScreen() {
             <SummaryLine label="Paid" value={formatMoneyFromCents(completedScanRequest.scanDetails.quotedAmountCents)} />
             <SummaryLine label="Paid At" value={formatDate(completedScanRequest.scanDetails.paidAt)} />
             {completedScanRequest.scanDetails.quoteNotes ? (
-              <Text className="mt-2 font-hanken text-[14px] text-ink/60">{completedScanRequest.scanDetails.quoteNotes}</Text>
+              <Text className="mt-2 font-brand text-[14px] text-ink/60">{completedScanRequest.scanDetails.quoteNotes}</Text>
             ) : null}
           </NoticeCard>
         ) : null}
@@ -1299,7 +1302,7 @@ export default function MailItemDetailScreen() {
                     <PdfThumbnail media={media} />
                   ) : (
                     <View className="h-40 items-center justify-center bg-media">
-                      <Text className="font-hanken-medium text-[14px] text-ink/60">{media.kind || "FILE"}</Text>
+                      <Text className="font-brand-medium text-[14px] text-ink/60">{media.kind || "FILE"}</Text>
                     </View>
                   )}
                 </Pressable>
@@ -1311,7 +1314,7 @@ export default function MailItemDetailScreen() {
         <DetailCard className="p-5">
           <CardHeading className="mb-4">History</CardHeading>
           {history.length === 0 ? (
-            <Text className="font-hanken text-[14px] text-ink/60">No events yet.</Text>
+            <Text className="font-brand text-[14px] text-ink/60">No events yet.</Text>
           ) : (
             <Timeline
               events={history}

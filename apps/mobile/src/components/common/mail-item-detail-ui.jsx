@@ -28,7 +28,7 @@ const { palette } = brand;
 
 /** Sombra difusa de las tarjetas, teñida del verde oscuro del diseño. */
 const CARD_SHADOW = {
-  shadowColor: "#1D4E4A",
+  shadowColor: brand.palette.shadow,
   shadowOpacity: 0.06,
   shadowRadius: 20,
   shadowOffset: { width: 0, height: 4 },
@@ -53,17 +53,17 @@ export function DetailCard({ tone = "default", className, style, ...props }) {
 }
 
 export function CardHeading({ className, ...props }) {
-  return <Text className={cn("font-hanken-bold text-[18px] tracking-tight text-ink", className)} {...props} />;
+  return <Text className={cn("font-brand-bold text-[18px] tracking-tight text-ink", className)} {...props} />;
 }
 
 export function CardSubheading({ className, ...props }) {
-  return <Text className={cn("mt-0.5 font-hanken text-[13px] leading-5 text-ink/60", className)} {...props} />;
+  return <Text className={cn("mt-0.5 font-brand text-[13px] leading-5 text-ink/60", className)} {...props} />;
 }
 
 /** "ACTIONS": rotulo pequeño en mayusculas encima de un grupo. */
 export function SectionLabel({ children }) {
   return (
-    <Text className="px-1 font-hanken-bold text-[11px] uppercase tracking-wider text-ink/60">{children}</Text>
+    <Text className="px-1 font-brand-bold text-[11px] uppercase tracking-wider text-ink/60">{children}</Text>
   );
 }
 
@@ -85,7 +85,7 @@ export function ItemHeaderTitle({ title }) {
           />
         ) : null}
       </View>
-      <Text className="font-hanken-bold text-[17px] tracking-tight text-ink" numberOfLines={1}>
+      <Text className="font-brand-bold text-[17px] tracking-tight text-ink" numberOfLines={1}>
         {title}
       </Text>
     </View>
@@ -125,7 +125,7 @@ export function StatusPill({ status, label, closedRequest = false }) {
     // largo se corta con "..." en vez de partirse y hacer mas alta la tarjeta.
     <View className="shrink flex-row items-center gap-1 rounded-md px-2.5 py-1" style={[PILL_SHADOW, { backgroundColor: fill }]}>
       <Icon size={13} color="#ffffff" />
-      <Text className="shrink font-hanken-bold text-[11px] uppercase tracking-wide text-white" numberOfLines={1}>
+      <Text className="shrink font-brand-bold text-[11px] uppercase tracking-wide text-white" numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -140,7 +140,7 @@ export function ViewPill({ label }) {
   return (
     <View className="flex-row items-center gap-1 rounded-md border border-ink/[0.12] bg-white px-2.5 py-1" style={PILL_SHADOW}>
       <Icon size={13} color={isNew ? brand.primaryColor : palette.glyph} />
-      <Text className="font-hanken-medium text-[11px] uppercase text-ink">{label}</Text>
+      <Text className="font-brand-medium text-[11px] uppercase text-ink">{label}</Text>
     </View>
   );
 }
@@ -153,9 +153,9 @@ export function DetailRow({ label, children, value, last = false }) {
         !last && "border-b border-ink/[0.08]"
       )}
     >
-      <Text className="font-hanken text-[14px] text-ink/60">{label}</Text>
+      <Text className="font-brand text-[14px] text-ink/60">{label}</Text>
       {children || (
-        <Text className="max-w-[65%] text-right font-hanken-medium text-[14px] text-ink">{value}</Text>
+        <Text className="max-w-[65%] text-right font-brand-medium text-[14px] text-ink">{value}</Text>
       )}
     </View>
   );
@@ -165,7 +165,7 @@ export function DetailRow({ label, children, value, last = false }) {
 export function MailboxChip({ children }) {
   return (
     <View className="rounded-md border border-primary/40 bg-tint/35 px-2.5 py-0.5">
-      <Text className="font-hanken-bold text-[13px] text-ink">{children}</Text>
+      <Text className="font-brand-bold text-[13px] text-ink">{children}</Text>
     </View>
   );
 }
@@ -178,7 +178,7 @@ export function TypeChip({ type, label }) {
   return (
     <View className="flex-row items-center gap-1 rounded-md border border-ink/[0.12] bg-ink/[0.05] px-2 py-0.5">
       <Icon size={15} color={palette.glyph} />
-      <Text className="font-hanken-bold text-[12px] uppercase text-ink">{label}</Text>
+      <Text className="font-brand-bold text-[12px] uppercase text-ink">{label}</Text>
     </View>
   );
 }
@@ -187,20 +187,20 @@ const ACTION_VARIANTS = {
   // El principal: relleno del color de marca, con la sombra teñida de el.
   primary: {
     container: "rounded-[10px] bg-primary px-4 py-3.5",
-    label: "font-hanken-bold text-[15px] text-white",
+    label: "font-brand-bold text-[15px] text-white",
     iconSize: 20,
     spinner: "#ffffff",
   },
   secondary: {
     container: "rounded-[10px] border border-ink/[0.18] bg-white px-4 py-3",
-    label: "font-hanken-medium text-[14px] text-ink",
+    label: "font-brand-medium text-[14px] text-ink",
     iconSize: 18,
     spinner: palette.ink,
   },
   // Lo que no es un servicio sino un aviso al centro ("Not mine").
   tertiary: {
     container: "mt-1 rounded-[10px] border border-ink/[0.12] bg-white px-4 py-2.5",
-    label: "font-hanken-medium text-[13px] text-ink",
+    label: "font-brand-medium text-[13px] text-ink",
     iconSize: 17,
     spinner: palette.ink,
   },
@@ -287,8 +287,8 @@ export function ProgressNotice({ icon: Icon, title, children }) {
         <Icon size={19} color="#ffffff" />
       </View>
       <View className="min-w-0 flex-1">
-        <Text className="font-hanken-bold text-[14px] text-ink">{title}</Text>
-        <Text className="mt-1 font-hanken text-[13px] leading-5 text-ink/70">{children}</Text>
+        <Text className="font-brand-bold text-[14px] text-ink">{title}</Text>
+        <Text className="mt-1 font-brand text-[13px] leading-5 text-ink/70">{children}</Text>
       </View>
     </View>
   );
@@ -313,13 +313,13 @@ export function Timeline({ events, renderExtra }) {
                 style={{ backgroundColor: isLatest ? brand.primaryColor : palette.sand }}
               />
               <View className="flex-row items-start justify-between gap-3">
-                <Text className="min-w-0 flex-1 font-hanken-bold text-[14px] text-ink">{event.title}</Text>
-                <Text className="font-hanken-medium text-[12px] text-ink/60">{event.time}</Text>
+                <Text className="min-w-0 flex-1 font-brand-bold text-[14px] text-ink">{event.title}</Text>
+                <Text className="font-brand-medium text-[12px] text-ink/60">{event.time}</Text>
               </View>
               {event.description ? (
                 <Text
                   className={cn(
-                    "mt-1 font-hanken text-[13px] leading-5",
+                    "mt-1 font-brand text-[13px] leading-5",
                     isLatest ? "text-ink" : "text-ink/60"
                   )}
                 >
@@ -368,5 +368,5 @@ export function TimelineDetails({ children }) {
 }
 
 export function TimelineDetailLine({ children }) {
-  return <Text className="font-hanken text-[12px] text-ink/70">{children}</Text>;
+  return <Text className="font-brand text-[12px] text-ink/70">{children}</Text>;
 }

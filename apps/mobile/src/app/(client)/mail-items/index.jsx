@@ -76,7 +76,7 @@ function UnreadBadge({ count }) {
 
   return (
     <View className="h-7 min-w-[28px] items-center justify-center rounded-full bg-rose-600 px-2">
-      <Text className="font-hanken-bold text-[12px] text-white">{count > 99 ? "99+" : count}</Text>
+      <Text className="font-brand-bold text-[12px] text-white">{count > 99 ? "99+" : count}</Text>
     </View>
   );
 }
@@ -105,10 +105,10 @@ function FolderBox({ icon: Icon, label, count, notificationCount, attention = fa
           <Icon size={23} color={attention ? ATTENTION_ICON : palette.glyph} />
         </View>
         <View className="min-w-0 flex-1">
-          <Text className="font-hanken-bold text-[16px] text-ink" numberOfLines={1}>
+          <Text className="font-brand-bold text-[16px] text-ink" numberOfLines={1}>
             {label}
           </Text>
-          <Text className="mt-0.5 font-hanken text-[13px] text-ink/60">
+          <Text className="mt-0.5 font-brand text-[13px] text-ink/60">
             {count} item{count === 1 ? "" : "s"}
           </Text>
         </View>
@@ -153,16 +153,34 @@ function FolderCard({ folder }) {
   );
 }
 
+/**
+ * Aviso de almacenaje del paquete, en una linea.
+ *
+ * El importe y la fecha salen del aviso que manda el backend
+ * (`dailyAmountCents`, `firstChargeDate`): antes la app escribia "$25/day", y
+ * la regla es por dia habil. El mensaje completo del backend va al lector de
+ * pantalla, que no tiene el limite de una linea.
+ */
 function StorageFeeNotice({ notice }) {
+  const amount =
+    Number(notice.dailyAmountCents) > 0 ? "$" + (Number(notice.dailyAmountCents) / 100).toFixed(2) : null;
   const message =
     notice.phase === "GRACE_PERIOD_ENDED"
-      ? "$25/day storage fee may apply"
-      : "$25/day storage fee may begin " + notice.firstChargeDate;
+      ? amount
+        ? amount + " per business day storage fee may apply"
+        : notice.title || "Package storage fee may apply"
+      : amount && notice.firstChargeDate
+        ? amount + " per business day fee may begin " + notice.firstChargeDate
+        : notice.title || "Package storage fee approaching";
 
   return (
-    <View className="flex-row items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+    <View
+      className="flex-row items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1"
+      accessible
+      accessibilityLabel={notice.message || message}
+    >
       <AlertCircle size={14} color="#B45309" />
-      <Text className="flex-1 font-hanken-semibold text-[11px] text-amber-900" numberOfLines={1}>
+      <Text className="flex-1 font-brand-semibold text-[11px] text-amber-900" numberOfLines={1}>
         {message}
       </Text>
     </View>
@@ -289,13 +307,13 @@ function MailItemCard({ item, selectionMode = false, selectable = false, selecte
             >
               <TypeIcon size={14} color={palette.glyph} />
             </View>
-            <Text className="min-w-0 flex-1 font-hanken-bold text-[15px] text-ink" numberOfLines={1}>
+            <Text className="min-w-0 flex-1 font-brand-bold text-[15px] text-ink" numberOfLines={1}>
               {item.itemCode || item.id}
             </Text>
             {/* El mismo punto rojo del aviso de la carpeta, para que al entrar
                 se vea de un vistazo cual es el que lo provocaba. */}
             {isUnread ? <View className="h-2 w-2 rounded-full bg-rose-500" /> : null}
-            <Text className="font-hanken-medium text-[12px] text-ink/55" numberOfLines={1}>
+            <Text className="font-brand-medium text-[12px] text-ink/55" numberOfLines={1}>
               {formatEventTime(item.receivedAt || item.createdAt)}
             </Text>
           </View>
@@ -303,7 +321,7 @@ function MailItemCard({ item, selectionMode = false, selectable = false, selecte
           {item.storageFeeNotice ? (
             <StorageFeeNotice notice={item.storageFeeNotice} />
           ) : (
-            <Text className="font-hanken-medium text-[13px] text-ink/60" numberOfLines={1}>
+            <Text className="font-brand-medium text-[13px] text-ink/60" numberOfLines={1}>
               {getMailTypeLabel(item.type)}
             </Text>
           )}
@@ -524,10 +542,10 @@ export default function MailItemsScreen() {
             className="flex-row items-center gap-2"
           >
             <SelectionCheck checked={allSelected} />
-            <Text className="font-hanken-semibold text-[14px] text-ink">Select all</Text>
+            <Text className="font-brand-semibold text-[14px] text-ink">Select all</Text>
           </Pressable>
 
-          <Text className="min-w-0 flex-1 font-hanken text-[14px] text-ink/60" numberOfLines={1}>
+          <Text className="min-w-0 flex-1 font-brand text-[14px] text-ink/60" numberOfLines={1}>
             {selectedItems.length} selected
           </Text>
 
@@ -539,7 +557,7 @@ export default function MailItemsScreen() {
             className="flex-row items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-2"
             style={!selectedItems.length ? { opacity: 0.5 } : null}
           >
-            <Text className="font-hanken-bold text-[14px] text-white">Request</Text>
+            <Text className="font-brand-bold text-[14px] text-white">Request</Text>
             <ChevronDown size={16} color="#ffffff" />
           </Pressable>
         </View>

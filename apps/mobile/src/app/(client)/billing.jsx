@@ -28,6 +28,7 @@ import {
   titleCase,
 } from "@/lib/billing";
 import { overWhite } from "@/lib/colors";
+import { stripeReturnBody } from "@/lib/stripe-return";
 import { formatErrorMessage } from "@/lib/utils";
 import EmptyState from "@/components/common/empty-state";
 import FeeScheduleView, { FEE_SCHEDULE_QUERY_KEY } from "@/components/common/fee-schedule";
@@ -51,8 +52,8 @@ const { palette } = brand;
 const INSET = "rounded-xl border border-ink/[0.08] bg-canvas p-4";
 
 /** Verde oscuro de la tarjeta de pago, el mismo de la bienvenida del panel. */
-const CARD_FROM = "#0F3A33";
-const CARD_TO = "#2F6F62";
+const CARD_FROM = brand.palette.heroFrom;
+const CARD_TO = brand.palette.heroTo;
 
 /** Tarjeta con titulo y descripcion arriba, separados del contenido por una linea. */
 function Section({ title, description, icon: Icon, children }) {
@@ -74,7 +75,7 @@ function StatTile({ label, value, description, icon: Icon }) {
   return (
     <DetailCard className="min-w-[47%] flex-1 p-4">
       <View className="flex-row items-start justify-between gap-2">
-        <Text className="min-w-0 flex-1 font-hanken-bold text-[11px] uppercase tracking-widest text-ink/55">
+        <Text className="min-w-0 flex-1 font-brand-bold text-[11px] uppercase tracking-widest text-ink/55">
           {label}
         </Text>
         <View
@@ -84,9 +85,9 @@ function StatTile({ label, value, description, icon: Icon }) {
           <Icon size={18} color={palette.glyph} />
         </View>
       </View>
-      <Text className="mt-2 font-hanken-bold text-[20px] tracking-tight text-ink">{value}</Text>
+      <Text className="mt-2 font-brand-bold text-[20px] tracking-tight text-ink">{value}</Text>
       {description ? (
-        <Text className="mt-1.5 font-hanken text-[12px] leading-4 text-ink/60">{description}</Text>
+        <Text className="mt-1.5 font-brand text-[12px] leading-4 text-ink/60">{description}</Text>
       ) : null}
     </DetailCard>
   );
@@ -103,8 +104,8 @@ function UsageBar({ label, description, used, included, remaining }) {
   return (
     <View className={INSET}>
       <View className="items-start gap-2">
-        <Text className="font-hanken-bold text-[16px] text-ink">{label}</Text>
-        <Text className="font-hanken text-[14px] leading-5 text-ink/60">{description}</Text>
+        <Text className="font-brand-bold text-[16px] text-ink">{label}</Text>
+        <Text className="font-brand text-[14px] leading-5 text-ink/60">{description}</Text>
         <MailboxChip>{hasIncluded ? used + " / " + included + " included" : used + " used"}</MailboxChip>
       </View>
 
@@ -120,12 +121,12 @@ function UsageBar({ label, description, used, included, remaining }) {
       ) : null}
 
       <View className="mt-3 flex-row items-center justify-between gap-3">
-        <Text className="min-w-0 flex-1 font-hanken text-[12px] text-ink/60">
+        <Text className="min-w-0 flex-1 font-brand text-[12px] text-ink/60">
           {hasIncluded && remaining != null
             ? remaining + " remaining in cycle"
             : "Billed from approved usage and quotes"}
         </Text>
-        <Text className="font-hanken-semibold text-[12px] text-ink">
+        <Text className="font-brand-semibold text-[12px] text-ink">
           {hasIncluded ? percent + "% used" : "Usage tracked"}
         </Text>
       </View>
@@ -138,10 +139,10 @@ function RequestTile({ icon: Icon, label, total, active }) {
     <View className={"min-w-[47%] flex-1 " + INSET}>
       <View className="flex-row items-center gap-2">
         <Icon size={16} color={palette.glyph} />
-        <Text className="font-hanken-bold text-[14px] text-ink">{label}</Text>
+        <Text className="font-brand-bold text-[14px] text-ink">{label}</Text>
       </View>
-      <Text className="mt-2 font-hanken-bold text-[26px] tracking-tight text-ink">{total || 0}</Text>
-      <Text className="mt-0.5 font-hanken text-[12px] text-ink/60">{(active || 0) + " active request(s)"}</Text>
+      <Text className="mt-2 font-brand-bold text-[26px] tracking-tight text-ink">{total || 0}</Text>
+      <Text className="mt-0.5 font-brand text-[12px] text-ink/60">{(active || 0) + " active request(s)"}</Text>
     </View>
   );
 }
@@ -240,15 +241,15 @@ function UsageTab({ data, isLoading, isError, error }) {
 
       <Section title="Pending Approval" description="Quotes waiting for you in this cycle.">
         {pendingForward.length === 0 ? (
-          <Text className={INSET + " font-hanken text-[14px] text-ink/60"}>No pending approvals.</Text>
+          <Text className={INSET + " font-brand text-[14px] text-ink/60"}>No pending approvals.</Text>
         ) : (
           pendingForward.map((item) => (
             <View key={item.id} className={INSET}>
-              <Text className="font-hanken-bold text-[16px] text-ink">Forwarding quote</Text>
-              <Text className="mt-1 font-hanken text-[14px] text-ink/60">
+              <Text className="font-brand-bold text-[16px] text-ink">Forwarding quote</Text>
+              <Text className="mt-1 font-brand text-[14px] text-ink/60">
                 {[item.quotedCarrier, item.quotedService].filter(Boolean).join(" · ") || "Carrier pending"}
               </Text>
-              <Text className="mt-2 font-hanken-bold text-[16px] text-ink">{formatMoneyCents(item.quotedAmountCents)}</Text>
+              <Text className="mt-2 font-brand-bold text-[16px] text-ink">{formatMoneyCents(item.quotedAmountCents)}</Text>
             </View>
           ))
         )}
@@ -270,12 +271,12 @@ function StatementRow({ row }) {
     <View className={"gap-2 " + INSET}>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="font-hanken-bold text-[14px] text-ink">{row.description}</Text>
+          <Text className="font-brand-bold text-[14px] text-ink">{row.description}</Text>
           {mailItemCode ? (
-            <Text className="mt-1 font-hanken text-[12px] text-ink/60">{"Mail item " + mailItemCode}</Text>
+            <Text className="mt-1 font-brand text-[12px] text-ink/60">{"Mail item " + mailItemCode}</Text>
           ) : null}
         </View>
-        <Text className="shrink-0 font-hanken-bold text-[16px] text-ink">
+        <Text className="shrink-0 font-brand-bold text-[16px] text-ink">
           {formatMoneyCents(row.totalAmountCents, row.currency)}
         </Text>
       </View>
@@ -284,9 +285,9 @@ function StatementRow({ row }) {
         <Badge variant="outline" className={statusColor.container} labelClassName={statusColor.label}>
           {titleCase(row.status)}
         </Badge>
-        <Text className="font-hanken text-[12px] text-ink/60">{titleCase(row.type)}</Text>
-        <Text className="font-hanken text-[12px] text-ink/60">·</Text>
-        <Text className="font-hanken text-[12px] text-ink/60">{formatDateOnly(row.createdAt)}</Text>
+        <Text className="font-brand text-[12px] text-ink/60">{titleCase(row.type)}</Text>
+        <Text className="font-brand text-[12px] text-ink/60">·</Text>
+        <Text className="font-brand text-[12px] text-ink/60">{formatDateOnly(row.createdAt)}</Text>
       </View>
     </View>
   );
@@ -334,7 +335,7 @@ function StatementTab({ data, isLoading, isError, error }) {
 
       <Section title="Statement" description="Approved service charges for the current billing cycle.">
         {rows.length === 0 ? (
-          <Text className={INSET + " text-center font-hanken text-[14px] text-ink/60"}>
+          <Text className={INSET + " text-center font-brand text-[14px] text-ink/60"}>
             No statement items for this cycle.
           </Text>
         ) : (
@@ -393,17 +394,17 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
           </Svg>
 
           <View className="flex-row items-center justify-between gap-3">
-            <Text className="font-hanken-bold text-[12px] uppercase tracking-widest text-white/70">{cardBrand}</Text>
+            <Text className="font-brand-bold text-[12px] uppercase tracking-widest text-white/70">{cardBrand}</Text>
             <CreditCard size={20} color="rgba(255,255,255,0.75)" />
           </View>
           {/* Bullets en vez de asteriscos: los `*` se apoyan en la parte alta
               de la línea y quedan desalineados con los cuatro dígitos. */}
-          <Text className="mt-10 font-hanken-semibold text-[20px] tracking-widest text-white">
+          <Text className="mt-10 font-brand-semibold text-[20px] tracking-widest text-white">
             {"•••• •••• •••• " + last4}
           </Text>
           <View className="mt-6 flex-row items-center justify-between gap-4">
-            <Text className="font-hanken text-[12px] text-white/80">{method ? "Default card" : "No payment method"}</Text>
-            <Text className="font-hanken text-[12px] text-white/80">
+            <Text className="font-brand text-[12px] text-white/80">{method ? "Default card" : "No payment method"}</Text>
+            <Text className="font-brand text-[12px] text-white/80">
               {"Expires " + String(expMonth).padStart(2, "0") + "/" + String(expYear).slice(-2)}
             </Text>
           </View>
@@ -419,7 +420,7 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
           Manage Payment
         </ActionButton>
 
-        <Text className="font-hanken text-[14px] leading-5 text-ink/60">
+        <Text className="font-brand text-[14px] leading-5 text-ink/60">
           {portal.available
             ? "Opens the secure Stripe portal. You will come back here when you are done."
             : portal.unavailableReason || "The payment portal is not available for this account."}
@@ -428,13 +429,13 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
 
       <Section title="Subscription" description="Subscription and payment status linked to this account.">
         <View className={INSET}>
-          <Text className="font-hanken-bold text-[14px] text-ink">Plan</Text>
-          <Text className="mt-1.5 font-hanken text-[14px] leading-5 text-ink/60">
+          <Text className="font-brand-bold text-[14px] text-ink">Plan</Text>
+          <Text className="mt-1.5 font-brand text-[14px] leading-5 text-ink/60">
             {plan.stripePlanName || plan.name || titleCase(plan.code) || "Current plan"}
           </Text>
         </View>
         <View className={INSET}>
-          <Text className="font-hanken-bold text-[14px] text-ink">Subscription Status</Text>
+          <Text className="font-brand-bold text-[14px] text-ink">Subscription Status</Text>
           <Badge
             variant="outline"
             className={"mt-3 " + subscriptionColor.container}
@@ -444,7 +445,7 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
           </Badge>
         </View>
         <View className={INSET}>
-          <Text className="font-hanken-bold text-[14px] text-ink">Payment Status</Text>
+          <Text className="font-brand-bold text-[14px] text-ink">Payment Status</Text>
           <Badge variant="outline" className={"mt-3 " + paymentColor.container} labelClassName={paymentColor.label}>
             {titleCase(subscription.paymentStatus || "unknown")}
           </Badge>
@@ -475,14 +476,17 @@ export default function BillingScreen() {
 
   /**
    * El portal de facturación de Stripe es una página web alojada por Stripe,
-   * no un SDK nativo: basta con abrirla. Se usa `openAuthSessionAsync` en vez
-   * de `openBrowserAsync` porque cierra el navegador solo en cuanto Stripe
-   * redirige al `returnUrl`, que aquí es el deep link de la propia app.
+   * no un SDK nativo: basta con abrirla.
+   *
+   * A Stripe no se le manda el deep link (lib/stripe-return): vuelve al portal
+   * web del centro, por https. `openAuthSessionAsync` sigue esperando el deep
+   * link, y cierra solo si algun dia la vuelta redirige a la app; hasta
+   * entonces el cliente cierra el navegador y la pantalla recarga igual.
    */
   const portalMutation = useMutation({
     mutationFn: async () => {
       const returnUrl = Linking.createURL("/billing");
-      const response = await api.post("/client/billing/payment-portal", { returnUrl });
+      const response = await api.post("/client/billing/payment-portal", stripeReturnBody({ returnUrl }));
       const url = response.data?.url;
 
       if (!url) {
@@ -530,7 +534,7 @@ export default function BillingScreen() {
     >
       {/* El titulo "Billing" ya lo pone la cabecera, centrado; aqui solo el
           plan y el ciclo, para no repetirlo. */}
-      <Text className="text-center font-hanken-medium text-[14px] leading-5 text-ink/60">{subtitle}</Text>
+      <Text className="text-center font-brand-medium text-[14px] leading-5 text-ink/60">{subtitle}</Text>
 
       <SegmentedControl options={TABS} value={tab} onChange={setTab} />
 

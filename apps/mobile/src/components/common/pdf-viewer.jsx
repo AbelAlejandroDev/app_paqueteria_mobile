@@ -173,7 +173,7 @@ export function PdfThumbnail({ media, height = 220 }) {
 
       <View className="absolute bottom-2.5 left-2.5 flex-row items-center gap-1 rounded-md bg-ink/80 px-2 py-1">
         <FileText size={12} color="#ffffff" />
-        <Text className="font-hanken-bold text-[11px] uppercase tracking-wide text-white">
+        <Text className="font-brand-bold text-[11px] uppercase tracking-wide text-white">
           {pages ? `PDF · ${pages} ${pages === 1 ? "page" : "pages"}` : "PDF"}
         </Text>
       </View>
@@ -246,7 +246,7 @@ export function PdfViewer({ media, title, fileName, onClose }) {
             <X size={22} color="#ffffff" />
           </Pressable>
 
-          <Text className="min-w-0 flex-1 font-hanken-bold text-[16px] text-white" numberOfLines={1}>
+          <Text className="min-w-0 flex-1 font-brand-bold text-[16px] text-white" numberOfLines={1}>
             {title}
           </Text>
 
@@ -258,7 +258,7 @@ export function PdfViewer({ media, title, fileName, onClose }) {
             style={{ opacity: !pdf.data || saving ? 0.6 : 1 }}
           >
             {saving ? <ActivityIndicator size="small" color="#ffffff" /> : <Download size={17} color="#ffffff" />}
-            <Text className="font-hanken-bold text-[14px] text-white">Download</Text>
+            <Text className="font-brand-bold text-[14px] text-white">Download</Text>
           </Pressable>
         </View>
 
@@ -275,7 +275,7 @@ export function PdfViewer({ media, title, fileName, onClose }) {
           {error ? (
             <View className="absolute inset-0 items-center justify-center gap-4 px-8">
               <FileText size={44} color="#ffffff" />
-              <Text className="text-center font-hanken-medium text-[15px] text-white">
+              <Text className="text-center font-brand-medium text-[15px] text-white">
                 This PDF could not be shown here.
               </Text>
               {url ? (
@@ -283,7 +283,7 @@ export function PdfViewer({ media, title, fileName, onClose }) {
                   onPress={() => Linking.openURL(url)}
                   className="rounded-[10px] border border-white/30 px-4 py-2.5 active:bg-white/10"
                 >
-                  <Text className="font-hanken-medium text-[14px] text-white">Open outside the app</Text>
+                  <Text className="font-brand-medium text-[14px] text-white">Open outside the app</Text>
                 </Pressable>
               ) : null}
             </View>
