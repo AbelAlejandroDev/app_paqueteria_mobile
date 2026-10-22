@@ -21,7 +21,7 @@ function Choice({ icon: Icon, label, onPress }) {
       className="flex-1 items-center gap-1.5 rounded-lg border border-input bg-card py-3 active:bg-muted"
     >
       <Icon size={20} color="#7D7B78" />
-      <Text className="text-xs font-hanken-semibold text-muted-foreground">{label}</Text>
+      <Text className="text-xs font-brand-semibold text-muted-foreground">{label}</Text>
     </Pressable>
   );
 }
@@ -109,10 +109,10 @@ export default function DocumentPickerField({ label, value, onChange, required =
         <View className="flex-row items-center gap-3 rounded-lg border border-input bg-card px-3 py-3">
           <FileText size={18} color="#7D7B78" />
           <View className="min-w-0 flex-1">
-            <Text className="text-sm font-hanken-semibold text-foreground" numberOfLines={1}>
+            <Text className="text-sm font-brand-semibold text-foreground" numberOfLines={1}>
               {value.name}
             </Text>
-            {value.size ? <Text className="font-hanken text-xs text-muted-foreground">{niceSize(value.size)}</Text> : null}
+            {value.size ? <Text className="font-brand text-xs text-muted-foreground">{niceSize(value.size)}</Text> : null}
           </View>
           <Pressable onPress={() => onChange(null)} hitSlop={10} accessibilityLabel={"Remove " + label}>
             <X size={18} color="#be123c" />

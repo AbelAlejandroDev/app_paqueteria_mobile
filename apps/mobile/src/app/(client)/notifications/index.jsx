@@ -37,7 +37,7 @@ const EMPTY_BY_FILTER = {
 
 /** Sombra suave de las tarjetas, la misma que en el resto del diseño. */
 const CARD_SHADOW = {
-  shadowColor: "#1D4E4A",
+  shadowColor: brand.palette.shadow,
   shadowOpacity: 0.06,
   shadowRadius: 14,
   shadowOffset: { width: 0, height: 3 },
@@ -77,15 +77,15 @@ function NotificationRow({ notification, onOpen }) {
       <NotificationIcon notification={notification} />
 
       <View className="min-w-0 flex-1 gap-0.5">
-        <Text numberOfLines={2} className="font-hanken-bold text-[16px] text-ink">
+        <Text numberOfLines={2} className="font-brand-bold text-[16px] text-ink">
           {title}
         </Text>
         {message ? (
-          <Text numberOfLines={2} className="font-hanken text-[14px] leading-5 text-ink/70">
+          <Text numberOfLines={2} className="font-brand text-[14px] leading-5 text-ink/70">
             {message}
           </Text>
         ) : null}
-        <Text className="mt-0.5 font-hanken-medium text-[12px] text-ink/55">{formatEventTime(notification.createdAt)}</Text>
+        <Text className="mt-0.5 font-brand-medium text-[12px] text-ink/55">{formatEventTime(notification.createdAt)}</Text>
       </View>
 
       <ChevronRight size={20} color={palette.ink} />
@@ -111,7 +111,7 @@ function FilterTabs({ value, onChange, unreadCount }) {
           >
             <Text
               numberOfLines={1}
-              className={cn("font-hanken-semibold text-[15px]", active ? "text-white" : "text-ink")}
+              className={cn("font-brand-semibold text-[15px]", active ? "text-white" : "text-ink")}
             >
               {label}
             </Text>
@@ -229,7 +229,7 @@ export default function NotificationsScreen() {
               {markAllRead.isPending ? (
                 <ActivityIndicator size="small" color={brand.primaryColor} />
               ) : (
-                <Text className="font-hanken-medium text-[13px]" style={{ color: palette.glyph }}>
+                <Text className="font-brand-medium text-[13px]" style={{ color: palette.glyph }}>
                   Mark all as read
                 </Text>
               )}

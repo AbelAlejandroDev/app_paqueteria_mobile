@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, ScrollView, Switch, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -33,8 +33,10 @@ function formatForDisplay(value) {
 
 export default function NotificationsScreen() {
   const queryClient = useQueryClient();
-  const [phone, setPhone] = useState("");
-  const [dirty, setDirty] = useState(false);
+  // Lo que el usuario esta escribiendo; null mientras no toca el campo. El
+  // numero que se ve sale del servidor salvo que haya borrador, asi que no se
+  // pisa lo que se escribe y no hace falta copiarlo en un efecto.
+  const [draft, setDraft] = useState(null);
 
   // Se consulta al entrar en esta pantalla, no al abrir Settings.
   const query = useQuery({
@@ -43,18 +45,15 @@ export default function NotificationsScreen() {
   });
 
   const serverPhone = query.data?.phone || "";
-
-  useEffect(() => {
-    // No se pisa lo que el usuario esté escribiendo.
-    if (!dirty) setPhone(formatForDisplay(serverPhone));
-  }, [serverPhone, dirty]);
+  const dirty = draft !== null;
+  const phone = dirty ? draft : formatForDisplay(serverPhone);
 
   const save = useMutation({
     mutationFn: async (payload) => (await api.patch(ENDPOINT, payload)).data,
     onSuccess: (data) => {
+      // La cache ya trae el numero guardado: soltar el borrador lo muestra.
       queryClient.setQueryData(["client-notification-preferences"], data);
-      setDirty(false);
-      setPhone(formatForDisplay(data?.phone));
+      setDraft(null);
     },
     onError: (error) => {
       // Con PHONE_REQUIRED_FOR_TEXT_ALERTS el servidor dice como quedo el
@@ -108,12 +107,12 @@ export default function NotificationsScreen() {
         <CardContent className="gap-4 p-5">
           <View className="flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
-              <Text className="text-base font-hanken-semibold text-foreground">Text Alerts</Text>
+              <Text className="text-base font-brand-semibold text-foreground">Text Alerts</Text>
               {/* No es "cuando llega correo": por SMS solo salen los tres
                   avisos que le cuestan dinero si no reacciona. Prometer un
                   mensaje por cada cosa acabaria con el numero silenciado, y
                   entonces no llegaria tampoco el que importa. */}
-              <Text className="font-hanken mt-1 text-sm leading-5 text-muted-foreground">
+              <Text className="font-brand mt-1 text-sm leading-5 text-muted-foreground">
                 A text message when a payment fails, when your membership falls behind, or before
                 storage fees start. New mail and completed services stay in the app.
               </Text>
@@ -129,7 +128,7 @@ export default function NotificationsScreen() {
           </View>
 
           {!phoneIsValid ? (
-            <Text className="font-hanken text-sm leading-5 text-amber-800">
+            <Text className="font-brand text-sm leading-5 text-amber-800">
               Add a valid phone number to turn these on.
             </Text>
           ) : null}
@@ -138,7 +137,7 @@ export default function NotificationsScreen() {
               10DLC exige que quede dicho a que se accede: que son automaticos,
               cuantos llegan, quien paga el mensaje y como pararlos. Va siempre
               a la vista, tambien apagado: leerlo despues de aceptar no vale. */}
-          <Text className="font-hanken text-xs leading-5 text-muted-foreground">
+          <Text className="font-brand text-xs leading-5 text-muted-foreground">
             By turning this on you agree to receive automated text messages about your mailbox at the
             number below. Message frequency depends on your mail activity. Message and data rates may
             apply. Reply STOP to any message to cancel, or turn this off here.
@@ -151,10 +150,7 @@ export default function NotificationsScreen() {
           <Field label="Phone Number">
             <Input
               value={phone}
-              onChangeText={(value) => {
-                setDirty(true);
-                setPhone(value);
-              }}
+              onChangeText={setDraft}
               keyboardType="phone-pad"
               placeholder="(305) 555-1234"
             />
@@ -168,7 +164,7 @@ export default function NotificationsScreen() {
             Save phone number
           </Button>
 
-          <Text className="font-hanken text-xs leading-4 text-muted-foreground">
+          <Text className="font-brand text-xs leading-4 text-muted-foreground">
             Saved in international format. Turning alerts off does not delete the number.
           </Text>
         </CardContent>
@@ -177,7 +173,7 @@ export default function NotificationsScreen() {
       {!smsAvailable ? (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-5">
-            <Text className="font-hanken text-sm leading-5 text-amber-900">
+            <Text className="font-brand text-sm leading-5 text-amber-900">
               {/* El motivo tal cual lo manda el servidor. */}
               {query.data?.channels?.sms?.reason
                 || "Text message delivery is not set up yet. Your preference is saved and will apply once your center enables it."}

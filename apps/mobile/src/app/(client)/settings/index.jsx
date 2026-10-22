@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { Bell, ChevronRight, LockKeyhole, LogOut, MapPin, ShieldCheck, UsersRound } from "lucide-react-native";
+import { Bell, ChevronRight, FileText, GraduationCap, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, UsersRound } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { brand } from "@/lib/brand";
@@ -9,6 +9,7 @@ import { overWhite } from "@/lib/colors";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
+import { useOnboarding } from "@/components/onboarding/onboarding-provider";
 
 const { palette } = brand;
 
@@ -22,13 +23,18 @@ const SECTIONS = [
   { label: "Authorized Individuals", href: "/settings/authorized-individuals", icon: UsersRound },
   { label: "USPS Verification", href: "/usps-verification", icon: ShieldCheck },
   { label: "Security", href: "/settings/security", icon: LockKeyhole },
+  { label: "Terms & Conditions", href: "/settings/terms", icon: FileText },
+  { label: "Fee Schedule", href: "/settings/fee-schedule", icon: Receipt },
+  // No es una ruta: vuelve a abrir la bienvenida y el recorrido.
+  { label: "App Tutorial", action: "replayTutorial", icon: GraduationCap },
 ];
 
 /** Una seccion: icono en el cuadro verde de marca, nombre y flecha, como las tarjetas del panel. */
-function SectionRow({ label, href, icon: Icon, last }) {
+function SectionRow({ label, href, icon: Icon, last, onPress }) {
   return (
     <Pressable
-      onPress={() => router.push(href)}
+      onPress={onPress || (() => router.push(href))}
+      accessibilityRole="button"
       className={
         last
           ? "flex-row items-center gap-3.5 px-4 py-3.5 active:bg-tint/20"
@@ -41,7 +47,7 @@ function SectionRow({ label, href, icon: Icon, last }) {
       >
         <Icon size={20} color={palette.glyph} />
       </View>
-      <Text className="min-w-0 flex-1 font-hanken-bold text-[16px] text-ink">{label}</Text>
+      <Text className="min-w-0 flex-1 font-brand-bold text-[16px] text-ink">{label}</Text>
       <ChevronRight size={20} color={palette.ink} />
     </Pressable>
   );
@@ -49,6 +55,7 @@ function SectionRow({ label, href, icon: Icon, last }) {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
+  const { replay } = useOnboarding();
   const timeZone = useMemo(() => formatTimeZone(), []);
 
   const confirmLogout = () => {
@@ -80,6 +87,7 @@ export default function SettingsScreen() {
         ? formatStatusDisplay(user.clientContext.servicePlan)
         : "Not assigned",
     },
+    { label: "App", value: brand.appName || brand.name },
     { label: "App Version", value: formatAppVersion() },
     { label: "Time Zone", value: timeZone },
   ];
@@ -92,10 +100,11 @@ export default function SettingsScreen() {
         <DetailCard>
           {SECTIONS.map((section, index) => (
             <SectionRow
-              key={section.href}
+              key={section.href || section.action}
               label={section.label}
               href={section.href}
               icon={section.icon}
+              onPress={section.action === "replayTutorial" ? replay : undefined}
               last={index === SECTIONS.length - 1}
             />
           ))}
@@ -108,7 +117,7 @@ export default function SettingsScreen() {
             <View className="h-10 w-10 items-center justify-center rounded-[10px] bg-rose-50">
               <LogOut size={20} color="#BE123C" />
             </View>
-            <Text className="min-w-0 flex-1 font-hanken-bold text-[16px] text-rose-700">Sign out</Text>
+            <Text className="min-w-0 flex-1 font-brand-bold text-[16px] text-rose-700">Sign out</Text>
           </Pressable>
         </DetailCard>
 

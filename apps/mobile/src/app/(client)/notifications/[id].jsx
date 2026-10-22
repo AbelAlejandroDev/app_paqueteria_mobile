@@ -38,7 +38,7 @@ function RichText({ text, className }) {
             key={index}
             onPress={() => openLink(segment.url)}
             accessibilityRole="link"
-            className="font-hanken-semibold underline"
+            className="font-brand-semibold underline"
             style={{ color: palette.glyph }}
           >
             {segment.url}
@@ -65,7 +65,7 @@ function MessageBody({ message }) {
       {toBlocks(message).map((block, index) => {
         if (block.kind === "heading") {
           return (
-            <Text key={index} className="mt-2 font-hanken-bold text-[16px] text-ink">
+            <Text key={index} className="mt-2 font-brand-bold text-[16px] text-ink">
               {block.text}
             </Text>
           );
@@ -77,14 +77,14 @@ function MessageBody({ message }) {
               {block.items.map((item, itemIndex) => (
                 <View key={itemIndex} className="flex-row gap-2.5">
                   <View className="mt-[9px] h-1.5 w-1.5 rounded-full" style={{ backgroundColor: brand.primaryColor }} />
-                  <RichText text={item} className="min-w-0 flex-1 font-hanken text-[15px] leading-6 text-ink/80" />
+                  <RichText text={item} className="min-w-0 flex-1 font-brand text-[15px] leading-6 text-ink/80" />
                 </View>
               ))}
             </View>
           );
         }
 
-        return <RichText key={index} text={block.text} className="font-hanken text-[15px] leading-6 text-ink/80" />;
+        return <RichText key={index} text={block.text} className="font-brand text-[15px] leading-6 text-ink/80" />;
       })}
     </View>
   );
@@ -98,7 +98,7 @@ function TimeChip({ value }) {
   return (
     <View className="flex-row items-center gap-1.5 rounded-full bg-ink/[0.05] px-3 py-1">
       <Clock3 size={13} color={palette.glyph} />
-      <Text className="font-hanken-medium text-[13px] text-ink/60">{time}</Text>
+      <Text className="font-brand-medium text-[13px] text-ink/60">{time}</Text>
     </View>
   );
 }
@@ -116,7 +116,7 @@ function WelcomeHeader({ notification }) {
       <View className="h-[72px] w-[72px] items-center justify-center rounded-full" style={{ backgroundColor: palette.success }}>
         <CheckCircle2 size={38} color="#ffffff" />
       </View>
-      <Text className="text-center font-hanken-bold text-[22px] leading-7 tracking-tight text-ink">
+      <Text className="text-center font-brand-bold text-[22px] leading-7 tracking-tight text-ink">
         {notification.title}
       </Text>
       {plan ? <MailboxChip>{plan}</MailboxChip> : null}
@@ -130,7 +130,7 @@ function PlainHeader({ notification }) {
   return (
     <View className="items-center gap-3">
       <NotificationIcon notification={notification} size={72} />
-      <Text className="text-center font-hanken-bold text-[22px] leading-7 tracking-tight text-ink">
+      <Text className="text-center font-brand-bold text-[22px] leading-7 tracking-tight text-ink">
         {notificationDisplay(notification).title}
       </Text>
       <TimeChip value={notification.createdAt} />
@@ -152,8 +152,8 @@ function TrackingRow({ trackingNumber }) {
     <View className="flex-row items-center gap-3 rounded-[10px] border border-ink/[0.08] bg-canvas px-4 py-3">
       <Hash size={18} color={palette.glyph} />
       <View className="min-w-0 flex-1">
-        <Text className="font-hanken text-[12px] uppercase tracking-wider text-ink/55">Tracking number</Text>
-        <Text selectable className="font-hanken-bold text-[15px] text-ink">
+        <Text className="font-brand text-[12px] uppercase tracking-wider text-ink/55">Tracking number</Text>
+        <Text selectable className="font-brand-bold text-[15px] text-ink">
           {trackingNumber}
         </Text>
       </View>

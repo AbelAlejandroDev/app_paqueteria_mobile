@@ -87,9 +87,9 @@ export default function AuthorizedIndividualsPanel() {
         <View className="min-w-0 flex-1">
           <View className="flex-row items-center gap-2">
             <UserCheck size={16} color="#7D7B78" />
-            <Text className="text-base font-hanken-bold text-foreground">Authorized individuals</Text>
+            <Text className="text-base font-brand-bold text-foreground">Authorized individuals</Text>
           </View>
-          <Text className="font-hanken mt-1 text-sm leading-5 text-muted-foreground">
+          <Text className="font-brand mt-1 text-sm leading-5 text-muted-foreground">
             Who can receive or pick up mail on your behalf.
           </Text>
         </View>
@@ -141,36 +141,36 @@ export default function AuthorizedIndividualsPanel() {
 
       {query.isLoading ? (
         <View className="rounded-lg border border-border bg-card p-4">
-          <Text className="font-hanken text-sm text-muted-foreground">Loading authorized individuals...</Text>
+          <Text className="font-brand text-sm text-muted-foreground">Loading authorized individuals...</Text>
         </View>
       ) : query.isError ? (
         <View className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <Text className="font-hanken text-sm text-rose-700">
+          <Text className="font-brand text-sm text-rose-700">
             {formatErrorMessage(query.error, "Unable to load authorized individuals")}
           </Text>
         </View>
       ) : activeItems.length === 0 ? (
         <View className="rounded-lg border border-dashed border-input bg-card p-4">
-          <Text className="font-hanken text-sm text-muted-foreground">No authorized individuals yet.</Text>
+          <Text className="font-brand text-sm text-muted-foreground">No authorized individuals yet.</Text>
         </View>
       ) : (
         <View className="gap-2">
           {activeItems.map((item) => (
             <View key={item.id} className="gap-3 rounded-lg border border-border bg-card p-4">
               <View className="flex-row flex-wrap items-center gap-2">
-                <Text className="font-hanken-bold text-foreground">{item.fullName}</Text>
+                <Text className="font-brand-bold text-foreground">{item.fullName}</Text>
                 <Badge variant="outline" className="border-emerald-200 bg-emerald-50" labelClassName="text-emerald-700">
                   Active
                 </Badge>
               </View>
 
               <View className="flex-row flex-wrap gap-x-4 gap-y-1">
-                {item.relationship ? <Text className="font-hanken text-sm text-muted-foreground">{item.relationship}</Text> : null}
-                {item.phone ? <Text className="font-hanken text-sm text-muted-foreground">{item.phone}</Text> : null}
-                {item.email ? <Text className="font-hanken text-sm text-muted-foreground">{item.email}</Text> : null}
+                {item.relationship ? <Text className="font-brand text-sm text-muted-foreground">{item.relationship}</Text> : null}
+                {item.phone ? <Text className="font-brand text-sm text-muted-foreground">{item.phone}</Text> : null}
+                {item.email ? <Text className="font-brand text-sm text-muted-foreground">{item.email}</Text> : null}
               </View>
 
-              {item.notes ? <Text className="font-hanken text-sm text-muted-foreground">{item.notes}</Text> : null}
+              {item.notes ? <Text className="font-brand text-sm text-muted-foreground">{item.notes}</Text> : null}
 
               <Button
                 variant="outline"

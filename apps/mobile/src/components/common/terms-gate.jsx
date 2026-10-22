@@ -15,6 +15,7 @@ import { Modal, Notice } from "@/components/ui/modal";
 import ConnectionError from "@/components/common/connection-error";
 import { FeeScheduleText, useFeeSchedule } from "@/components/common/fee-schedule";
 import { hasPassedTerms, markTermsPassed } from "@/lib/terms-state";
+import { getOnboardingRecord, needsOnboarding } from "@/lib/onboarding-state";
 
 const QUERY_KEY = ["auth-terms-current"];
 
@@ -162,7 +163,10 @@ export default function TermsGate({ children }) {
     onSuccess: async () => {
       await markTermsPassed(user?.id);
       setPassedBefore(true);
-      setWelcomeOpen(true);
+      // Si toca el tutorial de bienvenida, ese ya da la bienvenida: este
+      // aviso saldria a la vez, encima.
+      const onboardingPending = needsOnboarding(user, await getOnboardingRecord(user));
+      if (!onboardingPending) setWelcomeOpen(true);
       await query.refetch();
     },
   });
