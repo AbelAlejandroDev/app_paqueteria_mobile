@@ -63,6 +63,11 @@
       "extends": "base-production",
       "env": { "APP_BRAND": "the_worx" }
     },
+    "worx-production-apk": {
+      "extends": "worx-production",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
 
     "hdg-development": {
       "extends": "base-development",
