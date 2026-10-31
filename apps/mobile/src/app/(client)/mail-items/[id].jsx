@@ -11,7 +11,6 @@ import { AlertCircle, Eye, ImageIcon, Package2, ScanLine, Store, Trash2, Truck }
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
-import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import { formatStatusDisplay, getCurrentStatusColor, getCurrentStatusLabel, getItemStatusDisplay } from "@/lib/mail-item-display";
 import {
@@ -27,6 +26,8 @@ import {
   requestStatusColor,
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
+import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
+import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
 import { US_STATES } from "@/lib/us-states";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -271,11 +272,18 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   // traen dentro la gestion-- y se cobra igual, asi que sin sumarlo aqui el
   // cliente elegiria viendo menos de lo que se le va a cobrar.
   const [immediateFeeCents, setImmediateFeeCents] = useState(0);
+  // El entorno que devolvio la cotizacion: sandbox se avisa, produccion no.
+  const [ratesEnvironment, setRatesEnvironment] = useState("");
 
-  const { user } = useAuth();
   const isLetter = item?.type === "LETTER";
 
+  // Cada cambio de destino deja atras la cotizacion en curso: su respuesta,
+  // si llega despues, es de la direccion anterior.
+  const quoteGeneration = useRef(0);
+
   const clearRates = () => {
+    quoteGeneration.current += 1;
+
     // Se llama en cada pulsación, así que conviene no re-renderizar de balde.
     if (!forwardQuoteId && forwardRates.length === 0 && !selectedRateId) return;
 
@@ -283,6 +291,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     setForwardRates([]);
     setSelectedRateId("");
     setImmediateFeeCents(0);
+    setRatesEnvironment("");
   };
 
   /**
@@ -295,23 +304,20 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     setForwardForm((current) => ({ ...current, [field]: value }));
   };
 
-  const defaultAddress = user?.clientProfile || null;
-  const hasDefaultAddress = Boolean(defaultAddress?.addressLine1 && defaultAddress?.city);
+  // De sus direcciones guardadas, nunca del perfil. Se consulta al abrir el
+  // formulario, no cada vez que se abre el detalle de una pieza.
+  const addressesQuery = useQuery({
+    queryKey: FORWARDING_ADDRESSES_KEY,
+    queryFn: async () => (await api.get(FORWARDING_ADDRESSES_ENDPOINT)).data?.items || [],
+    enabled: forwardOpen,
+  });
+  const defaultAddress = findDefaultAddress(addressesQuery.data);
 
   const useDefaultAddress = () => {
-    if (!hasDefaultAddress) return;
+    if (!defaultAddress) return;
 
     clearRates();
-    setForwardForm((current) => ({
-      ...current,
-      recipient: defaultAddress.fullName || current.recipient,
-      address1: defaultAddress.addressLine1 || "",
-      address2: defaultAddress.addressLine2 || "",
-      city: defaultAddress.city || "",
-      state: defaultAddress.state || "",
-      zip: defaultAddress.zip || "",
-      // El perfil del cliente no guarda teléfono; se conserva el escrito.
-    }));
+    setForwardForm((current) => ({ ...current, ...forwardFieldsFromAddress(defaultAddress) }));
   };
 
   const createRequest = useMutation({
@@ -379,17 +385,21 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       });
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { generation }) => {
+      if (generation !== quoteGeneration.current) return;
       setForwardQuoteId(data?.quoteId || "");
       setForwardRates(data?.rates || []);
       setSelectedRateId(data?.rates?.[0]?.optionId || "");
       setImmediateFeeCents(Number(data?.immediateForwardFeeCents || 0));
+      setRatesEnvironment(data?.environment || "");
     },
-    onError: (error) => {
+    onError: (error, { generation }) => {
+      if (generation !== quoteGeneration.current) return;
       setForwardQuoteId("");
       setForwardRates([]);
       setSelectedRateId("");
       setImmediateFeeCents(0);
+      setRatesEnvironment("");
       Alert.alert("No rates available", formatErrorMessage(error, "Failed to load shipping rates"));
     },
   });
@@ -463,7 +473,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const getRates = () => {
     if (!forwardFormIsValid()) return;
-    quoteRates.mutate();
+    quoteRates.mutate({ generation: quoteGeneration.current });
   };
 
   const continueWithRate = () => {
@@ -619,10 +629,22 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             </Button>
           }
         >
-          {hasDefaultAddress ? (
-            <Button variant="outline" size="sm" onPress={useDefaultAddress}>
-              Use my default address
-            </Button>
+          {defaultAddress ? (
+            <>
+              <Button variant="outline" size="sm" disabled={anyPending} onPress={useDefaultAddress}>
+                Use my default address
+              </Button>
+              {!defaultAddress.phone ? (
+                <Notice tone="amber">This address has no phone number. Add one below: the carrier needs it for the label.</Notice>
+              ) : null}
+              {!isAddressUsableForForwarding(defaultAddress) ? (
+                <Notice tone="amber">{describeAddressVerification(defaultAddress.verification).hint}</Notice>
+              ) : null}
+            </>
+          ) : addressesQuery.isError ? (
+            <Notice tone="amber">We couldn't load your saved addresses. You can enter the address below.</Notice>
+          ) : addressesQuery.isSuccess ? (
+            <Notice tone="amber">You have no default forwarding address. Enter one below, or add it in Settings.</Notice>
           ) : null}
 
           <Field label="Recipient">
@@ -685,7 +707,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-foreground">Shipping rates</Text>
-                <Text className="text-xs text-muted-foreground">Sandbox rates. Labels are not purchased yet.</Text>
+                <Text className="text-xs text-muted-foreground">Get rates for the address above. Changing it clears them.</Text>
+                {ratesEnvironment === "sandbox" ? (
+                  <Text className="mt-1 text-xs font-medium text-amber-900">
+                    Test mode: these are sandbox rates. Any label created is a test label and will not ship.
+                  </Text>
+                ) : null}
               </View>
               <Button variant="outline" size="sm" loading={quoteRates.isPending} onPress={getRates}>
                 Get Rates

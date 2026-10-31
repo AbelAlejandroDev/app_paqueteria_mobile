@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AUTH_USER_UPDATED_EVENT,
   broadcastAuthUserUpdated,
@@ -24,6 +25,16 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // La cache es de quien entro: sin vaciarla, quien entra despues en este
+  // telefono veria un momento los datos del anterior (sus direcciones incluidas).
+  const previousUserId = useRef(user?.id || null);
+  useEffect(() => {
+    const currentUserId = user?.id || null;
+    if (previousUserId.current && previousUserId.current !== currentUserId) queryClient.clear();
+    previousUserId.current = currentUserId;
+  }, [user?.id, queryClient]);
 
   const reload = useCallback(async () => {
     const { accessToken } = await getTokens();
