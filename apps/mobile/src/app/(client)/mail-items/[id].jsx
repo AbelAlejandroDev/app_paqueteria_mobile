@@ -10,7 +10,6 @@ import { ChevronRight, Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "l
 
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
-import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import { formatStatusDisplay, getCurrentStatusLabel, getItemStatusDisplay, getMailTypeLabel } from "@/lib/mail-item-display";
 import {
@@ -339,7 +338,6 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   // cliente elegiria viendo menos de lo que se le va a cobrar.
   const [immediateFeeCents, setImmediateFeeCents] = useState(0);
 
-  const { user } = useAuth();
   const isLetter = item?.type === "LETTER";
 
   const clearRates = () => {
@@ -362,7 +360,19 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     setForwardForm((current) => ({ ...current, [field]: value }));
   };
 
-  const defaultAddress = user?.clientProfile || null;
+  /**
+   * La direccion de reenvio guardada como predeterminada (Settings >
+   * Forwarding Addresses), la misma lista y la misma cache que esa pantalla.
+   * Antes se usaba la direccion del perfil del cliente, que no es una
+   * direccion de reenvio: el formulario se llenaba con datos que el cliente
+   * no reconocia y sin enseñarselos antes.
+   */
+  const savedAddressesQuery = useQuery({
+    queryKey: ["client-forwarding-addresses"],
+    queryFn: async () => (await api.get("/client/forwarding-addresses")).data?.items || [],
+    enabled: forwardOpen,
+  });
+  const defaultAddress = (savedAddressesQuery.data || []).find((address) => address?.isDefault) || null;
   const hasDefaultAddress = Boolean(defaultAddress?.addressLine1 && defaultAddress?.city);
 
   const useDefaultAddress = () => {
@@ -371,13 +381,13 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     clearRates();
     setForwardForm((current) => ({
       ...current,
-      recipient: defaultAddress.fullName || current.recipient,
+      recipient: defaultAddress.name || current.recipient,
       address1: defaultAddress.addressLine1 || "",
       address2: defaultAddress.addressLine2 || "",
       city: defaultAddress.city || "",
       state: defaultAddress.state || "",
       zip: defaultAddress.zip || "",
-      // El perfil del cliente no guarda teléfono; se conserva el escrito.
+      phone: defaultAddress.phone || current.phone,
     }));
   };
 
@@ -686,9 +696,24 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           }
         >
           {hasDefaultAddress ? (
-            <Button variant="outline" size="sm" onPress={useDefaultAddress}>
-              Use my default address
-            </Button>
+            <View className="gap-2 rounded-lg border border-border bg-card p-3">
+              <Text className="font-brand-bold text-[12px] uppercase tracking-wider text-ink/60">Your default address</Text>
+              <View>
+                <Text className="font-brand-semibold text-[14px] text-ink">{defaultAddress.name}</Text>
+                <Text className="font-brand text-[13px] leading-5 text-ink/70">
+                  {[
+                    defaultAddress.addressLine1,
+                    defaultAddress.addressLine2,
+                    [defaultAddress.city, [defaultAddress.state, defaultAddress.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                </Text>
+              </View>
+              <Button variant="outline" size="sm" onPress={useDefaultAddress}>
+                Use this address
+              </Button>
+            </View>
           ) : null}
 
           <Field label="Recipient">

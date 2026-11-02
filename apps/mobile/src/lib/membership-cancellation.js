@@ -7,7 +7,7 @@
  */
 
 const STATUS_LABELS = {
-  PENDING: "Requested — waiting for your center",
+  PENDING: "Requested, waiting for your center",
   APPROVED: "Approved by your center",
   SCHEDULED: "Scheduled",
   REJECTED: "Not approved",

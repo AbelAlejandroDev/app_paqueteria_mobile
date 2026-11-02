@@ -95,7 +95,7 @@ export function buildWelcomeSlides({ plan, brandName = "" } = {}) {
       key: "welcome",
       kind: "welcome",
       title: brandName ? `Welcome to ${brandName}` : "Welcome",
-      description: "Your virtual office, mail, and packages — all in one place.",
+      description: "Your virtual office, mail, and packages, all in one place.",
     },
     {
       key: "mailbox",
