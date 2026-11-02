@@ -17,6 +17,8 @@ export default function SettingsLayout() {
       <Stack.Screen name="security" options={{ title: "Security" }} />
       <Stack.Screen name="terms" options={{ title: "Terms & Conditions" }} />
       <Stack.Screen name="fee-schedule" options={{ title: "Fee Schedule" }} />
+      <Stack.Screen name="membership" options={{ title: "Cancel Membership" }} />
+      <Stack.Screen name="delete-account" options={{ title: "Delete Account" }} />
     </Stack>
   );
 }

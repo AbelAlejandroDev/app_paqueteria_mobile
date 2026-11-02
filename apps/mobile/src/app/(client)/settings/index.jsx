@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { Bell, ChevronRight, FileText, GraduationCap, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, UsersRound } from "lucide-react-native";
+import { Bell, CalendarX, ChevronRight, FileText, GraduationCap, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, Trash2, UsersRound } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { brand } from "@/lib/brand";
@@ -29,8 +29,19 @@ const SECTIONS = [
   { label: "App Tutorial", action: "replayTutorial", icon: GraduationCap },
 ];
 
+/**
+ * Membership & Account: dar de baja la membresia (la misma tarjeta que en
+ * Billing → Payment, que sigue alli) y pedir el borrado de la cuenta, que es
+ * otra cosa y va aparte. Google Play pide que borrar la cuenta se encuentre
+ * facil.
+ */
+const ACCOUNT_SECTIONS = [
+  { label: "Cancel Membership", href: "/settings/membership", icon: CalendarX },
+  { label: "Delete Account", href: "/settings/delete-account", icon: Trash2, danger: true },
+];
+
 /** Una seccion: icono en el cuadro verde de marca, nombre y flecha, como las tarjetas del panel. */
-function SectionRow({ label, href, icon: Icon, last, onPress }) {
+function SectionRow({ label, href, icon: Icon, last, onPress, danger = false }) {
   return (
     <Pressable
       onPress={onPress || (() => router.push(href))}
@@ -41,13 +52,15 @@ function SectionRow({ label, href, icon: Icon, last, onPress }) {
           : "flex-row items-center gap-3.5 border-b border-border px-4 py-3.5 active:bg-tint/20"
       }
     >
+      {/* Borrar la cuenta en rojo, como Sign out: se distingue de un vistazo
+          de cancelar la membresia. */}
       <View
         className="h-10 w-10 items-center justify-center rounded-[10px]"
-        style={{ backgroundColor: overWhite(palette.tint, 0.4) }}
+        style={{ backgroundColor: danger ? "#FFF1F2" : overWhite(palette.tint, 0.4) }}
       >
-        <Icon size={20} color={palette.glyph} />
+        <Icon size={20} color={danger ? "#BE123C" : palette.glyph} />
       </View>
-      <Text className="min-w-0 flex-1 font-brand-bold text-[16px] text-ink">{label}</Text>
+      <Text className={`min-w-0 flex-1 font-brand-bold text-[16px] ${danger ? "text-rose-700" : "text-ink"}`}>{label}</Text>
       <ChevronRight size={20} color={palette.ink} />
     </Pressable>
   );
@@ -109,6 +122,22 @@ export default function SettingsScreen() {
             />
           ))}
         </DetailCard>
+
+        <View className="gap-2">
+          <Text className="px-1 font-brand-bold text-[13px] uppercase tracking-[0.12em] text-ink/60">Membership & Account</Text>
+          <DetailCard>
+            {ACCOUNT_SECTIONS.map((section, index) => (
+              <SectionRow
+                key={section.href}
+                label={section.label}
+                href={section.href}
+                icon={section.icon}
+                danger={section.danger}
+                last={index === ACCOUNT_SECTIONS.length - 1}
+              />
+            ))}
+          </DetailCard>
+        </View>
 
         {/* Cerrar sesion vivia en Security, que ahora solo guarda ajustes.
             Va aparte porque es una accion, no una preferencia. */}
