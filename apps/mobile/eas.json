@@ -87,7 +87,9 @@
     }
   },
   "submit": {
-    "worx-production": {},
+    "worx-production": {
+      "ios": { "ascAppId": "6822867406" }
+    },
     "hdg-production": {}
   }
 }
