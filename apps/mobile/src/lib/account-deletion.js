@@ -29,6 +29,21 @@ export const DELETION_STATUS_COPY = {
     title: "Deletion request approved",
     body: "Your personal data will be deleted, except the records the law requires us to keep. We'll confirm by email when it's done.",
   },
+  PROCESSING: {
+    tone: "amber",
+    title: "Deleting your account",
+    body: "Your center approved the request and your account is being deleted. It can no longer be withdrawn.",
+  },
+  LEGAL_REVIEW_REQUIRED: {
+    tone: "amber",
+    title: "Deleted, some records under legal review",
+    body: "Your account and personal data were deleted. A few records that the law may require us to keep are being reviewed; they are kept apart and not used for anything else.",
+  },
+  FAILED_RETRYABLE: {
+    tone: "amber",
+    title: "Deleting your account",
+    body: "Your account is being deleted. One step is taking longer than expected; it will be retried automatically.",
+  },
   REJECTED: {
     tone: "rose",
     title: "Deletion request not approved",

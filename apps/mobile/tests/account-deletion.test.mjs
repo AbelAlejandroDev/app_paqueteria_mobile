@@ -97,3 +97,13 @@ test("la pantalla explica la regla de los 15 dias con los dias que manda el serv
   assert.match(screen, /Deleting your account also starts the cancellation of your membership/);
   assert.match(screen, /describeNoticeRule\(data\?\.membership\?\.cancellation\?\.noticePeriodDays \?\? data\?\.membership\?\.plan\?\.noticePeriodDays\)/);
 });
+
+test("los estados del procesamiento tienen texto para el cliente", () => {
+  assert.match(deletionStatusCopy("PROCESSING").body, /can no longer be withdrawn/);
+  assert.match(deletionStatusCopy("LEGAL_REVIEW_REQUIRED").body, /kept apart/);
+  assert.match(deletionStatusCopy("FAILED_RETRYABLE").body, /retried automatically/);
+  // Retirar o pedir otra lo decide el servidor (canWithdraw, canRequest).
+  const screen = read("src/app/(client)/settings/delete-account.jsx");
+  assert.match(screen, /request\?\.canWithdraw/);
+  assert.match(screen, /data\?\.canRequest/);
+});
