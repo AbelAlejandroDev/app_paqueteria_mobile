@@ -125,6 +125,8 @@ export default function ClientLayout() {
             name="help"
             options={{
               title: "Help",
+              // Help tiene su propio Stack (Terms & Conditions y Fee Schedule).
+              headerShown: false,
               tabBarButton: anchoredTabButton("tab-help"),
               tabBarIcon: ({ color, size }) => <CircleHelp color={color} size={size} />,
             }}

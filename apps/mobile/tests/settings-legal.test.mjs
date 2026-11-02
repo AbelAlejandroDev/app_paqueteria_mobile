@@ -40,3 +40,20 @@ test("Fee Schedule reutiliza el componente de Billing", () => {
   assert.match(screen, /import FeeScheduleView, \{ FEE_SCHEDULE_QUERY_KEY \} from "@\/components\/common\/fee-schedule"/);
   assert.match(screen, /<FeeScheduleView \/>/);
 });
+
+test("Help tiene un recuadro con Terms & Conditions y Fee Schedule que vuelve a Help", () => {
+  const help = read("src/app/(client)/help/index.jsx");
+  assert.match(help, /href="\/help\/terms"/);
+  assert.match(help, /href="\/help\/fee-schedule"/);
+  assert.ok(help.indexOf('"/help/terms"') < help.indexOf('"/help/fee-schedule"'), "Terms primero, Fee Schedule debajo");
+
+  // Las mismas pantallas que Settings, sin copiar codigo.
+  assert.match(read("src/app/(client)/help/terms.jsx"), /export \{ default \} from "\.\.\/settings\/terms";/);
+  assert.match(read("src/app/(client)/help/fee-schedule.jsx"), /export \{ default \} from "\.\.\/settings\/fee-schedule";/);
+
+  // Stack propio: la flecha de vuelta regresa a Help.
+  const layout = read("src/app/(client)/help/_layout.jsx");
+  assert.match(layout, /name="terms" options=\{\{ title: "Terms & Conditions" \}\}/);
+  assert.match(layout, /name="fee-schedule" options=\{\{ title: "Fee Schedule" \}\}/);
+  assert.equal(fs.existsSync(path.join(root, "src/app/(client)/help.jsx")), false);
+});

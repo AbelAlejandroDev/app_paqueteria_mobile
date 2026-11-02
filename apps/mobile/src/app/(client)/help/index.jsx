@@ -1,7 +1,9 @@
-import { Linking, ScrollView, Text, View } from "react-native";
-import { Mail, Phone } from "lucide-react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { router } from "expo-router";
+import { ChevronRight, FileText, Mail, Phone, Receipt } from "lucide-react-native";
 import { getCurrentCenterName } from "@paqueteria/core";
 import { brand } from "@/lib/brand";
+import { overWhite } from "@/lib/colors";
 
 import { useAuth } from "@/context/AuthContext";
 import PageTitle from "@/components/common/page-title";
@@ -80,6 +82,36 @@ function ContactRow({ title, value, icon: Icon, url, actionLabel, last = false }
   );
 }
 
+/**
+ * Un documento del centro: icono en el cuadro de marca, nombre y flecha, igual
+ * que las filas de Settings. Abre la pantalla dentro del Stack de Help.
+ */
+function DocumentRow({ label, description, href, icon: Icon, last = false }) {
+  return (
+    <Pressable
+      onPress={() => router.push(href)}
+      accessibilityRole="button"
+      className={
+        last
+          ? "flex-row items-center gap-3.5 px-4 py-3.5 active:bg-tint/20"
+          : "flex-row items-center gap-3.5 border-b border-border px-4 py-3.5 active:bg-tint/20"
+      }
+    >
+      <View
+        className="h-10 w-10 items-center justify-center rounded-[10px]"
+        style={{ backgroundColor: overWhite(brand.palette.tint, 0.4) }}
+      >
+        <Icon size={20} color={brand.palette.glyph} />
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="font-brand-bold text-[16px] text-ink">{label}</Text>
+        <Text className="font-brand text-[13px] leading-5 text-ink/60">{description}</Text>
+      </View>
+      <ChevronRight size={20} color={brand.palette.ink} />
+    </Pressable>
+  );
+}
+
 export default function HelpScreen() {
   const { user } = useAuth();
   const contact = getCenterContact(user);
@@ -108,6 +140,28 @@ export default function HelpScreen() {
             icon={Phone}
             url={"tel:" + contact.supportPhone}
             actionLabel="Call"
+            last
+          />
+        </CardContent>
+      </Card>
+
+      {/* Los documentos del centro, los mismos que en Settings. */}
+      <Card>
+        <CardContent className="p-0">
+          <Text className="px-4 pb-1 pt-4 font-brand-bold text-[11px] uppercase tracking-wider text-ink/60">
+            Documents
+          </Text>
+          <DocumentRow
+            label="Terms & Conditions"
+            description="The current terms of your mailbox center."
+            href="/help/terms"
+            icon={FileText}
+          />
+          <DocumentRow
+            label="Fee Schedule"
+            description="Your center's fees for services."
+            href="/help/fee-schedule"
+            icon={Receipt}
             last
           />
         </CardContent>
