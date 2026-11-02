@@ -48,6 +48,8 @@
  *   - `heroFrom` / `heroTo` el fondo oscuro de la tarjeta de bienvenida del
  *                 panel y de la tarjeta de pago (de izquierda a derecha).
  *   - `shadow`  el tinte de las sombras suaves.
+ *   - `border` / `mutedForeground` (opcionales) el borde y el texto
+ *                 secundario; sin ellos se derivan de `ink`.
  *
  * `fonts` son las familias de la marca, una por peso: Android no sintetiza la
  * negrita de una fuente cargada a mano, asi que cada peso es su propia familia.
@@ -112,25 +114,31 @@ const BRANDS = {
     // #C7D9E5, Background #F4EFEB; complementarios Dark Navy #12203A, Muted
     // Blue #66809B, Light Gray Blue #DCE2EE, Neutral Gray #727375.
     primaryColor: "#2F4157",
-    // Splash sobre el Background del manual; el icono y el distintivo, sobre
-    // el Primary (el simbolo blanco va encima).
-    splashBackground: "#F4EFEB",
-    androidIconBackground: "#2F4157",
-    markBackground: "#2F4157",
-    // Cada papel con un color del manual. "success" es el verde de estado
-    // (recibido, completado): es funcional, no de marca, y se comparte.
+    // El icono aprobado es el logo a color sobre blanco: el splash, la capa
+    // de fondo del icono adaptativo y el cuadro del distintivo van en blanco
+    // para que no aparezca un recuadro de otro color alrededor.
+    splashBackground: "#FFFFFF",
+    androidIconBackground: "#FFFFFF",
+    markBackground: "#FFFFFF",
+    // Paleta definitiva (oct. 2026): primary, buttonPrimary y textPrimary
+    // #2F4157; secondary, textSecondary y link #577C8E; accent y border
+    // #C7D9E5; background #F4EFEB; surface #FFFFFF. "success" es el verde de
+    // estado (recibido, completado): es funcional, no de marca, y se comparte;
+    // error y aviso tampoco cambian.
     palette: {
-      ink: "#12203A", // Dark Navy: texto
-      tint: "#C7D9E5", // Accent: rellenos suaves y chips
-      glyph: "#577C8E", // Secondary: iconos
+      ink: "#2F4157", // textPrimary
+      tint: "#C7D9E5", // accent: rellenos suaves y chips
+      glyph: "#577C8E", // secondary: iconos y enlaces
       sand: "#66809B", // Muted Blue: acento secundario
       success: "#00A887",
-      canvas: "#F4EFEB", // Background
+      canvas: "#F4EFEB", // background
       media: "#DCE2EE", // Light Gray Blue: fondo de fotos
-      onPrimary: "#FFFFFF",
-      heroFrom: "#12203A", // Dark Navy -> Primary, ambos del manual
-      heroTo: "#2F4157",
-      shadow: "#12203A",
+      onPrimary: "#FFFFFF", // buttonText
+      border: "#C7D9E5", // border
+      mutedForeground: "#577C8E", // textSecondary
+      heroFrom: "#2F4157", // primary -> secondary: azul marino sin oscurecer
+      heroTo: "#577C8E",
+      shadow: "#2F4157",
     },
     fonts: {
       regular: "Poppins_400Regular",
@@ -138,10 +146,11 @@ const BRANDS = {
       semibold: "Poppins_600SemiBold",
       bold: "Poppins_700Bold",
     },
-    // Recursos oficiales (oct. 2026). icon.png, adaptive-icon.png y
-    // monochrome-icon.png salen del icono oficial
-    // (hdg-icono-simple-background-white.webp): el simbolo blanco recortado,
-    // sin redibujarlo, sobre el Primary. Los anteriores estan en old/.
+    // Icono aprobado (oct. 2026): icon.jpg, el logo HDG a color sobre blanco,
+    // sin "Executive Suites". icon.png, adaptive-icon.png (logo dentro de la
+    // zona segura) y monochrome-icon.png (silueta) salen de el sin
+    // redibujarlo; generated/ lo genera `npm run icons -- hdg`. Los
+    // anteriores estan en old/.
     assets: {
       mark: "icon.png",
       wordmark: "hdg-logo-completo-transparent.png",

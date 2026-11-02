@@ -18,7 +18,9 @@ module.exports = {
         // Los tokens genericos salen de la paleta de la marca: asi cada
         // pantalla que usa bg-background, text-foreground o border-border
         // queda con el lienzo, la tinta y los bordes del diseño sin tocarla.
-        border: mixWithWhite(palette.ink, 0.1),
+        // Una marca puede fijar su borde y su texto secundario (HDG); si no,
+        // salen de la tinta.
+        border: palette.border || mixWithWhite(palette.ink, 0.1),
         input: mixWithWhite(palette.ink, 0.14),
         ring: brand.primaryColor,
         background: palette.canvas,
@@ -37,7 +39,7 @@ module.exports = {
         },
         muted: {
           DEFAULT: mixWithWhite(palette.ink, 0.06),
-          foreground: mixWithWhite(palette.ink, 0.62),
+          foreground: palette.mutedForeground || mixWithWhite(palette.ink, 0.62),
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",

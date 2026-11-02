@@ -1,7 +1,8 @@
 /**
  * Genera los iconos de app a partir de los originales de cada marca.
  *
- *   npm run icons
+ *   npm run icons            todas las marcas
+ *   npm run icons -- hdg     solo esa marca
  *
  * Existe porque los originales no sirven tal cual:
  *
@@ -74,7 +75,13 @@ async function generate(brand) {
 }
 
 (async () => {
-  for (const brand of Object.values(BRANDS)) {
+  // `npm run icons -- hdg` regenera solo esa marca; sin argumentos, todas.
+  const only = process.argv.slice(2);
+  const unknown = only.filter((id) => !BRANDS[id]);
+  if (unknown.length) throw new Error("Marca desconocida: " + unknown.join(", "));
+  const brands = only.length ? only.map((id) => BRANDS[id]) : Object.values(BRANDS);
+
+  for (const brand of brands) {
     const result = await generate(brand);
     console.log(
       `${result.brand.padEnd(10)} ${ICON_SIZE}x${ICON_SIZE}  fondo ${result.background} ` +
