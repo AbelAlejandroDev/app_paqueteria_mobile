@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { Bell, CalendarX, ChevronRight, FileText, GraduationCap, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, Trash2, UsersRound } from "lucide-react-native";
+import * as WebBrowser from "expo-web-browser";
+import { Bell, CalendarX, ChevronRight, ExternalLink, FileText, GraduationCap, Lock, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, Trash2, UsersRound } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { brand } from "@/lib/brand";
 import { overWhite } from "@/lib/colors";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
+import { privacyPolicyFor } from "@/lib/legal-links";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
@@ -41,7 +43,7 @@ const ACCOUNT_SECTIONS = [
 ];
 
 /** Una seccion: icono en el cuadro verde de marca, nombre y flecha, como las tarjetas del panel. */
-function SectionRow({ label, href, icon: Icon, last, onPress, danger = false }) {
+function SectionRow({ label, href, icon: Icon, last, onPress, danger = false, external = false }) {
   return (
     <Pressable
       onPress={onPress || (() => router.push(href))}
@@ -61,7 +63,8 @@ function SectionRow({ label, href, icon: Icon, last, onPress, danger = false }) 
         <Icon size={20} color={danger ? "#BE123C" : palette.glyph} />
       </View>
       <Text className={`min-w-0 flex-1 font-brand-bold text-[16px] ${danger ? "text-rose-700" : "text-ink"}`}>{label}</Text>
-      <ChevronRight size={20} color={palette.ink} />
+      {/* Lo que sale de la app lleva el mismo icono que Conference Room en el panel. */}
+      {external ? <ExternalLink size={17} color={palette.ink} /> : <ChevronRight size={20} color={palette.ink} />}
     </Pressable>
   );
 }
@@ -70,6 +73,8 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { replay } = useOnboarding();
   const timeZone = useMemo(() => formatTimeZone(), []);
+  // De la organizacion del usuario: HDG no hereda la de The Worx.
+  const privacyPolicy = privacyPolicyFor(user?.tenant?.slug);
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [
@@ -138,6 +143,23 @@ export default function SettingsScreen() {
             ))}
           </DetailCard>
         </View>
+
+        {/* Legal: la Privacy Policy se publica y se mantiene en la web de la
+            organizacion; aqui solo se abre, en el navegador del sistema. */}
+        {privacyPolicy ? (
+          <View className="gap-2">
+            <Text className="px-1 font-brand-bold text-[13px] uppercase tracking-[0.12em] text-ink/60">Legal</Text>
+            <DetailCard>
+              <SectionRow
+                label="Privacy Policy"
+                icon={Lock}
+                external
+                onPress={() => WebBrowser.openBrowserAsync(privacyPolicy.url)}
+                last
+              />
+            </DetailCard>
+          </View>
+        ) : null}
 
         {/* Cerrar sesion vivia en Security, que ahora solo guarda ajustes.
             Va aparte porque es una accion, no una preferencia. */}
