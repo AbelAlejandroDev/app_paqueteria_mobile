@@ -148,6 +148,11 @@ module.exports = {
             "Allow camera access to photograph your USPS verification documents.",
           photosPermission:
             "Allow photo access to attach your USPS verification documents.",
+          // Solo se toman y eligen fotos (mediaTypes: ["images"]), nunca video
+          // ni audio. false quita NSMicrophoneUsageDescription en iOS y bloquea
+          // RECORD_AUDIO en Android aunque otra libreria lo pida: un permiso
+          // que no se usa es una pregunta mas en la revision de las tiendas.
+          microphonePermission: false,
         },
       ],
     ],

@@ -30,6 +30,16 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Claves privadas de las tiendas. La cuenta de servicio de Google Play vive en
+# EAS (eas credentials), no en el repo; esto es por si alguien la descarga aqui.
+# google-services.json NO entra: es publico y va dentro del build.
+*service-account*.json
+google-play*.json
+*.p8
+*.p12
+*.keystore
+*.jks
+
 # local env files (la URL de la API de cada build va en eas.json, no aqui)
 .env
 .env*.local
