@@ -15,8 +15,18 @@ import {
   WalletCards,
 } from "lucide-react-native";
 
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
+import {
+  BILLING_PAYMENT_QUERY_KEY,
+  BILLING_VIEW_STRIPE,
+  BILLING_VIEW_ZOHO,
+  billingView,
+  deriveCapabilities,
+} from "@/lib/capabilities";
+import { sessionScope } from "@/lib/session-scope";
+import { billingPaymentQueryOptions } from "@/lib/use-capabilities";
 import {
   formatCycle,
   formatDateOnly,
@@ -346,7 +356,64 @@ function StatementTab({ data, isLoading, isError, error }) {
   );
 }
 
-function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }) {
+/**
+ * Facturacion de un centro que cobra con Zoho (lo dice billing.provider).
+ *
+ * Solo lo que devuelve GET /client/billing/payment para Zoho: tarjetas
+ * enmascaradas (last4 y caducidad; Zoho no da la marca) y el plan. No hay
+ * suscripcion ni portal de Stripe. Pagar facturas o cambiar la tarjeta abre
+ * paginas de Zoho (POST /client/billing/zoho/*): es un flujo propio, pendiente.
+ */
+function ZohoPaymentTab({ data, capabilities }) {
+  const zoho = capabilities.zoho || { cards: [], unavailable: null };
+  const plan = data?.plan || {};
+
+  return (
+    <View className="gap-5">
+      <Section title="Payment Method" icon={WalletCards} description="Card your center has on file for this account.">
+        {zoho.unavailable ? (
+          <View className={INSET}>
+            <Text className="font-brand text-[14px] leading-5 text-ink/70">
+              We could not load your payment details right now. Pull down to try again.
+            </Text>
+          </View>
+        ) : zoho.cards.length ? (
+          zoho.cards.map((card, index) => (
+            <View key={(card.last4 || "card") + "-" + index} className={INSET}>
+              <View className="flex-row items-center justify-between gap-3">
+                <Text className="font-brand-semibold text-[16px] tracking-widest text-ink">{"•••• " + (card.last4 || "----")}</Text>
+                <CreditCard size={18} color={palette.glyph} />
+              </View>
+              <Text className="mt-1.5 font-brand text-[13px] text-ink/60">
+                {"Expires " + String(card.expMonth || "--").padStart(2, "0") + "/" + String(card.expYear || "--").slice(-2)}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <View className={INSET}>
+            <Text className="font-brand text-[14px] leading-5 text-ink/70">No card on file.</Text>
+          </View>
+        )}
+
+        <Text className="font-brand text-[14px] leading-5 text-ink/60">
+          {(capabilities.billingPortalUnavailableReason || "Billing is managed by your center.") +
+            " Card updates and invoice payments are not available in the app yet; contact your center if you need help."}
+        </Text>
+      </Section>
+
+      <Section title="Plan" description="The plan linked to this account.">
+        <View className={INSET}>
+          <Text className="font-brand-bold text-[14px] text-ink">Plan</Text>
+          <Text className="mt-1.5 font-brand text-[14px] leading-5 text-ink/60">
+            {plan.name || titleCase(plan.code) || "Current plan"}
+          </Text>
+        </View>
+      </Section>
+    </View>
+  );
+}
+
+function PaymentTab({ data, capabilities, isLoading, isError, error, onOpenPortal, isOpening }) {
   if (isLoading) {
     return (
       <View className="gap-4">
@@ -358,6 +425,18 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
 
   if (isError) {
     return <EmptyState title="Unable to load payment details" description={formatErrorMessage(error)} />;
+  }
+
+  // Cada proveedor con su pantalla: Zoho no tiene ni suscripcion ni portal de Stripe.
+  const view = billingView(capabilities);
+  if (view === BILLING_VIEW_ZOHO) return <ZohoPaymentTab data={data} capabilities={capabilities} />;
+  if (view !== BILLING_VIEW_STRIPE) {
+    return (
+      <EmptyState
+        title="Billing is managed by your center"
+        description={capabilities.billingPortalUnavailableReason || "Contact your center for payment details."}
+      />
+    );
   }
 
   const method = data?.paymentMethod;
@@ -457,6 +536,7 @@ function PaymentTab({ data, isLoading, isError, error, onOpenPortal, isOpening }
 
 export default function BillingScreen() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [tab, setTab] = useState("usage");
 
   const usageQuery = useQuery({
@@ -469,10 +549,9 @@ export default function BillingScreen() {
     queryFn: async () => (await api.get("/client/billing/statements")).data,
   });
 
-  const paymentQuery = useQuery({
-    queryKey: ["client-billing-payment"],
-    queryFn: async () => (await api.get("/client/billing/payment")).data,
-  });
+  // La misma consulta que las capacidades (lib/use-capabilities): una peticion.
+  const paymentQuery = useQuery(billingPaymentQueryOptions(sessionScope(user)));
+  const capabilities = useMemo(() => deriveCapabilities({ billingPayment: paymentQuery.data || null }), [paymentQuery.data]);
 
   /**
    * El portal de facturación de Stripe es una página web alojada por Stripe,
@@ -497,7 +576,7 @@ export default function BillingScreen() {
     },
     onSuccess: () => {
       // La tarjeta puede haber cambiado dentro del portal.
-      queryClient.invalidateQueries({ queryKey: ["client-billing-payment"] });
+      queryClient.invalidateQueries({ queryKey: [BILLING_PAYMENT_QUERY_KEY] });
     },
     onError: (error) => {
       Alert.alert("Could not open the portal", formatErrorMessage(error, "Unable to open billing portal."));
@@ -559,6 +638,7 @@ export default function BillingScreen() {
       {tab === "payment" ? (
         <PaymentTab
           data={paymentQuery.data}
+          capabilities={capabilities}
           isLoading={paymentQuery.isLoading}
           isError={paymentQuery.isError}
           error={paymentQuery.error}

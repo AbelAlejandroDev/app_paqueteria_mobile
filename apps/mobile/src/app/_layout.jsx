@@ -5,7 +5,8 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -15,6 +16,7 @@ import SandboxFrame from "@/components/common/sandbox-frame";
 import ServiceUnavailable from "@/components/common/service-unavailable";
 import { apiEnvironment } from "@/lib/api";
 import { QUERY_DEFAULT_OPTIONS } from "@/lib/query-defaults";
+import { connectFocusToAppState } from "@/lib/query-focus";
 import { setupStorage } from "@/lib/storage";
 import { brandFontFiles } from "@/lib/brand-fonts";
 
@@ -27,6 +29,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Consultas: un reintento como mucho; mutaciones (pagos, peticiones): ninguno.
 const queryClient = new QueryClient({ defaultOptions: QUERY_DEFAULT_OPTIONS });
+
+// Al volver a primer plano se releen las consultas caducadas (las capacidades
+// del centro entre ellas: los interruptores de Zoho cambian sin publicar la app).
+connectFocusToAppState(focusManager, AppState);
 
 export default function RootLayout() {
   // Se espera a la tipografia antes de pintar: Android mide el texto con la
@@ -55,6 +61,9 @@ export default function RootLayout() {
             {/* Fuera de todas las puertas: guarda el toque de un push aunque la app
                 este cerrada, sin sesion o bloqueada. No navega. */}
             <PushIntentCapture />
+            {/* deployment: el del servidor. Hoy solo lo publica /public/portal, que la
+                app no puede usar (lib/capabilities, docs/backend-contract-gaps.md);
+                cuando haya fuente, llega por las capacidades. Mientras, la build. */}
             <SandboxFrame apiEnvironment={apiEnvironment} deployment={null}>
               <Stack screenOptions={{ headerShown: false }} />
             </SandboxFrame>

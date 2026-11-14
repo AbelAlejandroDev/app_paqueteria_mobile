@@ -29,6 +29,15 @@ import { US_STATES } from "@/lib/us-states";
 import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
 import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
 import { stripeReturnBody } from "@/lib/stripe-return";
+import {
+  FORWARD_PAYMENT_NOT_IN_APP,
+  FORWARD_PAYMENT_STRIPE_CHECKOUT,
+  FORWARD_PAYMENT_UNAVAILABLE,
+  forwardPaymentMode,
+  isCapabilityError,
+  itemActions,
+} from "@/lib/capabilities";
+import { BILLING_PAYMENT_QUERY_KEY, useCapabilities } from "@/lib/use-capabilities";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -182,6 +191,13 @@ function ToggleRow({ label, description, value, onValueChange }) {
 function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   const details = request.forwardDetails || {};
   const needsAuthentication = details.paymentStatus === "AUTHENTICATION_REQUIRED";
+  const queryClient = useQueryClient();
+
+  // Como se paga en esta cuenta: lo dice billing/payment (lib/capabilities).
+  // Stripe y Zoho son flujos distintos; aqui solo esta el de Stripe.
+  const capabilities = useCapabilities();
+  const mode = forwardPaymentMode(capabilities);
+  const waitingForCapabilities = !capabilities.known && capabilities.isLoading;
 
   const pay = useMutation({
     mutationFn: async () => {
@@ -204,9 +220,13 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
       await onRefresh?.();
     },
     onError: (error) => {
+      // El centro no cobra asi: las capacidades estaban viejas. Se releen.
+      if (isCapabilityError(error)) queryClient.invalidateQueries({ queryKey: [BILLING_PAYMENT_QUERY_KEY] });
       Alert.alert("Could not open payment", formatErrorMessage(error, "Unable to start the payment."));
     },
   });
+
+  const payInApp = mode === FORWARD_PAYMENT_STRIPE_CHECKOUT || (!capabilities.known && !waitingForCapabilities);
 
   return (
     <NoticeCard
@@ -227,13 +247,30 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
         </Notice>
       ) : null}
 
-      <Button className="mt-3" loading={pay.isPending} onPress={() => pay.mutate()}>
-        {needsAuthentication ? "Verify and pay" : "Pay now"}
-      </Button>
+      {payInApp || waitingForCapabilities ? (
+        <>
+          <Button
+            className="mt-3"
+            loading={pay.isPending || waitingForCapabilities}
+            disabled={pay.isPending || waitingForCapabilities}
+            onPress={() => pay.mutate()}
+          >
+            {needsAuthentication ? "Verify and pay" : "Pay now"}
+          </Button>
 
-      <Text className="mt-1 font-brand text-[12px] leading-4 text-ink/60">
-        Payment opens in a secure Stripe page. It can take a moment to show as paid here.
-      </Text>
+          <Text className="mt-1 font-brand text-[12px] leading-4 text-ink/60">
+            Payment opens in a secure Stripe page. It can take a moment to show as paid here.
+          </Text>
+        </>
+      ) : mode === FORWARD_PAYMENT_NOT_IN_APP ? (
+        <Notice tone="amber" className="mt-2">
+          Paying for this shipment is not available in the app yet. Contact your center to complete the payment.
+        </Notice>
+      ) : mode === FORWARD_PAYMENT_UNAVAILABLE ? (
+        <Notice tone="amber" className="mt-2">
+          Online payments are not available for this account. Please contact your center.
+        </Notice>
+      ) : null}
     </NoticeCard>
   );
 }
@@ -501,6 +538,9 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const anyPending =
     createRequest.isPending || rejectAssignment.isPending || quoteRates.isPending || selectRate.isPending;
 
+  // Lo que dice el backend para esta pieza; las capacidades del centro solo pueden quitar.
+  const capabilities = useCapabilities();
+  const actions = itemActions(availableActions, capabilities);
   const active = availableActions?.activeRequests || {};
   const activeNotice = noticeService ? serviceNotices[noticeService] : null;
 
@@ -508,17 +548,17 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     forwardForm.recipient && forwardForm.address1 && forwardForm.city && forwardForm.state && forwardForm.zip && forwardForm.phone;
 
   const submitScan = () => {
-    if (!availableActions?.canRequestScan) return;
+    if (!actions.canRequestScan) return;
     createRequest.mutate({ type: "SCAN", payload: { chargeConsent: true } });
   };
 
   const submitPickup = () => {
-    if (!availableActions?.canRequestPickup) return;
+    if (!actions.canRequestPickup) return;
     createRequest.mutate({ type: "PICKUP", payload: { pickupWindow: pickupWindow || undefined } });
   };
 
   const submitDiscard = () => {
-    if (!availableActions?.canRequestDiscard) return;
+    if (!actions.canRequestDiscard) return;
     createRequest.mutate({ type: "DISCARD", payload: {} });
   };
 
@@ -560,7 +600,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   };
 
   // Los paquetes se reenvían o se recogen, pero su contenido no se escanea.
-  const canScan = item?.type !== "PACKAGE" && availableActions?.canRequestScan;
+  const canScan = item?.type !== "PACKAGE" && actions.canRequestScan;
 
   const selectedRate = forwardRates.find((rate) => rate.optionId === selectedRateId) || null;
 
@@ -578,7 +618,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
    * Lo demas va de dos en dos debajo. Que botones salen lo decide el servidor,
    * asi que la rejilla se arma con los que haya.
    */
-  const forwardAction = availableActions?.canRequestForward ? (
+  const forwardAction = actions.canRequestForward ? (
     <ActionButton variant="primary" icon={Truck} disabled={anyPending} onPress={openForward}>
       {isLetter ? "Forward Letter" : "Forward Item"}
     </ActionButton>
@@ -597,7 +637,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const secondaryActions = [
     forwardAction ? scanAction : null,
-    availableActions?.canRequestPickup ? (
+    actions.canRequestPickup ? (
       <ActionButton icon={Store} disabled={anyPending} onPress={() => setPickupOpen(true)}>
         Pickup
       </ActionButton>
@@ -605,7 +645,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     // Lo que se pisa con un escaneo en marcha lo quita el backend, pero
     // Discard se aparta aqui: descartar lo que se esta escaneando no tiene
     // sentido aunque el servidor lo permita.
-    availableActions?.canRequestDiscard && !active.scan ? (
+    actions.canRequestDiscard && !active.scan ? (
       <ActionButton icon={Trash2} disabled={anyPending} onPress={() => setDiscardOpen(true)}>
         Discard
       </ActionButton>
@@ -613,16 +653,16 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   ].filter(Boolean);
 
   const primaryAction = forwardAction || scanAction;
-  const hasActions = Boolean(primaryAction || secondaryActions.length || availableActions?.canRejectAssignment);
+  const hasActions = Boolean(primaryAction || secondaryActions.length || actions.canRejectAssignment);
 
   return (
     <View className="gap-2.5 pt-1">
-      {hasActions || active.forward || active.scan || availableActions?.billingRestricted ? (
+      {hasActions || active.forward || active.scan || actions.billingRestricted ? (
         <SectionLabel>Actions</SectionLabel>
       ) : null}
 
       <View className="gap-2.5">
-        {availableActions?.billingRestricted ? (
+        {actions.billingRestricted ? (
           <Notice tone="amber">
             {availableActions.reason || "Billing needs attention before requesting services."}
           </Notice>
@@ -650,7 +690,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
             <ActionGrid primary={primaryAction} secondary={secondaryActions} />
 
-            {availableActions?.canRejectAssignment ? (
+            {actions.canRejectAssignment ? (
               <ActionButton
                 variant="tertiary"
                 icon={Flag}
