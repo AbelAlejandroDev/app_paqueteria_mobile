@@ -1,4 +1,5 @@
 import { reportBillingRequired } from "./billing-required.js";
+import { reportCapabilityError } from "./capabilities-events.js";
 import { reportFromError, reportServiceRecovered } from "./service-status.js";
 
 /**
@@ -9,6 +10,7 @@ import { reportFromError, reportServiceRecovered } from "./service-status.js";
  * - Sin red, timeout o caida del proxy: pantalla de "servicio no disponible".
  *   La sesion no se toca.
  * - 402 BILLING_REQUIRED: aviso para ir a Facturacion.
+ * - 402/409 de una guarda: las capacidades pueden estar viejas; se releen.
  *
  * Solo observa: no repite ninguna peticion. El error sigue hasta quien la hizo.
  */
@@ -21,6 +23,7 @@ export function attachAppInterceptors(api) {
     (error) => {
       reportFromError(error);
       reportBillingRequired(error);
+      reportCapabilityError(error);
       return Promise.reject(error);
     }
   );

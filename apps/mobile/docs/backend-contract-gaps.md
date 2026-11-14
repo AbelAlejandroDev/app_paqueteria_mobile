@@ -1,5 +1,19 @@
 # Huecos del contrato del backend para la app movil
 
+## Estado tras backend `348c327` (2026-11-14, rama `feat/mobile-fase-4`)
+
+| Propuesta | Estado | En la app |
+|---|---|---|
+| 1. Capacidades sin `Origin` | **Resuelta**: `GET /client/capabilities` (contrato v1, `docs/mobile/capacidades-y-health.md`) | Fuente principal (`src/lib/capabilities.js`, `use-capabilities.js`). `/public/portal` ya no hace falta |
+| 2. Ruta de salud | **Resuelta**: `GET|HEAD /api/v1/health` → `200 {"status":"ok"}` | Sonda de conectividad (`PROBE_PATH = "/health"`, `isHealthyResponse`) |
+| 3. Señal de mantenimiento | Respondida: no hay modo propio; en una parada responde Traefik (502/503/504) | Ya era el comportamiento (`availability.js`) |
+| 4. `returnUrl` a la app desde Zoho | Respondida: no hace falta; la vuelta se detecta con `AppState` + `payment-status` cada ≥ 15 s | Implementado (`zoho-forward-payment.js`) |
+| Motivo del fallo de pago / marca de tarjeta | Siguen abiertos (opcionales) | — |
+
+Lo que sigue es el analisis original (backend `dac158a`), conservado como historia.
+
+---
+
 Contra backend `main` `dac158a` (app_paqueteria) y su handoff
 `docs/operacion/HDG_MOBILE_HANDOFF.md`. Estado a 2026-11-13, rama `feat/mobile-fase-2-3`.
 Nada de esto se ha cambiado en el backend: son propuestas para su equipo.

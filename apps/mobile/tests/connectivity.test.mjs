@@ -159,15 +159,15 @@ test("tras un 503 la app marca el servicio caido, sondea y se recupera sin perde
     assert.equal(getServiceStatus().status, AVAILABILITY_UNAVAILABLE);
     await assertSessionKept(ctx);
 
-    // La sonda: GET /auth/me sin token. Primero sigue caido, luego responde 401 JSON.
+    // La sonda: GET /health sin token. Primero sigue caido, luego 200 {"status":"ok"}.
     const probeCalls = [];
     const probe = createApiProbe({
       baseURL: "https://api.example.test/api/v1",
       adapter: (config) => {
         probeCalls.push(config);
         return Promise.resolve({
-          data: up ? { error: "Missing Bearer token" } : "<html>503</html>",
-          status: up ? 401 : 503,
+          data: up ? { status: "ok" } : "<html>503</html>",
+          status: up ? 200 : 503,
           headers: {},
           config,
         });
@@ -186,10 +186,10 @@ test("tras un 503 la app marca el servicio caido, sondea y se recupera sin perde
       cancel: timers.cancel,
     });
 
-    assert.equal(timers.queue[0].delay, 5000);
+    assert.equal(timers.queue[0].delay, 2000);
     await timers.runNext();
     assert.equal(recovered, 0, "sigue caido");
-    assert.equal(timers.queue[0].delay, 10000, "espera creciente");
+    assert.equal(timers.queue[0].delay, 5000, "espera creciente");
 
     up = true;
     await timers.runNext();
@@ -259,8 +259,8 @@ test("el bucle de recuperacion: 'Try again' comprueba ya, stop() lo para, y una 
   await timers.runNext();
 });
 
-test("espera entre sondas: 5, 10, 20, 30 y luego 60 s", () => {
-  assert.deepEqual([0, 1, 2, 3, 4, 5, 50].map(nextProbeDelay), [5000, 10000, 20000, 30000, 60000, 60000, 60000]);
+test("espera entre sondas (la del backend): 2, 5, 15, 30 y luego 60 s", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 50].map(nextProbeDelay), [2000, 5000, 15000, 30000, 60000, 60000, 60000]);
 });
 
 test("el estado guarda desde cuando esta caido y vuelve a ok", () => {

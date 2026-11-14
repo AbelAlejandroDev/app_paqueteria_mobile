@@ -30,14 +30,17 @@ import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib
 import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
 import { stripeReturnBody } from "@/lib/stripe-return";
 import {
-  FORWARD_PAYMENT_NOT_IN_APP,
+  billingHold,
   FORWARD_PAYMENT_STRIPE_CHECKOUT,
   FORWARD_PAYMENT_UNAVAILABLE,
+  FORWARD_PAYMENT_UNKNOWN,
+  FORWARD_PAYMENT_ZOHO_HOSTED,
   forwardPaymentMode,
   isCapabilityError,
   itemActions,
 } from "@/lib/capabilities";
-import { BILLING_PAYMENT_QUERY_KEY, useCapabilities } from "@/lib/use-capabilities";
+import { CAPABILITIES_QUERY_KEY, useCapabilities } from "@/lib/use-capabilities";
+import ZohoForwardPaymentCard from "@/components/common/zoho-forward-payment-card";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -193,8 +196,8 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   const needsAuthentication = details.paymentStatus === "AUTHENTICATION_REQUIRED";
   const queryClient = useQueryClient();
 
-  // Como se paga en esta cuenta: lo dice billing/payment (lib/capabilities).
-  // Stripe y Zoho son flujos distintos; aqui solo esta el de Stripe.
+  // Como se paga en esta cuenta: lo dice GET /client/capabilities
+  // (forwarding.checkout y forwarding.methods). Stripe y Zoho son flujos distintos.
   const capabilities = useCapabilities();
   const mode = forwardPaymentMode(capabilities);
   const waitingForCapabilities = !capabilities.known && capabilities.isLoading;
@@ -221,12 +224,11 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
     },
     onError: (error) => {
       // El centro no cobra asi: las capacidades estaban viejas. Se releen.
-      if (isCapabilityError(error)) queryClient.invalidateQueries({ queryKey: [BILLING_PAYMENT_QUERY_KEY] });
+      if (isCapabilityError(error)) queryClient.invalidateQueries({ queryKey: [CAPABILITIES_QUERY_KEY] });
       Alert.alert("Could not open payment", formatErrorMessage(error, "Unable to start the payment."));
     },
   });
 
-  const payInApp = mode === FORWARD_PAYMENT_STRIPE_CHECKOUT || (!capabilities.known && !waitingForCapabilities);
 
   return (
     <NoticeCard
@@ -247,14 +249,13 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
         </Notice>
       ) : null}
 
-      {payInApp || waitingForCapabilities ? (
+      {waitingForCapabilities ? (
+        <Button className="mt-3" loading disabled>
+          Pay now
+        </Button>
+      ) : mode === FORWARD_PAYMENT_STRIPE_CHECKOUT ? (
         <>
-          <Button
-            className="mt-3"
-            loading={pay.isPending || waitingForCapabilities}
-            disabled={pay.isPending || waitingForCapabilities}
-            onPress={() => pay.mutate()}
-          >
+          <Button className="mt-3" loading={pay.isPending} disabled={pay.isPending} onPress={() => pay.mutate()}>
             {needsAuthentication ? "Verify and pay" : "Pay now"}
           </Button>
 
@@ -262,10 +263,16 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
             Payment opens in a secure Stripe page. It can take a moment to show as paid here.
           </Text>
         </>
-      ) : mode === FORWARD_PAYMENT_NOT_IN_APP ? (
-        <Notice tone="amber" className="mt-2">
-          Paying for this shipment is not available in the app yet. Contact your center to complete the payment.
-        </Notice>
+      ) : mode === FORWARD_PAYMENT_ZOHO_HOSTED ? (
+        <ZohoForwardPaymentCard request={request} capabilities={capabilities} onRefresh={onRefresh} />
+      ) : mode === FORWARD_PAYMENT_UNKNOWN ? (
+        // Sin capacidades no se adivina el proveedor: ni Stripe ni Zoho.
+        <View className="mt-2 gap-2">
+          <Notice tone="amber">We could not load the payment options for your account.</Notice>
+          <Button variant="outline" onPress={() => capabilities.refetch()}>
+            Try again
+          </Button>
+        </View>
       ) : mode === FORWARD_PAYMENT_UNAVAILABLE ? (
         <Notice tone="amber" className="mt-2">
           Online payments are not available for this account. Please contact your center.
@@ -664,7 +671,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       <View className="gap-2.5">
         {actions.billingRestricted ? (
           <Notice tone="amber">
-            {availableActions.reason || "Billing needs attention before requesting services."}
+            {availableActions?.reason || billingHold(capabilities)?.reason || "Billing needs attention before requesting services."}
           </Notice>
         ) : null}
 

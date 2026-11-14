@@ -63,10 +63,11 @@ export function reportFromError(error) {
 }
 
 /**
- * Espera entre comprobaciones automaticas mientras no hay servicio: 5 s, 10 s,
- * 20 s, 30 s y despues cada 60 s. El boton "Try again" comprueba al momento.
+ * Espera entre comprobaciones automaticas de GET /health mientras no hay
+ * servicio: 2 s, 5 s, 15 s, 30 s y despues cada 60 s (la que recomienda el
+ * backend, docs/mobile/capacidades-y-health.md §2). "Try again" comprueba ya.
  */
-const PROBE_DELAYS_MS = [5000, 10000, 20000, 30000, 60000];
+const PROBE_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
 
 export function nextProbeDelay(attempt) {
   const index = Math.max(0, Math.min(Number(attempt) || 0, PROBE_DELAYS_MS.length - 1));

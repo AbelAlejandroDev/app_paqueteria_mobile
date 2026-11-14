@@ -6,296 +6,302 @@ import { fileURLToPath } from "node:url";
 import { QueryClient } from "@tanstack/query-core";
 
 import {
-  BILLING_PAYMENT_QUERY_KEY,
   BILLING_VIEW_STRIPE,
   BILLING_VIEW_UNKNOWN,
   BILLING_VIEW_ZOHO,
-  billingPaymentQueryKey,
+  billingHold,
   billingView,
+  CAPABILITIES_QUERY_KEY,
+  capabilitiesQueryKey,
   deriveCapabilities,
-  FORWARD_PAYMENT_NOT_IN_APP,
   FORWARD_PAYMENT_STRIPE_CHECKOUT,
   FORWARD_PAYMENT_UNAVAILABLE,
   FORWARD_PAYMENT_UNKNOWN,
+  FORWARD_PAYMENT_ZOHO_HOSTED,
   forwardPaymentMode,
   isCapabilityError,
   itemActions,
-  PUBLIC_PORTAL_SOURCE,
+  paymentStatusMinPollMs,
+  savedCardAllowed,
   SERVICE_KEYS,
   serviceAllowed,
+  zohoBillingActions,
 } from "../src/lib/capabilities.js";
+import { reportCapabilityError, subscribeCapabilitiesStale } from "../src/lib/capabilities-events.js";
 import { sessionScope } from "../src/lib/session-scope.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
-// ── Respuestas reales del backend (handoff HDG B.1 y A.7; ids ficticios) ────
+// ── Ejemplos del contrato v1 (backend 348c327, docs/mobile/capacidades-y-health.md) ──
 
-const STRIPE_PAYMENT = {
-  billing: { provider: "STRIPE", onlinePayments: true, billingPortal: true, invoices: true, forwardingPayments: true, forwardingPaymentProvider: "STRIPE" },
-  plan: { code: "PREMIUM", name: "Premium" },
-  subscription: { stripeCustomerId: "cus_example", status: "active" },
-  paymentMethod: { brand: "visa", last4: "4242", expMonth: 12, expYear: 2030 },
-  billingPortal: { available: true, returnUrl: "https://x/billing", unavailableReason: null },
-};
-
-// HDG Sandbox hoy: ZOHO_FORWARDING_PAYMENTS_ENABLED apagado.
-const ZOHO_PAYMENT = {
-  billing: { provider: "ZOHO", onlinePayments: false, billingPortal: false, invoices: false, forwardingPayments: false, forwardingPaymentProvider: null },
-  plan: { code: "PREMIUM", name: "Premium", startedAt: "2026-01-01T00:00:00.000Z" },
-  billingCycle: { startAt: "2026-11-05T05:00:00.000Z", endAt: "2026-12-05T05:00:00.000Z", source: "zoho_subscription" },
-  subscription: null,
-  paymentMethod: null,
-  billingPortal: { available: false, returnUrl: null, unavailableReason: "Billing is managed by your center." },
-  zoho: {
-    provider: "ZOHO",
-    cards: [{ last4: "1111", expMonth: 12, expYear: 2030, gateway: "test_gateway" }],
-    invoices: [{ invoiceId: "1234567000000012345", kind: "MEMBERSHIP", payable: true }],
-    payments: [],
-    actions: { updateCard: true, addPaymentMethod: true, payInvoices: true, deleteCard: false, setDefaultCard: false },
-  },
-  zohoUnavailable: null,
-};
-
-// /public/portal de HDG Sandbox (A.7) y de The Worx (respuesta real, solo lectura).
-const HDG_PORTAL = {
-  portal: "member",
-  tenant: { slug: "hdg" },
-  center: { slug: "hollywood" },
-  billing: { onlinePayments: false, billingPortal: false, invoices: false, forwardingPayments: false, forwardingCheckout: null },
-  services: { forwarding: false, immediateForwarding: false, scheduledForwarding: false, storageFees: false, paidScans: false, autoScan: false, planChange: false, cancellationRequest: true },
-  deployment: "sandbox",
-};
-const WORX_PORTAL = {
-  portal: "member",
-  tenant: { slug: "the_worx" },
-  center: { slug: "sandlake" },
-  billing: { onlinePayments: true, billingPortal: true, invoices: true, forwardingPayments: true, forwardingCheckout: "EMBEDDED" },
+const WORX = {
+  contractVersion: 1,
+  environment: "production",
+  tenant: { slug: "the_worx", name: "The Worx" },
+  center: { slug: "sandlake", displayName: "The Worx Sand Lake" },
+  billing: { provider: "STRIPE", onlinePayments: true, billingPortal: true, invoices: true, paymentMethodManagement: "STRIPE_PORTAL", zoho: null },
+  forwarding: { available: true, payments: true, checkout: "EMBEDDED", methods: ["PAYMENT_INTENT", "CHECKOUT_SESSION"], returnDetection: null, paymentStatusMinPollSeconds: null },
   services: { forwarding: true, immediateForwarding: true, scheduledForwarding: true, storageFees: true, paidScans: true, autoScan: true, planChange: true, cancellationRequest: true },
+  restrictions: { billingHold: { active: false, code: null, reason: null }, mailboxActive: true, uspsComplianceStatus: "APPROVED", accountClosureScheduledAt: null, accountDeletionInProgress: false },
+};
+
+const HDG = {
+  contractVersion: 1,
+  environment: "sandbox",
+  tenant: { slug: "hdg", name: "HDG Executive Suites" },
+  center: { slug: "hollywood", displayName: "HDG Hollywood" },
+  billing: {
+    provider: "ZOHO", onlinePayments: false, billingPortal: false, invoices: false, paymentMethodManagement: "ZOHO_HOSTED",
+    zoho: { available: true, unavailableReason: null, payInvoices: true, updateCard: true, addPaymentMethod: true },
+  },
+  forwarding: { available: false, payments: true, checkout: "HOSTED", methods: ["HOSTED_PAGE", "SAVED_CARD"], returnDetection: "PAYMENT_STATUS_POLL", paymentStatusMinPollSeconds: 15 },
+  services: { forwarding: false, immediateForwarding: false, scheduledForwarding: false, storageFees: false, paidScans: false, autoScan: false, planChange: false, cancellationRequest: true },
+  restrictions: { billingHold: { active: false, code: null, reason: null }, mailboxActive: true, uspsComplianceStatus: "UNDER_REVIEW", accountClosureScheduledAt: null, accountDeletionInProgress: false },
+};
+
+// HDG con Zoho apagado o sin configurar (§1, al final).
+const HDG_ZOHO_OFF = {
+  ...HDG,
+  billing: {
+    ...HDG.billing,
+    paymentMethodManagement: "NONE",
+    zoho: { available: false, unavailableReason: "ZOHO_ENVIRONMENT_NOT_ENABLED", payInvoices: false, updateCard: false, addPaymentMethod: false },
+  },
+  forwarding: { available: false, payments: false, checkout: null, methods: [], returnDetection: null, paymentStatusMinPollSeconds: null },
+};
+
+const PAST_DUE = {
+  ...WORX,
+  restrictions: {
+    billingHold: { active: true, code: "BILLING_REQUIRED", reason: "Your subscription is past due. Please update payment before requesting services." },
+    mailboxActive: true, uspsComplianceStatus: null, accountClosureScheduledAt: "2026-12-01T05:00:00.000Z", accountDeletionInProgress: true,
+  },
 };
 
 const ALL_ACTIONS = { canRequestScan: true, canRequestForward: true, canRequestPickup: true, canRequestDiscard: true, canRejectAssignment: true, billingRestricted: false };
 
 // ── Stripe ──────────────────────────────────────────────────────────────────
 
-test("Stripe: capacidades tal cual las da billing/payment", () => {
-  const caps = deriveCapabilities({ billingPayment: STRIPE_PAYMENT });
+test("Stripe (The Worx): capacidades del contrato v1 tal cual", () => {
+  const caps = deriveCapabilities({ capabilities: WORX, expectedTenantSlug: "the_worx" });
   assert.equal(caps.known, true);
+  assert.equal(caps.environment, "production");
   assert.equal(caps.provider, "STRIPE");
-  assert.equal(caps.onlinePayments, true);
-  assert.equal(caps.billingPortal, true);
-  assert.equal(caps.billingPortalAvailable, true);
-  assert.equal(caps.forwardingPayments, true);
-  assert.equal(caps.forwardingPaymentProvider, "STRIPE");
+  assert.equal(caps.paymentMethodManagement, "STRIPE_PORTAL");
   assert.equal(caps.zoho, null);
+  assert.deepEqual(caps.center, { slug: "sandlake", displayName: "The Worx Sand Lake" });
   assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_STRIPE_CHECKOUT);
+  assert.equal(savedCardAllowed(caps), false);
   assert.equal(billingView(caps), BILLING_VIEW_STRIPE);
+  assert.equal(zohoBillingActions(caps).available, false);
 });
 
-test("Stripe: sin /public/portal no se inventan services, forwardingCheckout ni deployment", () => {
-  const caps = deriveCapabilities({ billingPayment: STRIPE_PAYMENT });
-  assert.equal(caps.services, null);
-  assert.equal(caps.forwardingCheckout, null, "no se deduce EMBEDDED del proveedor");
-  assert.equal(caps.deployment, null);
-  assert.deepEqual(caps.sources, { billingPayment: true, publicPortal: false });
-  assert.deepEqual(PUBLIC_PORTAL_SOURCE, { available: false, reason: "PUBLIC_PORTAL_REQUIRES_ORIGIN" });
+test("EMBEDDED sin CHECKOUT_SESSION no se paga con el flujo de la app (no se supone)", () => {
+  const caps = deriveCapabilities({ capabilities: { ...WORX, forwarding: { ...WORX.forwarding, methods: ["PAYMENT_INTENT"] } } });
+  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNAVAILABLE);
 });
 
 // ── Zoho ────────────────────────────────────────────────────────────────────
 
-test("Zoho (HDG Sandbox hoy): sin pagos en linea ni de reenvio", () => {
-  const caps = deriveCapabilities({ billingPayment: ZOHO_PAYMENT });
+test("Zoho (HDG Sandbox): HOSTED, tarjeta guardada y sondeo minimo de 15 s", () => {
+  const caps = deriveCapabilities({ capabilities: HDG, expectedTenantSlug: "hdg" });
+  assert.equal(caps.environment, "sandbox");
   assert.equal(caps.provider, "ZOHO");
-  assert.equal(caps.onlinePayments, false);
-  assert.equal(caps.billingPortalAvailable, false);
-  assert.equal(caps.billingPortalUnavailableReason, "Billing is managed by your center.");
-  assert.equal(caps.forwardingPayments, false);
-  assert.equal(caps.forwardingPaymentProvider, null);
+  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_ZOHO_HOSTED);
+  assert.equal(savedCardAllowed(caps), true);
+  assert.equal(paymentStatusMinPollMs(caps), 15000);
+  assert.equal(caps.forwarding.returnDetection, "PAYMENT_STATUS_POLL");
+  assert.equal(billingView(caps), BILLING_VIEW_ZOHO);
+  assert.deepEqual(zohoBillingActions(caps), { available: true, unavailableReason: null, payInvoices: true, updateCard: true, addPaymentMethod: true });
+});
+
+test("Zoho: pagar un reenvio ya creado no depende de forwarding.available (eso es pedir uno)", () => {
+  const caps = deriveCapabilities({ capabilities: HDG });
+  assert.equal(caps.forwarding.available, false);
+  assert.equal(caps.forwarding.payments, true);
+  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_ZOHO_HOSTED);
+});
+
+test("Zoho apagado: sin pagos de reenvio ni paginas de Zoho, con el motivo", () => {
+  const caps = deriveCapabilities({ capabilities: HDG_ZOHO_OFF });
   assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNAVAILABLE);
+  assert.equal(savedCardAllowed(caps), false);
+  assert.deepEqual(zohoBillingActions(caps), {
+    available: false,
+    unavailableReason: "ZOHO_ENVIRONMENT_NOT_ENABLED",
+    payInvoices: false,
+    updateCard: false,
+    addPaymentMethod: false,
+  });
   assert.equal(billingView(caps), BILLING_VIEW_ZOHO);
 });
 
-test("Zoho: tarjetas enmascaradas (sin gateway ni marca inventada) y acciones de Zoho", () => {
-  const caps = deriveCapabilities({ billingPayment: ZOHO_PAYMENT });
-  assert.deepEqual(caps.zoho.cards, [{ last4: "1111", expMonth: 12, expYear: 2030 }]);
-  assert.deepEqual(caps.zoho.actions, { updateCard: true, addPaymentMethod: true, payInvoices: true });
-  assert.equal(caps.zoho.unavailable, null);
-  assert.equal(caps.zoho.loaded, true);
+test("HOSTED sin SAVED_CARD: solo pagina segura", () => {
+  const caps = deriveCapabilities({ capabilities: { ...HDG, forwarding: { ...HDG.forwarding, methods: ["HOSTED_PAGE"] } } });
+  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_ZOHO_HOSTED);
+  assert.equal(savedCardAllowed(caps), false);
 });
 
-test("Zoho con el cobro de reenvios encendido: nunca se le ofrece el Checkout de Stripe", () => {
-  const enabled = { ...ZOHO_PAYMENT, billing: { ...ZOHO_PAYMENT.billing, forwardingPayments: true, forwardingPaymentProvider: "ZOHO" } };
-  const caps = deriveCapabilities({ billingPayment: enabled });
-  assert.equal(caps.forwardingPayments, true);
-  assert.equal(caps.forwardingPaymentProvider, "ZOHO");
-  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_NOT_IN_APP);
+test("el sondeo nunca baja de 15 s aunque el servidor dijera menos", () => {
+  const caps = deriveCapabilities({ capabilities: { ...HDG, forwarding: { ...HDG.forwarding, paymentStatusMinPollSeconds: 2 } } });
+  assert.equal(paymentStatusMinPollMs(caps), 15000);
+  assert.equal(paymentStatusMinPollMs(deriveCapabilities({ capabilities: { ...HDG, forwarding: { ...HDG.forwarding, paymentStatusMinPollSeconds: 30 } } })), 30000);
 });
 
-test("Zoho no responde: la pantalla sigue, con el motivo y sin tarjetas", () => {
-  const caps = deriveCapabilities({ billingPayment: { ...ZOHO_PAYMENT, zoho: null, zohoUnavailable: "ZOHO_CUSTOMER_NOT_LINKED" } });
-  assert.equal(caps.provider, "ZOHO");
-  assert.equal(caps.zoho.unavailable, "ZOHO_CUSTOMER_NOT_LINKED");
-  assert.deepEqual(caps.zoho.cards, []);
-  assert.equal(caps.zoho.loaded, false);
-  assert.deepEqual(caps.zoho.actions, { updateCard: null, addPaymentMethod: null, payInvoices: null });
-});
+// ── Sin datos / contrato desconocido ────────────────────────────────────────
 
-// ── Sin datos ───────────────────────────────────────────────────────────────
-
-test("sin billing/payment todo es desconocido, no falso", () => {
+test("sin respuesta todo es desconocido, no falso", () => {
   const caps = deriveCapabilities({});
   assert.equal(caps.known, false);
-  for (const key of ["provider", "onlinePayments", "billingPortal", "invoices", "forwardingPayments", "forwardingPaymentProvider", "billingPortalAvailable", "services", "deployment", "zoho"]) {
-    assert.equal(caps[key], null, key);
-  }
+  assert.equal(caps.provider, null);
+  assert.equal(caps.services, null);
+  assert.equal(caps.environment, null);
   assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNKNOWN);
   assert.equal(billingView(caps), BILLING_VIEW_UNKNOWN);
 });
 
-test("un proveedor desconocido no se trata como Stripe", () => {
-  const caps = deriveCapabilities({ billingPayment: { billing: { provider: "OTHER", forwardingPayments: true, forwardingPaymentProvider: "OTHER" } } });
+test("un contractVersion que no se conoce no se interpreta", () => {
+  const caps = deriveCapabilities({ capabilities: { ...WORX, contractVersion: 2 } });
+  assert.equal(caps.known, false);
+  assert.equal(caps.reason, "UNSUPPORTED_CONTRACT");
+  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNKNOWN);
+});
+
+test("valores fuera del contrato se descartan", () => {
+  const caps = deriveCapabilities({
+    capabilities: { ...WORX, environment: "staging", billing: { ...WORX.billing, provider: "OTHER", paymentMethodManagement: "X" }, forwarding: { ...WORX.forwarding, checkout: "WEIRD" }, services: { forwarding: true, made_up: true } },
+  });
+  assert.equal(caps.environment, null);
   assert.equal(caps.provider, null);
-  assert.equal(caps.forwardingPaymentProvider, null);
-  assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNAVAILABLE);
-  assert.equal(billingView(caps), BILLING_VIEW_UNKNOWN);
-});
-
-// ── /public/portal, si hubiera fuente ───────────────────────────────────────
-
-test("con la respuesta del portal: services, forwardingCheckout y deployment reales", () => {
-  const hdg = deriveCapabilities({ billingPayment: ZOHO_PAYMENT, publicPortal: HDG_PORTAL });
-  assert.deepEqual(Object.keys(hdg.services), SERVICE_KEYS);
-  assert.equal(hdg.services.forwarding, false);
-  assert.equal(hdg.services.cancellationRequest, true);
-  assert.equal(hdg.deployment, "sandbox");
-  assert.equal(hdg.forwardingCheckout, null);
-
-  const worx = deriveCapabilities({ billingPayment: STRIPE_PAYMENT, publicPortal: WORX_PORTAL });
-  assert.equal(worx.deployment, "production", "sin el campo, produccion");
-  assert.equal(worx.forwardingCheckout, "EMBEDDED");
-  assert.equal(worx.services.forwarding, true);
-});
-
-test("services con claves de mas o de menos: solo las del contrato, lo que falta es null", () => {
-  const caps = deriveCapabilities({ billingPayment: STRIPE_PAYMENT, publicPortal: { services: { forwarding: true, made_up: true } } });
+  assert.equal(caps.paymentMethodManagement, null);
+  assert.equal(caps.forwarding.checkout, null);
   assert.deepEqual(Object.keys(caps.services), SERVICE_KEYS);
-  assert.equal(caps.services.forwarding, true);
   assert.equal(caps.services.paidScans, null);
-  assert.equal("made_up" in caps.services, false);
-});
-
-// ── Servicios deshabilitados ────────────────────────────────────────────────
-
-test("reenvio apagado en el centro: sin pago de reenvio aunque el proveedor sea Stripe", () => {
-  const caps = deriveCapabilities({ billingPayment: STRIPE_PAYMENT, publicPortal: { ...WORX_PORTAL, services: { ...WORX_PORTAL.services, forwarding: false } } });
-  assert.equal(serviceAllowed(caps, "forwarding"), false);
   assert.equal(forwardPaymentMode(caps), FORWARD_PAYMENT_UNAVAILABLE);
 });
 
-test("reenvio apagado: la pieza pierde Forward aunque availableActions lo diga; el resto sigue", () => {
-  const caps = deriveCapabilities({ billingPayment: ZOHO_PAYMENT, publicPortal: HDG_PORTAL });
+// ── Servicios deshabilitados y restricciones ────────────────────────────────
+
+test("services.forwarding false quita Forward a la pieza; el resto sigue", () => {
+  const caps = deriveCapabilities({ capabilities: HDG });
+  assert.equal(serviceAllowed(caps, "forwarding"), false);
   const actions = itemActions(ALL_ACTIONS, caps);
   assert.equal(actions.canRequestForward, false);
   assert.equal(actions.canRequestScan, true, "paidScans no decide si se puede pedir un escaneo incluido");
   assert.equal(actions.canRequestPickup, true);
-  assert.equal(actions.canRequestDiscard, true);
-});
-
-test("services desconocidos no quitan nada; availableActions manda", () => {
-  const caps = deriveCapabilities({ billingPayment: ZOHO_PAYMENT });
-  assert.deepEqual(itemActions(ALL_ACTIONS, caps), ALL_ACTIONS);
 });
 
 test("las capacidades nunca dan una accion que el backend no da", () => {
-  const caps = deriveCapabilities({ billingPayment: STRIPE_PAYMENT, publicPortal: WORX_PORTAL });
+  const caps = deriveCapabilities({ capabilities: WORX });
   const none = { canRequestScan: false, canRequestForward: false, canRequestPickup: false, canRequestDiscard: false, canRejectAssignment: false };
   assert.deepEqual(itemActions(none, caps), { ...none, billingRestricted: false });
-  assert.deepEqual(itemActions(null, caps), { ...none, billingRestricted: false });
+  assert.deepEqual(itemActions(ALL_ACTIONS, deriveCapabilities({})), ALL_ACTIONS, "sin capacidades manda availableActions");
 });
 
-test("mora (billingRestricted): ninguna accion", () => {
-  const actions = itemActions({ ...ALL_ACTIONS, billingRestricted: true }, deriveCapabilities({ billingPayment: STRIPE_PAYMENT }));
+test("billingHold activo: aviso con su motivo y ninguna solicitud de servicio", () => {
+  const caps = deriveCapabilities({ capabilities: PAST_DUE });
+  assert.equal(billingHold(caps).reason, "Your subscription is past due. Please update payment before requesting services.");
+  const actions = itemActions(ALL_ACTIONS, caps);
   assert.equal(actions.billingRestricted, true);
   for (const flag of ["canRequestScan", "canRequestForward", "canRequestPickup", "canRequestDiscard", "canRejectAssignment"]) {
     assert.equal(actions[flag], false, flag);
   }
-});
-
-test("los 409 de 'no disponible en este centro' obligan a releer las capacidades", () => {
-  const conflict = (code) => ({ response: { status: 409, data: { error: "x", code } } });
-  assert.equal(isCapabilityError(conflict("ONLINE_PAYMENTS_UNAVAILABLE")), true);
-  assert.equal(isCapabilityError(conflict("CENTER_POLICY_NOT_CONFIGURED")), true);
-  assert.equal(isCapabilityError(conflict("FORWARDING_ALREADY_PAID")), false);
-  assert.equal(isCapabilityError({ response: { status: 402, data: { code: "BILLING_REQUIRED" } } }), false);
+  assert.equal(caps.restrictions.accountDeletionInProgress, true);
+  assert.equal(billingHold(deriveCapabilities({ capabilities: WORX })), null);
 });
 
 // ── Aislamiento entre marcas y centros ──────────────────────────────────────
 
+test("las capacidades de otra organizacion no valen en esta app", () => {
+  const inHdgApp = deriveCapabilities({ capabilities: WORX, expectedTenantSlug: "hdg" });
+  assert.equal(inHdgApp.known, false);
+  assert.equal(inHdgApp.reason, "TENANT_MISMATCH");
+  assert.equal(forwardPaymentMode(inHdgApp), FORWARD_PAYMENT_UNKNOWN);
+
+  const inWorxApp = deriveCapabilities({ capabilities: HDG, expectedTenantSlug: "the_worx" });
+  assert.equal(inWorxApp.known, false);
+  assert.equal(inWorxApp.provider, null, "no se usa el proveedor de la otra marca");
+});
+
 test("la cache de capacidades va por organizacion y usuario", () => {
-  const hollywood = sessionScope({ id: "u1", tenantId: "hdg" });
-  const sandlake = sessionScope({ id: "u1", tenantId: "worx" });
-  const other = sessionScope({ id: "u2", tenantId: "worx" });
-  assert.notDeepEqual(billingPaymentQueryKey(hollywood), billingPaymentQueryKey(sandlake));
-  assert.notDeepEqual(billingPaymentQueryKey(sandlake), billingPaymentQueryKey(other));
-  assert.deepEqual(billingPaymentQueryKey(null), [BILLING_PAYMENT_QUERY_KEY, null]);
+  const hdgUser = sessionScope({ id: "u1", tenantId: "hdg" });
+  const worxUser = sessionScope({ id: "u1", tenantId: "worx" });
+  assert.notDeepEqual(capabilitiesQueryKey(hdgUser), capabilitiesQueryKey(worxUser));
+  assert.deepEqual(capabilitiesQueryKey(null), [CAPABILITIES_QUERY_KEY, null]);
 
   const queryClient = new QueryClient();
-  queryClient.setQueryData(billingPaymentQueryKey(hollywood), ZOHO_PAYMENT);
-  queryClient.setQueryData(billingPaymentQueryKey(sandlake), STRIPE_PAYMENT);
-  assert.equal(deriveCapabilities({ billingPayment: queryClient.getQueryData(billingPaymentQueryKey(hollywood)) }).provider, "ZOHO");
-  assert.equal(deriveCapabilities({ billingPayment: queryClient.getQueryData(billingPaymentQueryKey(sandlake)) }).provider, "STRIPE");
-  assert.equal(queryClient.getQueryData(billingPaymentQueryKey(other)), undefined, "otro usuario no hereda nada");
+  queryClient.setQueryData(capabilitiesQueryKey(hdgUser), HDG);
+  queryClient.setQueryData(capabilitiesQueryKey(worxUser), WORX);
+  assert.equal(queryClient.getQueryData(capabilitiesQueryKey(hdgUser)).billing.provider, "ZOHO");
+  assert.equal(queryClient.getQueryData(capabilitiesQueryKey(worxUser)).billing.provider, "STRIPE");
+  assert.equal(queryClient.getQueryData(capabilitiesQueryKey(sessionScope({ id: "u2", tenantId: "worx" }))), undefined);
 });
 
-test("las invalidaciones existentes por ['client-billing-payment'] alcanzan a todas las cuentas por prefijo", async () => {
-  const queryClient = new QueryClient();
-  const key = billingPaymentQueryKey("worx:u1");
-  queryClient.setQueryData(key, STRIPE_PAYMENT);
-  await queryClient.invalidateQueries({ queryKey: ["client-billing-payment"] });
-  assert.equal(queryClient.getQueryState(key).isInvalidated, true);
-});
-
-test("ninguna decision de capacidades mira la marca: todo sale de las respuestas", () => {
-  for (const file of ["src/lib/capabilities.js", "src/lib/use-capabilities.js"]) {
+test("ninguna decision de capacidades mira la marca: todo sale de la respuesta", () => {
+  for (const file of ["src/lib/capabilities.js", "src/lib/use-capabilities.js", "src/lib/zoho-billing.js", "src/lib/zoho-forward-payment.js", "src/components/common/zoho-forward-payment-card.jsx"]) {
     const code = read(file).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
     assert.doesNotMatch(code, /["'](hdg|the_worx|hollywood|sandlake|hallandale|hunterscreek)["']/, file);
-    assert.doesNotMatch(code, /brand\.(id|tenantSlug)/, file);
+    assert.doesNotMatch(code, /brand\.id\b/, file);
   }
-  const detail = read("src/app/(client)/mail-items/[id].jsx");
-  const card = detail.slice(detail.indexOf("function ForwardPaymentCard("), detail.indexOf("\nfunction ", detail.indexOf("function ForwardPaymentCard(") + 10));
-  assert.doesNotMatch(card, /brand\.(id|tenantSlug)|["']hdg["']/);
-  const billing = read("src/app/(client)/billing.jsx");
-  assert.doesNotMatch(billing, /brand\.(id|tenantSlug)\s*===|["']hdg["']/);
 });
 
-// ── Cableado en las pantallas ───────────────────────────────────────────────
+// ── Releer tras 402/409 de una guarda ───────────────────────────────────────
 
-test("el pago del reenvio elige el flujo por las capacidades; el de Stripe solo con Stripe", () => {
+test("tras un 402/409 de una guarda se piden de nuevo las capacidades", () => {
+  const events = [];
+  const off = subscribeCapabilitiesStale((reason) => events.push(reason));
+  try {
+    const conflict = (status, code) => ({ response: { status, data: { error: "x", code } } });
+    assert.equal(reportCapabilityError(conflict(409, "ONLINE_PAYMENTS_UNAVAILABLE")), true);
+    assert.equal(reportCapabilityError(conflict(409, "CENTER_POLICY_NOT_CONFIGURED")), true);
+    assert.equal(reportCapabilityError(conflict(402, "BILLING_REQUIRED")), true);
+    assert.equal(reportCapabilityError(conflict(409, "FORWARDING_ALREADY_PAID")), false);
+    assert.equal(reportCapabilityError({ response: { status: 402, data: { error: "Payment failed" } } }), false);
+    assert.deepEqual(events, ["ONLINE_PAYMENTS_UNAVAILABLE", "CENTER_POLICY_NOT_CONFIGURED", "BILLING_REQUIRED"]);
+  } finally {
+    off();
+  }
+  assert.equal(isCapabilityError({ response: { status: 404, data: { code: "ZOHO_CUSTOMER_NOT_LINKED" } } }), true);
+});
+
+// ── Cableado ────────────────────────────────────────────────────────────────
+
+test("la app pide /client/capabilities con su sesion y la compara con su organizacion", () => {
+  const hook = read("src/lib/use-capabilities.js");
+  assert.match(hook, /api\.get\("\/client\/capabilities"\)/);
+  assert.match(hook, /queryKey: capabilitiesQueryKey\(scope\)/);
+  assert.match(hook, /expectedTenantSlug: brand\.tenantSlug/);
+  assert.match(read("src/lib/api-interceptors.js"), /reportCapabilityError\(error\)/);
+  assert.match(read("src/app/_layout.jsx"), /<CapabilitiesSync \/>/);
+  assert.match(read("src/app/_layout.jsx"), /connectFocusToAppState\(focusManager, AppState\)/);
+});
+
+test("el pago del reenvio elige el flujo por las capacidades; el de Stripe sigue igual", () => {
   const detail = read("src/app/(client)/mail-items/[id].jsx");
-  const card = detail.slice(detail.indexOf("function ForwardPaymentCard("), detail.indexOf("\nfunction ", detail.indexOf("function ForwardPaymentCard(") + 10));
+  const start = detail.indexOf("function ForwardPaymentCard(");
+  const card = detail.slice(start, detail.indexOf("\nfunction ", start + 10));
   assert.match(card, /const mode = forwardPaymentMode\(capabilities\);/);
-  assert.match(card, /const payInApp = mode === FORWARD_PAYMENT_STRIPE_CHECKOUT \|\| \(!capabilities\.known && !waitingForCapabilities\);/);
-  assert.match(card, /mode === FORWARD_PAYMENT_NOT_IN_APP/);
-  assert.match(card, /mode === FORWARD_PAYMENT_UNAVAILABLE/);
-  assert.match(card, /isCapabilityError\(error\)\) queryClient\.invalidateQueries/);
+  assert.match(card, /mode === FORWARD_PAYMENT_STRIPE_CHECKOUT/);
+  assert.match(card, /mode === FORWARD_PAYMENT_ZOHO_HOSTED \? \(\s*<ZohoForwardPaymentCard/);
+  assert.match(card, /mode === FORWARD_PAYMENT_UNKNOWN/);
+  // Stripe: el mismo Checkout de siempre.
+  assert.match(card, /"\/client\/forwarding\/" \+ request\.id \+ "\/checkout-session"/);
+  assert.match(card, /stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
 });
 
 test("las acciones de la pieza pasan por itemActions", () => {
   const detail = read("src/app/(client)/mail-items/[id].jsx");
-  const actionsCard = detail.slice(detail.indexOf("function ActionsCard("), detail.indexOf("\nfunction ", detail.indexOf("function ActionsCard(") + 10));
+  const start = detail.indexOf("function ActionsCard(");
+  const actionsCard = detail.slice(start, detail.indexOf("\nfunction ", start + 10));
   assert.match(actionsCard, /const actions = itemActions\(availableActions, capabilities\);/);
   assert.doesNotMatch(actionsCard, /availableActions\?\.(canRequest|canReject|billingRestricted)/);
 });
 
-test("Facturacion comparte la consulta y enseña la vista del proveedor real", () => {
+test("Facturacion: vista por /client/capabilities, datos por billing/payment", () => {
   const billing = read("src/app/(client)/billing.jsx");
+  assert.match(billing, /const capabilities = useCapabilities\(\);/);
   assert.match(billing, /useQuery\(billingPaymentQueryOptions\(sessionScope\(user\)\)\)/);
-  assert.match(billing, /if \(view === BILLING_VIEW_ZOHO\) return <ZohoPaymentTab/);
-  assert.match(billing, /if \(view !== BILLING_VIEW_STRIPE\)/);
-  assert.doesNotMatch(billing, /queryKey: \["client-billing-payment"\]/);
-});
-
-test("las capacidades se refrescan al volver a primer plano", () => {
-  assert.match(read("src/app/_layout.jsx"), /connectFocusToAppState\(focusManager, AppState\)/);
-  assert.match(read("src/lib/use-capabilities.js"), /staleTime: CAPABILITIES_STALE_MS/);
+  assert.match(billing, /if \(view === BILLING_VIEW_ZOHO\) \{/);
+  assert.doesNotMatch(billing, /deriveCapabilities\(/);
 });

@@ -2,7 +2,7 @@ import axios from "axios";
 import { clearAuthUser, clearTokens, getTokens, setAuthUser, setTokens } from "./storage.js";
 import { broadcastAuthUserUpdated, normalizeAuthUser } from "./auth.js";
 import { isRefreshRejection } from "./session.js";
-import { DEFAULT_TIMEOUT_MS, isReachableResponse } from "./availability.js";
+import { DEFAULT_TIMEOUT_MS, isHealthyResponse } from "./availability.js";
 
 /**
  * Crea el cliente HTTP con refresh automático de token.
@@ -159,14 +159,11 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter
 /**
  * Comprueba si la API responde, sin sesion y sin interceptores.
  *
- * El backend no tiene una ruta de salud en /api/v1. Se usa GET /auth/me sin
- * token: authMiddleware contesta 401 en JSON en el acto, sin tocar la base de
- * datos ni la sesion del cliente. Cualquier respuesta del backend prueba que
- * esta vivo; un 502/503/504 del proxy, sin red o un timeout, que no.
- *
- * Nunca manda el token: una sonda no puede provocar un refresh ni cerrar nada.
+ * GET /api/v1/health: sin sesion, sin base de datos ni terceros, y siempre el
+ * mismo cuerpo `{"status":"ok"}` (backend 3bc5e88). Nunca manda el token: una
+ * sonda no puede provocar un refresh ni cerrar nada.
  */
-export const PROBE_PATH = "/auth/me";
+export const PROBE_PATH = "/health";
 
 export function createApiProbe({ baseURL, timeout = DEFAULT_TIMEOUT_MS, adapter }) {
   if (!baseURL) throw new Error("createApiProbe requiere baseURL.");
@@ -174,8 +171,7 @@ export function createApiProbe({ baseURL, timeout = DEFAULT_TIMEOUT_MS, adapter 
 
   return async function probe() {
     try {
-      const response = await client.get(PROBE_PATH);
-      return isReachableResponse(response);
+      return isHealthyResponse(await client.get(PROBE_PATH));
     } catch {
       return false;
     }

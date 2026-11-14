@@ -1,34 +1,29 @@
 /**
- * Capacidades del centro y del usuario, a partir de respuestas reales del
- * backend. Sin React, para poder probarlo; el hook es lib/use-capabilities.
+ * Capacidades del centro y del usuario. Sin React, para poder probarlo; el hook
+ * es lib/use-capabilities.
  *
- * Fuentes (contrato: docs/operacion/HDG_MOBILE_HANDOFF.md del backend):
- *
- *   1. GET /client/billing/payment (con sesion). `billing` =
- *      billingCapabilitiesForCenter: { provider: "STRIPE"|"ZOHO", onlinePayments,
- *      billingPortal, invoices, forwardingPayments, forwardingPaymentProvider }.
- *      Ademas `billingPortal { available, unavailableReason }` y, con Zoho,
- *      `zoho { cards, invoices, payments, actions }` y `zohoUnavailable`.
- *   2. GET /public/portal: `billing { ..., forwardingCheckout }`, `services.*`
- *      y `deployment`. Necesita un portal resuelto por Origin/Referer/Host, que
- *      una app nativa no tiene: hoy NO se consulta (PUBLIC_PORTAL_SOURCE y
- *      docs/backend-contract-gaps.md). Si llega a existir, se pasa aqui.
- *   3. Por pieza: `availableActions` de GET /client/mail-items/:id, que el
- *      backend ya calcula con las reglas del centro (canRequestForward respeta
- *      services.forwarding) y con la mora (billingRestricted).
+ * Fuente principal: GET /client/capabilities (contrato v1, backend 348c327,
+ * docs/mobile/capacidades-y-health.md y src/lib/clientCapabilities.js). El
+ * centro lo decide el backend por el buzon de la sesion; no llama a Zoho,
+ * Stripe ni Pitney. Las capacidades NO autorizan nada: solo dicen que pintar.
+ * Cada ruta sigue aplicando su guarda y la app sigue tratando sus 402/409.
  *
  * Reglas:
  *   - Tres valores: true, false o null (no se sabe). Lo que no da el backend
- *     no se rellena: null no es false ni true.
- *   - Stripe y Zoho no funcionan igual: el flujo de pago se elige por
- *     `forwardingPaymentProvider`, no se supone.
- *   - Nada de `if (marca)`: todo sale de las respuestas.
+ *     no se rellena.
+ *   - Stripe y Zoho no funcionan igual: el flujo de pago sale de
+ *     `forwarding.checkout` y `forwarding.methods`, no se supone.
+ *   - Nada de `if (marca)`: todo sale de la respuesta. La marca solo sirve para
+ *     comprobar que la respuesta es de la organizacion de esta app.
  */
+
+export const CAPABILITIES_CONTRACT_VERSION = 1;
+export const CAPABILITIES_QUERY_KEY = "client-capabilities";
 
 export const PROVIDER_STRIPE = "STRIPE";
 export const PROVIDER_ZOHO = "ZOHO";
 
-/** Las claves de `services` en GET /public/portal (backend src/lib/jobPolicies.js, portalServices). */
+/** Claves de `services` (backend lib/jobPolicies.portalServices). */
 export const SERVICE_KEYS = [
   "forwarding",
   "immediateForwarding",
@@ -40,26 +35,32 @@ export const SERVICE_KEYS = [
   "cancellationRequest",
 ];
 
+const ENVIRONMENTS = ["sandbox", "production", "unspecified"];
+const CHECKOUTS = ["EMBEDDED", "HOSTED"];
+const PAYMENT_METHOD_MANAGEMENT = ["STRIPE_PORTAL", "ZOHO_HOSTED", "NONE"];
+
+/** Zoho no se relee mas a menudo (backend STATUS_CHECK_INTERVAL_MS). Nunca por debajo. */
+export const MIN_PAYMENT_STATUS_POLL_SECONDS = 15;
+
 /**
- * Clave de GET /client/billing/payment, con el ambito de la sesion
- * (organizacion:usuario): las capacidades de un centro nunca se sirven a la
- * cuenta de otro, aunque la cache no se hubiera vaciado (que si se vacia:
- * lib/session-scope). Las invalidaciones por ["client-billing-payment"] valen
- * por prefijo.
+ * Clave de cada consulta por ambito de sesion (organizacion:usuario): lo de un
+ * centro nunca se sirve a la cuenta de otro, aunque la cache no se hubiera
+ * vaciado (que si se vacia: lib/session-scope).
  */
+export function capabilitiesQueryKey(scope) {
+  return [CAPABILITIES_QUERY_KEY, scope ?? null];
+}
+
+/** GET /client/billing/payment (Facturacion; con Zoho lee Zoho en el momento). */
 export const BILLING_PAYMENT_QUERY_KEY = "client-billing-payment";
 
 export function billingPaymentQueryKey(scope) {
   return [BILLING_PAYMENT_QUERY_KEY, scope ?? null];
 }
 
-/** Por que no se usa /public/portal desde la app (ver docs/backend-contract-gaps.md). */
-export const PUBLIC_PORTAL_SOURCE = Object.freeze({
-  available: false,
-  reason: "PUBLIC_PORTAL_REQUIRES_ORIGIN",
-});
-
 const triState = (value) => (value === true ? true : value === false ? false : null);
+const oneOf = (value, allowed) => (allowed.includes(value) ? value : null);
+const normalizeSlug = (value) => String(value || "").trim().toLowerCase() || null;
 
 function pickServices(services) {
   if (!services || typeof services !== "object") return null;
@@ -68,66 +69,101 @@ function pickServices(services) {
   return out;
 }
 
-function zohoSummary(billingPayment) {
-  const zoho = billingPayment?.zoho;
-  const cards = Array.isArray(zoho?.cards)
-    ? zoho.cards.map((card) => ({
-        last4: card?.last4 ?? null,
-        expMonth: card?.expMonth ?? null,
-        expYear: card?.expYear ?? null,
-      }))
-    : [];
-  const actions = zoho?.actions || {};
+function pickZoho(zoho) {
+  if (!zoho || typeof zoho !== "object") return null;
   return {
-    loaded: Boolean(zoho),
-    // Si Zoho no respondio: la pantalla sigue, sin estos datos.
-    unavailable: billingPayment?.zohoUnavailable || null,
-    cards,
-    actions: {
-      updateCard: triState(actions.updateCard),
-      addPaymentMethod: triState(actions.addPaymentMethod),
-      payInvoices: triState(actions.payInvoices),
-    },
+    available: triState(zoho.available),
+    unavailableReason: typeof zoho.unavailableReason === "string" ? zoho.unavailableReason : null,
+    payInvoices: triState(zoho.payInvoices),
+    updateCard: triState(zoho.updateCard),
+    addPaymentMethod: triState(zoho.addPaymentMethod),
   };
 }
 
+function pickForwarding(forwarding) {
+  const f = forwarding && typeof forwarding === "object" ? forwarding : {};
+  const minPoll = Number(f.paymentStatusMinPollSeconds);
+  return {
+    available: triState(f.available),
+    payments: triState(f.payments),
+    checkout: oneOf(f.checkout, CHECKOUTS),
+    methods: Array.isArray(f.methods) ? f.methods.filter((m) => typeof m === "string") : [],
+    returnDetection: f.returnDetection === "PAYMENT_STATUS_POLL" ? "PAYMENT_STATUS_POLL" : null,
+    paymentStatusMinPollSeconds: Number.isFinite(minPoll) && minPoll > 0 ? minPoll : null,
+  };
+}
+
+function pickRestrictions(restrictions) {
+  if (!restrictions || typeof restrictions !== "object") return null;
+  const hold = restrictions.billingHold || {};
+  return {
+    billingHold: {
+      active: hold.active === true,
+      code: hold.code === "BILLING_REQUIRED" ? "BILLING_REQUIRED" : null,
+      reason: typeof hold.reason === "string" && hold.reason.trim() ? hold.reason.trim() : null,
+    },
+    mailboxActive: triState(restrictions.mailboxActive),
+    uspsComplianceStatus: typeof restrictions.uspsComplianceStatus === "string" ? restrictions.uspsComplianceStatus : null,
+    accountClosureScheduledAt: typeof restrictions.accountClosureScheduledAt === "string" ? restrictions.accountClosureScheduledAt : null,
+    accountDeletionInProgress: triState(restrictions.accountDeletionInProgress),
+  };
+}
+
+const UNKNOWN = Object.freeze({
+  known: false,
+  reason: "NOT_LOADED",
+  environment: null,
+  tenantSlug: null,
+  center: null,
+  provider: null,
+  onlinePayments: null,
+  billingPortal: null,
+  invoices: null,
+  paymentMethodManagement: null,
+  zoho: null,
+  forwarding: pickForwarding(null),
+  services: null,
+  restrictions: null,
+});
+
 /**
  * @param {object} sources
- * @param {object|null} [sources.billingPayment] - cuerpo de GET /client/billing/payment
- * @param {object|null} [sources.publicPortal] - cuerpo de GET /public/portal, si se tuviera
+ * @param {object|null} [sources.capabilities] - cuerpo de GET /client/capabilities
+ * @param {string} [sources.expectedTenantSlug] - la organizacion de esta app (brand.tenantSlug)
  */
-export function deriveCapabilities({ billingPayment = null, publicPortal = null } = {}) {
-  const billing = billingPayment?.billing || null;
-  const portalBilling = publicPortal?.billing || null;
-  const provider = billing?.provider === PROVIDER_STRIPE || billing?.provider === PROVIDER_ZOHO ? billing.provider : null;
+export function deriveCapabilities({ capabilities = null, expectedTenantSlug } = {}) {
+  if (!capabilities || typeof capabilities !== "object") return { ...UNKNOWN };
 
-  const fromBilling = (key) => triState(billing ? billing[key] : portalBilling?.[key]);
+  // Un contrato que no se conoce no se interpreta: mejor "no se sabe" que leerlo mal.
+  if (capabilities.contractVersion !== CAPABILITIES_CONTRACT_VERSION) {
+    return { ...UNKNOWN, reason: "UNSUPPORTED_CONTRACT" };
+  }
 
+  const tenantSlug = normalizeSlug(capabilities.tenant?.slug);
+  // Las capacidades de otra organizacion no valen para esta app (y la sesion
+  // tampoco: lo comprueba AuthContext con el usuario).
+  if (expectedTenantSlug && tenantSlug !== normalizeSlug(expectedTenantSlug)) {
+    return { ...UNKNOWN, reason: "TENANT_MISMATCH", tenantSlug };
+  }
+
+  const billing = capabilities.billing || {};
   return {
-    /** Si hay datos con sesion (billing/payment). Sin ellos todo es null. */
-    known: Boolean(billing),
-    provider,
-    onlinePayments: fromBilling("onlinePayments"),
-    billingPortal: fromBilling("billingPortal"),
-    invoices: fromBilling("invoices"),
-    // El portal de facturacion de Stripe de ESTA cuenta (puede no estarlo aunque el centro lo tenga).
-    billingPortalAvailable: billingPayment ? billingPayment.billingPortal?.available === true : null,
-    billingPortalUnavailableReason: billingPayment?.billingPortal?.unavailableReason || null,
-    forwardingPayments: fromBilling("forwardingPayments"),
-    forwardingPaymentProvider:
-      billing?.forwardingPaymentProvider === PROVIDER_STRIPE || billing?.forwardingPaymentProvider === PROVIDER_ZOHO
-        ? billing.forwardingPaymentProvider
-        : null,
-    // Solo lo da /public/portal ("EMBEDDED" | "HOSTED" | null); no se deduce.
-    forwardingCheckout: portalBilling ? portalBilling.forwardingCheckout ?? null : null,
-    services: pickServices(publicPortal?.services),
-    // /public/portal solo trae `deployment: "sandbox"`; sin el campo, produccion.
-    deployment: publicPortal ? (publicPortal.deployment === "sandbox" ? "sandbox" : "production") : null,
-    zoho: provider === PROVIDER_ZOHO ? zohoSummary(billingPayment) : null,
-    sources: {
-      billingPayment: Boolean(billingPayment),
-      publicPortal: Boolean(publicPortal),
-    },
+    known: true,
+    reason: null,
+    environment: oneOf(capabilities.environment, ENVIRONMENTS),
+    tenantSlug,
+    center: capabilities.center && typeof capabilities.center === "object"
+      ? { slug: capabilities.center.slug ?? null, displayName: capabilities.center.displayName ?? null }
+      : null,
+    provider: oneOf(billing.provider, [PROVIDER_STRIPE, PROVIDER_ZOHO]),
+    onlinePayments: triState(billing.onlinePayments),
+    billingPortal: triState(billing.billingPortal),
+    invoices: triState(billing.invoices),
+    paymentMethodManagement: oneOf(billing.paymentMethodManagement, PAYMENT_METHOD_MANAGEMENT),
+    zoho: pickZoho(billing.zoho),
+    forwarding: pickForwarding(capabilities.forwarding),
+    services: pickServices(capabilities.services),
+    restrictions: pickRestrictions(capabilities.restrictions),
   };
 }
 
@@ -136,33 +172,51 @@ export function serviceAllowed(capabilities, key) {
   return triState(capabilities?.services?.[key]);
 }
 
+/** La retencion por impago (402 BILLING_REQUIRED en las solicitudes de servicio). */
+export function billingHold(capabilities) {
+  return capabilities?.restrictions?.billingHold?.active === true ? capabilities.restrictions.billingHold : null;
+}
+
 // ── Pago del reenvio ────────────────────────────────────────────────────────
 
 export const FORWARD_PAYMENT_STRIPE_CHECKOUT = "stripe-checkout";
-export const FORWARD_PAYMENT_NOT_IN_APP = "not-in-app";
+export const FORWARD_PAYMENT_ZOHO_HOSTED = "zoho-hosted";
 export const FORWARD_PAYMENT_UNAVAILABLE = "unavailable";
 export const FORWARD_PAYMENT_UNKNOWN = "unknown";
 
 /**
- * Como se paga un reenvio en esta cuenta.
+ * Como se paga un reenvio ya creado en esta cuenta.
  *
- * - Stripe: Checkout alojado de Stripe (POST checkout-session), el flujo que
- *   ya usa la app; el backend lo admite solo con Stripe (requireStripeBilling).
- * - Zoho: factura de Zoho + tarjeta guardada o pagina de Zoho (prepare-payment
- *   con useSavedCard). Es otro flujo, todavia no esta en la app: no se le
- *   ofrece el de Stripe (daria 409 ONLINE_PAYMENTS_UNAVAILABLE).
- * - forwardingPayments false (o el servicio de reenvio apagado): no se paga
- *   desde la app.
- * - Sin datos todavia: unknown (la pantalla espera; si fallo la carga, deja
- *   intentarlo y el backend decide sin cobrar nada).
+ * - EMBEDDED con CHECKOUT_SESSION: el Checkout alojado de Stripe (POST
+ *   checkout-session), el flujo que ya usa la app con The Worx.
+ * - HOSTED con HOSTED_PAGE: factura de Zoho, tarjeta guardada (SAVED_CARD) o
+ *   pagina segura de Zoho (lib/zoho-forward-payment).
+ * - forwarding.payments false: no se paga desde la app.
+ *
+ * `forwarding.available` (services.forwarding) es para PEDIR un reenvio
+ * (quotes, quotes/select); pagar uno que ya existe lo decide
+ * requireForwardingPayments, que es `forwarding.payments`.
  */
 export function forwardPaymentMode(capabilities) {
   if (!capabilities?.known) return FORWARD_PAYMENT_UNKNOWN;
-  if (serviceAllowed(capabilities, "forwarding") === false) return FORWARD_PAYMENT_UNAVAILABLE;
-  if (capabilities.forwardingPayments !== true) return FORWARD_PAYMENT_UNAVAILABLE;
-  if (capabilities.forwardingPaymentProvider === PROVIDER_STRIPE) return FORWARD_PAYMENT_STRIPE_CHECKOUT;
-  if (capabilities.forwardingPaymentProvider === PROVIDER_ZOHO) return FORWARD_PAYMENT_NOT_IN_APP;
+  const forwarding = capabilities.forwarding || {};
+  if (forwarding.payments !== true) return FORWARD_PAYMENT_UNAVAILABLE;
+  if (forwarding.checkout === "EMBEDDED" && forwarding.methods.includes("CHECKOUT_SESSION")) {
+    return FORWARD_PAYMENT_STRIPE_CHECKOUT;
+  }
+  if (forwarding.checkout === "HOSTED" && forwarding.methods.includes("HOSTED_PAGE")) return FORWARD_PAYMENT_ZOHO_HOSTED;
   return FORWARD_PAYMENT_UNAVAILABLE;
+}
+
+/** Si se puede intentar la tarjeta guardada de Zoho (useSavedCard). */
+export function savedCardAllowed(capabilities) {
+  return forwardPaymentMode(capabilities) === FORWARD_PAYMENT_ZOHO_HOSTED && capabilities.forwarding.methods.includes("SAVED_CARD");
+}
+
+/** Cada cuanto, como poco, se pregunta payment-status (nunca menos de 15 s). */
+export function paymentStatusMinPollMs(capabilities) {
+  const seconds = capabilities?.forwarding?.paymentStatusMinPollSeconds;
+  return Math.max(MIN_PAYMENT_STATUS_POLL_SECONDS, Number(seconds) || 0) * 1000;
 }
 
 // ── Facturacion ─────────────────────────────────────────────────────────────
@@ -171,49 +225,66 @@ export const BILLING_VIEW_STRIPE = "stripe";
 export const BILLING_VIEW_ZOHO = "zoho";
 export const BILLING_VIEW_UNKNOWN = "unknown";
 
-/** Que pantalla de pago enseñar: la de Stripe, la de Zoho, o nada concreto. */
+/** Que pantalla de pago enseñar. */
 export function billingView(capabilities) {
   if (capabilities?.provider === PROVIDER_STRIPE) return BILLING_VIEW_STRIPE;
   if (capabilities?.provider === PROVIDER_ZOHO) return BILLING_VIEW_ZOHO;
   return BILLING_VIEW_UNKNOWN;
 }
 
-// ── Acciones de una pieza ───────────────────────────────────────────────────
+/** Acciones de Zoho (paginas seguras) que se pueden ofrecer. Todas false si Zoho no esta disponible. */
+export function zohoBillingActions(capabilities) {
+  const zoho = capabilities?.zoho;
+  const usable = capabilities?.paymentMethodManagement === "ZOHO_HOSTED" && zoho?.available === true;
+  return {
+    available: usable,
+    unavailableReason: usable ? null : zoho?.unavailableReason || null,
+    payInvoices: usable && zoho.payInvoices === true,
+    updateCard: usable && zoho.updateCard === true,
+    addPaymentMethod: usable && zoho.addPaymentMethod === true,
+  };
+}
 
-const ITEM_ACTION_SERVICE = {
-  // canRequestForward ya lo calcula el backend con services.forwarding; si la
-  // app llegara a conocer services, solo puede quitar, nunca dar.
-  canRequestForward: "forwarding",
-};
+// ── Acciones de una pieza ───────────────────────────────────────────────────
 
 const ITEM_ACTION_FLAGS = ["canRequestScan", "canRequestForward", "canRequestPickup", "canRequestDiscard", "canRejectAssignment"];
 
 /**
  * Las acciones de una pieza: las de `availableActions` del backend, que manda.
- * Las capacidades del centro solo pueden quitar (services.forwarding === false),
- * y la mora (billingRestricted) las quita todas, como hace el backend.
+ * Las capacidades solo pueden quitar: services.forwarding === false quita
+ * Forward, y la retencion por impago (billingHold, igual que billingRestricted)
+ * quita todas.
  */
 export function itemActions(availableActions, capabilities) {
   const actions = availableActions || {};
-  const restricted = actions.billingRestricted === true;
+  const restricted = actions.billingRestricted === true || Boolean(billingHold(capabilities));
   const out = { billingRestricted: restricted };
 
   for (const flag of ITEM_ACTION_FLAGS) {
-    const service = ITEM_ACTION_SERVICE[flag];
-    out[flag] = !restricted && actions[flag] === true && (!service || serviceAllowed(capabilities, service) !== false);
+    const blockedByService = flag === "canRequestForward" && serviceAllowed(capabilities, "forwarding") === false;
+    out[flag] = !restricted && actions[flag] === true && !blockedByService;
   }
   return out;
 }
 
-/** Errores del backend que dicen "esto no esta disponible en este centro": hay que releer las capacidades. */
+/**
+ * Errores de guarda que obligan a releer las capacidades (contrato §1: "tras
+ * cualquier 402/409 de una guarda").
+ */
 export const CAPABILITY_ERROR_CODES = [
   "ONLINE_PAYMENTS_UNAVAILABLE",
   "CENTER_POLICY_NOT_CONFIGURED",
   "BILLING_PROVIDER_NOT_STRIPE",
   "BILLING_PROVIDER_NOT_ZOHO",
   "ZOHO_FORWARDING_PAYMENTS_UNAVAILABLE",
+  "ZOHO_ACCOUNT_NOT_CONFIGURED",
+  "ZOHO_ENVIRONMENT_NOT_ENABLED",
+  "ZOHO_CUSTOMER_NOT_LINKED",
 ];
 
 export function isCapabilityError(error) {
-  return error?.response?.status === 409 && CAPABILITY_ERROR_CODES.includes(error.response.data?.code);
+  const status = error?.response?.status;
+  const code = error?.response?.data?.code;
+  if (status === 402 && code === "BILLING_REQUIRED") return true;
+  return (status === 409 || status === 404) && CAPABILITY_ERROR_CODES.includes(code);
 }

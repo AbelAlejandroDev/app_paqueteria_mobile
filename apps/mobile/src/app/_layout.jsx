@@ -12,9 +12,9 @@ import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-c
 
 import { AuthProvider } from "@/context/AuthContext";
 import PushIntentCapture from "@/components/common/push-intent-capture";
+import CapabilitiesSync from "@/components/common/capabilities-sync";
 import SandboxFrame from "@/components/common/sandbox-frame";
 import ServiceUnavailable from "@/components/common/service-unavailable";
-import { apiEnvironment } from "@/lib/api";
 import { QUERY_DEFAULT_OPTIONS } from "@/lib/query-defaults";
 import { connectFocusToAppState } from "@/lib/query-focus";
 import { setupStorage } from "@/lib/storage";
@@ -61,10 +61,10 @@ export default function RootLayout() {
             {/* Fuera de todas las puertas: guarda el toque de un push aunque la app
                 este cerrada, sin sesion o bloqueada. No navega. */}
             <PushIntentCapture />
-            {/* deployment: el del servidor. Hoy solo lo publica /public/portal, que la
-                app no puede usar (lib/capabilities, docs/backend-contract-gaps.md);
-                cuando haya fuente, llega por las capacidades. Mientras, la build. */}
-            <SandboxFrame apiEnvironment={apiEnvironment} deployment={null}>
+            {/* Relee /client/capabilities tras un 402/409 de una guarda o un pago. */}
+            <CapabilitiesSync />
+            {/* Sandbox: environment de /client/capabilities; antes del login, la build. */}
+            <SandboxFrame>
               <Stack screenOptions={{ headerShown: false }} />
             </SandboxFrame>
             {/* Por encima de todo, sin desmontar nada debajo. */}

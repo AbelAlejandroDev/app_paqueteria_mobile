@@ -23,10 +23,22 @@ import {
   BILLING_VIEW_STRIPE,
   BILLING_VIEW_ZOHO,
   billingView,
-  deriveCapabilities,
+  zohoBillingActions,
 } from "@/lib/capabilities";
+import { notifyCapabilitiesStale } from "@/lib/capabilities-events";
 import { sessionScope } from "@/lib/session-scope";
-import { billingPaymentQueryOptions } from "@/lib/use-capabilities";
+import { billingPaymentQueryOptions, useCapabilities } from "@/lib/use-capabilities";
+import {
+  canPayZohoInvoice,
+  sortZohoInvoices,
+  ZOHO_ADD_PAYMENT_METHOD_PATH,
+  ZOHO_UPDATE_CARD_PATH,
+  zohoBillingErrorMessage,
+  zohoInvoiceKindLabel,
+  zohoInvoicePayPath,
+  zohoInvoiceStatus,
+  zohoPageUrl,
+} from "@/lib/zoho-billing";
 import {
   formatCycle,
   formatDateOnly,
@@ -356,29 +368,66 @@ function StatementTab({ data, isLoading, isError, error }) {
   );
 }
 
+/** Una factura de Zoho: numero, tipo, fechas, importe, estado y, si se puede, "Pay". */
+function ZohoInvoiceRow({ invoice, canPay, paying, disabled, onPay }) {
+  const status = zohoInvoiceStatus(invoice.status);
+  return (
+    <View className={INSET}>
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="min-w-0 flex-1">
+          <Text className="font-brand-bold text-[14px] text-ink">{invoice.number || "Invoice"}</Text>
+          <Text className="mt-0.5 font-brand text-[13px] text-ink/60">
+            {zohoInvoiceKindLabel(invoice.kind) + (invoice.dueDate ? " · Due " + invoice.dueDate : invoice.date ? " · " + invoice.date : "")}
+          </Text>
+        </View>
+        <Badge variant="outline" className={status.tone.container} labelClassName={status.tone.label}>
+          {status.label}
+        </Badge>
+      </View>
+      <View className="mt-3 flex-row items-center justify-between gap-3">
+        <Text className="min-w-0 flex-1 font-brand text-[13px] text-ink/60">
+          {"Total " + formatMoneyCents(invoice.totalCents, invoice.currency) +
+            (Number(invoice.balanceCents) > 0 ? " · Balance " + formatMoneyCents(invoice.balanceCents, invoice.currency) : "")}
+        </Text>
+        {canPay ? (
+          <ActionButton variant="primary" icon={ExternalLink} loading={paying} disabled={disabled} onPress={onPay}>
+            Pay
+          </ActionButton>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 /**
- * Facturacion de un centro que cobra con Zoho (lo dice billing.provider).
+ * Facturacion de un centro que cobra con Zoho (lo dice /client/capabilities).
  *
- * Solo lo que devuelve GET /client/billing/payment para Zoho: tarjetas
- * enmascaradas (last4 y caducidad; Zoho no da la marca) y el plan. No hay
- * suscripcion ni portal de Stripe. Pagar facturas o cambiar la tarjeta abre
- * paginas de Zoho (POST /client/billing/zoho/*): es un flujo propio, pendiente.
+ * Datos: GET /client/billing/payment (zoho.cards, invoices, payments; lee Zoho en
+ * el momento). Acciones: las paginas seguras de Zoho (lib/zoho-billing), solo si
+ * capabilities.billing.zoho las permite. Al volver del navegador se relee
+ * billing/payment: la vuelta no confirma nada.
  */
-function ZohoPaymentTab({ data, capabilities }) {
-  const zoho = capabilities.zoho || { cards: [], unavailable: null };
+function ZohoPaymentTab({ data, capabilities, onOpenZohoPage, openingPath }) {
+  const zoho = data?.zoho || null;
+  const unavailable = data?.zohoUnavailable || (!zoho ? capabilities.zoho?.unavailableReason || "ZOHO_UNAVAILABLE" : null);
+  const actions = zohoBillingActions(capabilities);
   const plan = data?.plan || {};
+  const cards = Array.isArray(zoho?.cards) ? zoho.cards : [];
+  const invoices = sortZohoInvoices(zoho?.invoices);
+  const payments = Array.isArray(zoho?.payments) ? zoho.payments : [];
+  const busy = Boolean(openingPath);
 
   return (
     <View className="gap-5">
       <Section title="Payment Method" icon={WalletCards} description="Card your center has on file for this account.">
-        {zoho.unavailable ? (
+        {unavailable ? (
           <View className={INSET}>
             <Text className="font-brand text-[14px] leading-5 text-ink/70">
               We could not load your payment details right now. Pull down to try again.
             </Text>
           </View>
-        ) : zoho.cards.length ? (
-          zoho.cards.map((card, index) => (
+        ) : cards.length ? (
+          cards.map((card, index) => (
             <View key={(card.last4 || "card") + "-" + index} className={INSET}>
               <View className="flex-row items-center justify-between gap-3">
                 <Text className="font-brand-semibold text-[16px] tracking-widest text-ink">{"•••• " + (card.last4 || "----")}</Text>
@@ -395,11 +444,75 @@ function ZohoPaymentTab({ data, capabilities }) {
           </View>
         )}
 
+        {actions.updateCard && cards.length ? (
+          <ActionButton
+            variant="primary"
+            icon={ExternalLink}
+            loading={openingPath === ZOHO_UPDATE_CARD_PATH}
+            disabled={busy}
+            onPress={() => onOpenZohoPage(ZOHO_UPDATE_CARD_PATH)}
+          >
+            Update card
+          </ActionButton>
+        ) : null}
+        {actions.addPaymentMethod ? (
+          <ActionButton
+            variant={cards.length ? "secondary" : "primary"}
+            icon={ExternalLink}
+            loading={openingPath === ZOHO_ADD_PAYMENT_METHOD_PATH}
+            disabled={busy}
+            onPress={() => onOpenZohoPage(ZOHO_ADD_PAYMENT_METHOD_PATH)}
+          >
+            Add payment method
+          </ActionButton>
+        ) : null}
+
         <Text className="font-brand text-[14px] leading-5 text-ink/60">
-          {(capabilities.billingPortalUnavailableReason || "Billing is managed by your center.") +
-            " Card updates and invoice payments are not available in the app yet; contact your center if you need help."}
+          {actions.available
+            ? "Card changes and payments open a secure page. Come back to the app when you are done; it can take a moment to update here."
+            : (data?.billingPortal?.unavailableReason || "Billing is managed by your center.") + " Contact your center if you need help."}
         </Text>
       </Section>
+
+      <Section title="Invoices" icon={FileText} description="Your invoices from your center.">
+        {invoices.length ? (
+          invoices.map((invoice) => (
+            <ZohoInvoiceRow
+              key={invoice.invoiceId || invoice.number}
+              invoice={invoice}
+              canPay={canPayZohoInvoice(invoice, actions)}
+              paying={openingPath === "invoice:" + invoice.invoiceId}
+              disabled={busy}
+              onPay={() => onOpenZohoPage(zohoInvoicePayPath(invoice.invoiceId), "invoice:" + invoice.invoiceId)}
+            />
+          ))
+        ) : (
+          <Text className="font-brand text-[14px] leading-5 text-ink/60">
+            {unavailable ? "Invoices are not available right now." : "No invoices yet."}
+          </Text>
+        )}
+        {invoices.some((invoice) => invoice.kind === "FORWARDING" && Number(invoice.balanceCents) > 0) ? (
+          <Text className="font-brand text-[13px] leading-5 text-ink/60">Shipping invoices are paid from the mail item.</Text>
+        ) : null}
+      </Section>
+
+      {payments.length ? (
+        <Section title="Payments" icon={CheckCircle2} description="Payments recorded for this account.">
+          {payments.map((payment) => (
+            <View key={payment.paymentId || payment.number} className={INSET}>
+              <View className="flex-row items-center justify-between gap-3">
+                <Text className="font-brand-bold text-[14px] text-ink">{payment.number || "Payment"}</Text>
+                <Text className="font-brand-semibold text-[14px] text-ink">{formatMoneyCents(payment.amountCents, payment.currency)}</Text>
+              </View>
+              <Text className="mt-0.5 font-brand text-[13px] text-ink/60">
+                {[payment.date, Array.isArray(payment.invoiceNumbers) && payment.invoiceNumbers.length ? payment.invoiceNumbers.join(", ") : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            </View>
+          ))}
+        </Section>
+      ) : null}
 
       <Section title="Plan" description="The plan linked to this account.">
         <View className={INSET}>
@@ -413,7 +526,7 @@ function ZohoPaymentTab({ data, capabilities }) {
   );
 }
 
-function PaymentTab({ data, capabilities, isLoading, isError, error, onOpenPortal, isOpening }) {
+function PaymentTab({ data, capabilities, isLoading, isError, error, onOpenPortal, isOpening, onOpenZohoPage, openingZohoPath }) {
   if (isLoading) {
     return (
       <View className="gap-4">
@@ -429,12 +542,14 @@ function PaymentTab({ data, capabilities, isLoading, isError, error, onOpenPorta
 
   // Cada proveedor con su pantalla: Zoho no tiene ni suscripcion ni portal de Stripe.
   const view = billingView(capabilities);
-  if (view === BILLING_VIEW_ZOHO) return <ZohoPaymentTab data={data} capabilities={capabilities} />;
+  if (view === BILLING_VIEW_ZOHO) {
+    return <ZohoPaymentTab data={data} capabilities={capabilities} onOpenZohoPage={onOpenZohoPage} openingPath={openingZohoPath} />;
+  }
   if (view !== BILLING_VIEW_STRIPE) {
     return (
       <EmptyState
         title="Billing is managed by your center"
-        description={capabilities.billingPortalUnavailableReason || "Contact your center for payment details."}
+        description={data?.billingPortal?.unavailableReason || "Contact your center for payment details."}
       />
     );
   }
@@ -551,7 +666,33 @@ export default function BillingScreen() {
 
   // La misma consulta que las capacidades (lib/use-capabilities): una peticion.
   const paymentQuery = useQuery(billingPaymentQueryOptions(sessionScope(user)));
-  const capabilities = useMemo(() => deriveCapabilities({ billingPayment: paymentQuery.data || null }), [paymentQuery.data]);
+  // Que vista y que acciones: /client/capabilities. Los datos (tarjetas,
+  // facturas): billing/payment.
+  const capabilities = useCapabilities();
+
+  const zohoPageMutation = useMutation({
+    mutationFn: async ({ path }) => {
+      const url = zohoPageUrl((await api.post(path)).data);
+      if (!url) throw new Error("INVALID_PAYMENT_URL");
+      // Navegador del sistema; la vuelta va al portal web y no confirma nada.
+      await WebBrowser.openBrowserAsync(url);
+    },
+    onSettled: () => {
+      // Al volver (o si fallo): se relee lo de Zoho y lo que dependa de un pago.
+      queryClient.invalidateQueries({ queryKey: [BILLING_PAYMENT_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["client-account-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["client-payment-alerts"] });
+      notifyCapabilitiesStale("zoho-page");
+    },
+    onError: (error) => {
+      Alert.alert(
+        "Could not open the secure page",
+        error?.message === "INVALID_PAYMENT_URL"
+          ? "We could not open the secure payment page. Please try again."
+          : zohoBillingErrorMessage(error)
+      );
+    },
+  });
 
   /**
    * El portal de facturación de Stripe es una página web alojada por Stripe,
@@ -644,6 +785,8 @@ export default function BillingScreen() {
           error={paymentQuery.error}
           onOpenPortal={() => portalMutation.mutate()}
           isOpening={portalMutation.isPending}
+          onOpenZohoPage={(path, key) => zohoPageMutation.mutate({ path, key: key || path })}
+          openingZohoPath={zohoPageMutation.isPending ? zohoPageMutation.variables?.key : null}
         />
       ) : null}
 

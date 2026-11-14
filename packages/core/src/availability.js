@@ -60,6 +60,15 @@ export function classifyAvailability(error) {
 }
 
 /**
+ * GET /api/v1/health (backend 3bc5e88, docs/mobile/capacidades-y-health.md §2):
+ * solo `200 {"status":"ok"}` es "hay conexion". Cualquier otro codigo o cuerpo
+ * (502/503/504 de Traefik, una pagina HTML, otro JSON) es "no disponible".
+ */
+export function isHealthyResponse(response) {
+  return Boolean(response && response.status === 200 && response.data && response.data.status === "ok");
+}
+
+/**
  * Si la respuesta de una sonda prueba que la API esta viva: cualquier
  * respuesta por debajo de 500, o un 5xx con el cuerpo del backend (la app
  * responde; el fallo es de esa ruta).

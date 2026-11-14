@@ -8,6 +8,7 @@ export {
   DEFAULT_TIMEOUT_MS,
   isBackendErrorBody,
   isCancellation,
+  isHealthyResponse,
   isReachableResponse,
   isTimeoutError,
 } from "./availability.js";
