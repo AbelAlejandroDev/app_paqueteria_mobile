@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { configureStorage } from "../../../packages/core/src/storage.js";
+// Por el nombre del paquete, como lo importa onboarding-state.js: con una ruta
+// relativa, Windows puede resolver "d:" y "D:" como dos modulos distintos y el
+// test configuraria un almacen que el modulo bajo prueba no ve.
+import { configureStorage } from "@paqueteria/core";
 import {
   CLIENT_ONBOARDING_VERSION,
   getOnboardingRecord,
