@@ -68,6 +68,13 @@ const BRANDS = {
     scheme: "worxclient",
     bundleId: "com.theworxoffices.clientportal",
     easProjectId: "922f4b80-6a1f-4072-a4df-c0d35fe374c8",
+    // APIs de esta marca por entorno (brands/api-environment.js). The Worx solo
+    // tiene produccion, operativa: todos sus perfiles van ahi.
+    api: {
+      production: "https://core.theworxoffices.com/api/v1",
+    },
+    defaultEnvironment: "production",
+    productionRelease: { authorized: true },
     primaryColor: "#65baaf",
     splashBackground: "#0e0d13",
     // Capa de fondo del icono adaptativo de Android. Coincide con la esquina
@@ -110,6 +117,18 @@ const BRANDS = {
     scheme: "hdgclient",
     bundleId: "com.hdgexecutivesuites.clientportal",
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
+    // HDG Sandbox es su entorno habitual (API y base distintas de produccion).
+    // La de produccion no existe todavia: hasta configurarla aqui Y autorizar
+    // el lanzamiento, los builds de production de HDG fallan a proposito.
+    api: {
+      sandbox: "https://core.hdgexecutivesuites.com/api/v1",
+      production: null,
+    },
+    defaultEnvironment: "sandbox",
+    productionRelease: {
+      authorized: false,
+      reason: "La API de produccion de HDG no esta configurada y el lanzamiento no esta autorizado.",
+    },
     // Manual de marca de HDG: Primary #2F4157, Secondary #577C8E, Accent
     // #C7D9E5, Background #F4EFEB; complementarios Dark Navy #12203A, Muted
     // Blue #66809B, Light Gray Blue #DCE2EE, Neutral Gray #727375.

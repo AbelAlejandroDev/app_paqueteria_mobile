@@ -8,88 +8,109 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "environment": "development",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
-      }
+      "environment": "development"
     },
-
     "base-preview": {
       "distribution": "internal",
       "channel": "preview",
       "environment": "preview",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
-      },
       "android": {
         "buildType": "apk"
       }
     },
-
     "base-simulator": {
       "distribution": "internal",
       "channel": "preview",
       "environment": "preview",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
-      },
       "ios": {
         "simulator": true
       }
     },
-
     "base-production": {
       "autoIncrement": true,
       "channel": "production",
-      "environment": "production",
+      "environment": "production"
+    },
+    "worx-development": {
+      "extends": "base-development",
       "env": {
+        "APP_BRAND": "the_worx",
+        "APP_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
       }
     },
-
-    "worx-development": {
-      "extends": "base-development",
-      "env": { "APP_BRAND": "the_worx" }
-    },
     "worx-preview": {
       "extends": "base-preview",
-      "env": { "APP_BRAND": "the_worx" }
+      "env": {
+        "APP_BRAND": "the_worx",
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
+      }
     },
     "worx-simulator": {
       "extends": "base-simulator",
-      "env": { "APP_BRAND": "the_worx" }
+      "env": {
+        "APP_BRAND": "the_worx",
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
+      }
     },
     "worx-production": {
       "extends": "base-production",
-      "env": { "APP_BRAND": "the_worx" }
+      "env": {
+        "APP_BRAND": "the_worx",
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://core.theworxoffices.com/api/v1"
+      }
     },
     "worx-production-apk": {
       "extends": "worx-production",
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      }
     },
-
     "hdg-development": {
       "extends": "base-development",
-      "env": { "APP_BRAND": "hdg" }
+      "env": {
+        "APP_BRAND": "hdg",
+        "APP_ENV": "sandbox",
+        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+      }
     },
     "hdg-preview": {
       "extends": "base-preview",
-      "env": { "APP_BRAND": "hdg" }
+      "env": {
+        "APP_BRAND": "hdg",
+        "APP_ENV": "sandbox",
+        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+      }
     },
     "hdg-simulator": {
       "extends": "base-simulator",
-      "env": { "APP_BRAND": "hdg" }
+      "env": {
+        "APP_BRAND": "hdg",
+        "APP_ENV": "sandbox",
+        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+      }
     },
     "hdg-production": {
       "extends": "base-production",
-      "env": { "APP_BRAND": "hdg" }
+      "env": {
+        "APP_BRAND": "hdg",
+        "APP_ENV": "production"
+      }
     }
   },
   "submit": {
     "worx-production": {
-      "ios": { "ascAppId": "6822867406" },
-      "android": { "track": "internal", "releaseStatus": "draft" }
+      "ios": {
+        "ascAppId": "6822867406"
+      },
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
     },
     "hdg-production": {}
   }

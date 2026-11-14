@@ -13,16 +13,19 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
 // ── Builds: la API de cada perfil ─────────────────────────────────────────
 
-test("todos los perfiles de EAS apuntan a la API publica por HTTPS (sin localhost ni ngrok)", () => {
+test("cada perfil de EAS apunta a la API de su marca por HTTPS (detalle en build-safety.test.mjs)", () => {
   const eas = JSON.parse(read("eas.json"));
   const resolve = (name) => {
     const profile = eas.build[name];
     const parent = profile.extends ? resolve(profile.extends) : {};
     return { ...(parent || {}), ...(profile.env || {}) };
   };
-  for (const name of Object.keys(eas.build)) {
-    const url = resolve(name).EXPO_PUBLIC_API_URL;
-    assert.equal(url, "https://core.theworxoffices.com/api/v1", name);
+  for (const name of Object.keys(eas.build).filter((n) => !n.startsWith("base-"))) {
+    const env = resolve(name);
+    if (name.startsWith("worx-")) assert.equal(env.EXPO_PUBLIC_API_URL, "https://core.theworxoffices.com/api/v1", name);
+    else if (name === "hdg-production") assert.equal(env.EXPO_PUBLIC_API_URL, undefined, name + ": bloqueado, sin API");
+    else if (name.startsWith("hdg-")) assert.equal(env.EXPO_PUBLIC_API_URL, "https://core.hdgexecutivesuites.com/api/v1", name);
+    else assert.fail("perfil sin marca conocida: " + name);
   }
 });
 

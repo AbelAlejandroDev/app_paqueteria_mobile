@@ -3,8 +3,15 @@ const path = require("path");
 
 const { getBrand } = require("./brands");
 const { getForegroundForColor } = require("./brands/color");
+const { resolveApiConfig } = require("./brands/api-environment");
 
 const brand = getBrand();
+
+// La API de esta build (marca + APP_ENV). Lanza aqui, antes de que EAS
+// construya o publique nada, si la combinacion no esta permitida: una app de
+// HDG apuntando a The Worx (o al reves), un production de HDG sin autorizar,
+// o un EXPO_PUBLIC_API_URL que no es el de esa marca y entorno.
+const apiConfig = resolveApiConfig({ brand });
 
 const brandDir = "./assets/brands/" + brand.id;
 // Identificadores publicos de Firebase; se versiona. La clave privada de la
@@ -162,6 +169,8 @@ module.exports = {
     },
     // Lo lee src/lib/brand.js en runtime a través de expo-constants.
     extra: {
+      // La lee src/lib/api.js: la URL ya validada, no la variable suelta.
+      api: apiConfig,
       // Proyecto de expo.dev de esta marca. Lo lee getExpoPushTokenAsync; sin
       // el, la app detecta que no puede registrarse y no lo intenta.
       eas: { projectId: brand.easProjectId || null },
