@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AUTH_USER_UPDATED_EVENT,
@@ -11,6 +11,8 @@ import {
   getTokens,
   normalizeAuthUser,
   on,
+  classifySessionError,
+  SESSION_INVALID,
   setAuthUser,
   setTokens,
 } from "@paqueteria/core";
@@ -19,27 +21,58 @@ import { brand } from "@/lib/brand";
 import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
 import { clearBiometricLock } from "@/lib/security-preferences";
 import { clearPendingNavigation } from "@/lib/pending-navigation";
+import { createScopeTracker, resetQueryCache } from "@/lib/session-scope";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Hay tokens guardados pero no se pudo comprobar la sesion (sin red, 5xx...)
+  // ni hay usuario guardado que enseñar. No es "sin sesion": no se va al login.
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
   const queryClient = useQueryClient();
 
-  // La cache es de quien entro: sin vaciarla, quien entra despues en este
-  // telefono veria un momento los datos del anterior (sus direcciones incluidas).
-  const previousUserId = useRef(user?.id || null);
-  useEffect(() => {
-    const currentUserId = user?.id || null;
-    if (previousUserId.current && previousUserId.current !== currentUserId) queryClient.clear();
-    previousUserId.current = currentUserId;
-  }, [user?.id, queryClient]);
+  /**
+   * La cache es de quien entro. Se vacia ANTES de pintar al siguiente (no en un
+   * efecto despues), para que ni un fotograma enseñe datos del anterior. Cuenta
+   * tambien la organizacion: la misma persona en otro tenant no comparte cache.
+   */
+  const [trackScope] = useState(() =>
+    createScopeTracker((nextScope) => {
+      resetQueryCache(queryClient);
+      // Un push tocado con la cuenta anterior no se abre en la siguiente.
+      clearPendingNavigation();
+      if (nextScope === null) {
+        // Tambien si la sesion la cerro el servidor (revocada), no solo el boton.
+        clearBiometricLock().catch(() => {});
+      }
+    })
+  );
+
+  /** Todo cambio de usuario pasa por aqui. */
+  const applyUser = useCallback(
+    (nextUser) => {
+      trackScope(nextUser);
+      setUser(nextUser ?? null);
+    },
+    [trackScope]
+  );
+
+  /** Cierra la sesion local: tokens, usuario guardado y datos en memoria. */
+  const endLocalSession = useCallback(async () => {
+    await clearTokens();
+    await clearAuthUser();
+    broadcastAuthUserUpdated(null);
+    setSessionUnavailable(false);
+    applyUser(null);
+  }, [applyUser]);
 
   const reload = useCallback(async () => {
     const { accessToken } = await getTokens();
     if (!accessToken) {
-      setUser(null);
+      setSessionUnavailable(false);
+      applyUser(null);
       setLoading(false);
       return null;
     }
@@ -47,7 +80,8 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.get("/auth/me");
       const nextUser = normalizeAuthUser(response.data?.user || response.data || null, response.data || {});
-      setUser(nextUser);
+      setSessionUnavailable(false);
+      applyUser(nextUser);
 
       if (nextUser) {
         await setAuthUser(nextUser);
@@ -59,15 +93,26 @@ export function AuthProvider({ children }) {
 
       return nextUser;
     } catch (error) {
-      await clearTokens();
-      await clearAuthUser();
-      broadcastAuthUserUpdated(null);
-      setUser(null);
-      return null;
+      // Solo una prueba del servidor de que las credenciales no valen (401, o
+      // 404 "User not found") cierra la sesion. Sin red, timeout, 429, 5xx o un
+      // 403 de permisos: los tokens se quedan y se sigue con el usuario guardado.
+      if (classifySessionError(error) === SESSION_INVALID) {
+        await endLocalSession();
+        return null;
+      }
+
+      const cachedUser = await getAuthUser();
+      if (cachedUser) {
+        applyUser(cachedUser);
+        setSessionUnavailable(false);
+      } else {
+        setSessionUnavailable(true);
+      }
+      return cachedUser || null;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyUser, endLocalSession]);
 
   // Arranque: pintamos el usuario cacheado para evitar un splash largo y
   // revalidamos contra /auth/me en segundo plano.
@@ -76,14 +121,14 @@ export function AuthProvider({ children }) {
 
     (async () => {
       const cachedUser = await getAuthUser();
-      if (!cancelled && cachedUser) setUser(cachedUser);
+      if (!cancelled && cachedUser) applyUser(cachedUser);
       await reload();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [reload]);
+  }, [applyUser, reload]);
 
   const login = useCallback(
     async (email, password) => {
@@ -101,7 +146,8 @@ export function AuthProvider({ children }) {
 
         const nextUser = normalizeAuthUser(data.user || null, data);
         if (nextUser) {
-          setUser(nextUser);
+          setSessionUnavailable(false);
+          applyUser(nextUser);
           await setAuthUser(nextUser);
           broadcastAuthUserUpdated(nextUser);
         }
@@ -124,7 +170,7 @@ export function AuthProvider({ children }) {
         };
       }
     },
-    [reload]
+    [applyUser, reload]
   );
 
   const logout = useCallback(async () => {
@@ -141,12 +187,10 @@ export function AuthProvider({ children }) {
     } catch (error) {
       // Da igual si falla: la sesión local se limpia de todos modos.
     } finally {
-      await clearTokens();
-      await clearAuthUser();
-      broadcastAuthUserUpdated(null);
-      setUser(null);
+      // Tokens, usuario guardado y cache de React Query.
+      await endLocalSession();
     }
-  }, []);
+  }, [endLocalSession]);
 
   /**
    * Registra el dispositivo en cuanto hay sesion, no solo al iniciarla.
@@ -171,23 +215,28 @@ export function AuthProvider({ children }) {
   }, [user?.id]);
 
   useEffect(() => {
+    // Lo emite tambien el cliente HTTP: tras un refresh (mismo usuario) y al
+    // abortar una sesion revocada (null). Pasa por applyUser para que la cache
+    // se vacie igual que en un cierre de sesion normal.
     return on(AUTH_USER_UPDATED_EVENT, (nextUser) => {
-      setUser(nextUser ?? null);
+      if (!nextUser) setSessionUnavailable(false);
+      applyUser(nextUser ?? null);
       setLoading(false);
     });
-  }, []);
+  }, [applyUser]);
 
   const value = useMemo(
     () => ({
       user,
       currentCenterId: getCurrentCenterId(user),
       loading,
+      sessionUnavailable,
       login,
       logout,
       reload,
       isAuthenticated: !!user,
     }),
-    [loading, login, logout, reload, user]
+    [loading, login, logout, reload, sessionUnavailable, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

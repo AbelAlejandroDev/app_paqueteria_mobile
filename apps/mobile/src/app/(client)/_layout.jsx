@@ -4,6 +4,7 @@ import { CircleHelp, CreditCard, Home, Mail, Settings } from "lucide-react-nativ
 import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
+import SessionUnavailable from "@/components/common/session-unavailable";
 import PaymentAlerts from "@/components/common/payment-alerts";
 import TermsGate from "@/components/common/terms-gate";
 import BiometricGate from "@/components/common/biometric-gate";
@@ -41,7 +42,7 @@ function anchoredTabButton(id) {
  * su barra inferior en móvil.
  */
 export default function ClientLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionUnavailable, reload } = useAuth();
 
   if (loading) {
     return (
@@ -49,6 +50,12 @@ export default function ClientLayout() {
         <ActivityIndicator />
       </View>
     );
+  }
+
+  // Sesion guardada que no se pudo comprobar (sin red, 5xx): no es un cierre
+  // de sesion, asi que no se manda al login.
+  if (!user && sessionUnavailable) {
+    return <SessionUnavailable onRetry={reload} />;
   }
 
   if (!user) {

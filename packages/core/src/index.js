@@ -12,6 +12,14 @@ export {
 export { emit, on } from "./events.js";
 
 export {
+  classifySessionError,
+  isRefreshRejection,
+  SESSION_FORBIDDEN,
+  SESSION_INVALID,
+  SESSION_TEMPORARY,
+} from "./session.js";
+
+export {
   clearAuthUser,
   clearTokens,
   configureStorage,

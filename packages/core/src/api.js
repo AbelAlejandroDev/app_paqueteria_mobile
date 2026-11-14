@@ -1,6 +1,7 @@
 import axios from "axios";
 import { clearAuthUser, clearTokens, getTokens, setAuthUser, setTokens } from "./storage.js";
 import { broadcastAuthUserUpdated, normalizeAuthUser } from "./auth.js";
+import { isRefreshRejection } from "./session.js";
 
 /**
  * Crea el cliente HTTP con refresh automático de token.
@@ -19,6 +20,8 @@ import { broadcastAuthUserUpdated, normalizeAuthUser } from "./auth.js";
  * @param {() => void} [options.onUnauthorized] - Se invoca cuando la sesión
  *   queda irrecuperable y hay que mandar al usuario al login.
  * @param {Record<string, string>} [options.headers]
+ * @param {Function} [options.adapter] - Adaptador de axios. Solo para tests:
+ *   permite simular respuestas sin red.
  */
 /**
  * Peticiones que se hacen sin sesion: entrar, renovar, crear o recuperar la
@@ -39,7 +42,7 @@ export function isPublicAuthRequest(url) {
   return PUBLIC_AUTH_PATHS.includes(normalized);
 }
 
-export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
+export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter }) {
   if (!baseURL) {
     throw new Error("createApiClient requiere baseURL.");
   }
@@ -67,8 +70,9 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
     onUnauthorized?.(reason);
   }
 
-  const api = axios.create({ baseURL, headers });
-  const refreshClient = axios.create({ baseURL, headers });
+  const config = { baseURL, headers, ...(adapter ? { adapter } : {}) };
+  const api = axios.create(config);
+  const refreshClient = axios.create(config);
 
   api.interceptors.request.use(async (config) => {
     const { accessToken } = await getTokens();
@@ -126,9 +130,13 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {} }) {
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        // Un 401 del refresh (SESSION_REVOKED incluido) no se reintenta: el
-        // token no va a volver a valer.
-        await abortSession(refreshError?.response?.data?.code || null);
+        // Solo un rechazo del servidor (401, SESSION_REVOKED incluido) cierra
+        // la sesion: ese token no va a volver a valer. Sin red, un timeout, un
+        // 429 o un 5xx no dicen nada del token; se conserva y la siguiente
+        // peticion volvera a intentar el refresh.
+        if (isRefreshRejection(refreshError)) {
+          await abortSession(refreshError?.response?.data?.code || null);
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

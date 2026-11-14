@@ -59,7 +59,8 @@ test("Settings y el reenvio comparten la clave", () => {
 });
 
 test("la cache se vacia al cambiar de usuario", () => {
-  assert.ok(/previousUserId\.current !== currentUserId\) queryClient\.clear\(\)/.test(read("../src/context/AuthContext.jsx")));
+  // Detalle y comportamiento real con QueryClient: tests/session-cache.test.mjs.
+  assert.ok(/createScopeTracker\(\(nextScope\) => \{\s*resetQueryCache\(queryClient\)/.test(read("../src/context/AuthContext.jsx")));
 });
 
 test("cartas: una guardada sin telefono lo pide y lo manda con la peticion", () => {
