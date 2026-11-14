@@ -22,6 +22,7 @@ import {
 } from "@paqueteria/core";
 
 import { api } from "@/lib/api";
+import { isSessionForTenant } from "@/lib/session-tenant";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from "@/lib/auth-messages";
@@ -157,14 +158,19 @@ export default function SetPasswordScreen() {
 
       const data = response.data || {};
 
-      if (data.accessToken || data.refreshToken) {
-        await setTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
-      }
+      // La contraseña ya quedo puesta. La sesion que devuelve solo se guarda si
+      // es de esta organizacion (lib/session-tenant); si no, que entre por la
+      // app de su centro.
+      if (isSessionForTenant(data.user, brand.tenantSlug)) {
+        if (data.accessToken || data.refreshToken) {
+          await setTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+        }
 
-      const nextUser = normalizeAuthUser(data.user || null, data);
-      if (nextUser) {
-        await setAuthUser(nextUser);
-        broadcastAuthUserUpdated(nextUser);
+        const nextUser = normalizeAuthUser(data.user || null, data);
+        if (nextUser) {
+          await setAuthUser(nextUser);
+          broadcastAuthUserUpdated(nextUser);
+        }
       }
 
       setIsSuccess(true);

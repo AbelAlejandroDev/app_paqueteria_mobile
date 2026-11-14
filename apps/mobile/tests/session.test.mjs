@@ -276,9 +276,12 @@ test("AuthContext.reload solo cierra la sesion con un error de credenciales", ()
   const reload = source.match(/const reload = useCallback\([\s\S]*?\n  \}, \[applyUser, endLocalSession\]\);/)[0];
   const catchBlock = reload.slice(reload.indexOf("} catch (error) {"));
   assert.match(catchBlock, /if \(classifySessionError\(error\) === SESSION_INVALID\) \{\s*await endLocalSession\(\);/);
-  // Fuera de esa rama no se borra nada: se sigue con el usuario guardado.
+  // Fuera de esa rama no se borra nada (salvo un usuario guardado de OTRA
+  // organizacion, lib/session-tenant): se sigue con el usuario guardado.
   const afterInvalid = catchBlock.slice(catchBlock.indexOf("const cachedUser"), catchBlock.indexOf("} finally {"));
-  assert.doesNotMatch(afterInvalid, /clearTokens|clearAuthUser|endLocalSession/);
+  assert.doesNotMatch(afterInvalid, /clearTokens|clearAuthUser/);
+  assert.equal((afterInvalid.match(/endLocalSession\(\)/g) || []).length, 1);
+  assert.match(afterInvalid, /if \(cachedUser && !isSessionForTenant\(cachedUser, brand\.tenantSlug\)\) \{\s*await endLocalSession\(\);/);
   assert.match(afterInvalid, /applyUser\(cachedUser\)/);
   assert.match(afterInvalid, /setSessionUnavailable\(true\)/);
 });

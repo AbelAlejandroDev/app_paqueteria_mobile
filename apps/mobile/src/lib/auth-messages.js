@@ -9,6 +9,8 @@ const NETWORK_MESSAGE =
 /** El error del login, dicho para el cliente. */
 export function loginErrorMessage(result) {
   if (result?.network) return NETWORK_MESSAGE;
+  // Cuenta de otra organizacion (lib/session-tenant): el mensaje ya lo dice.
+  if (result?.code === "WRONG_ORGANIZATION" && result.message) return result.message;
   if (result?.status === 429) return "Too many sign-in attempts. Please wait a few minutes and try again.";
   // 400 tambien es "credenciales incorrectas": el backend rechaza con "Invalid
   // body" una contraseña de menos de 6 caracteres antes de comprobar nada, y

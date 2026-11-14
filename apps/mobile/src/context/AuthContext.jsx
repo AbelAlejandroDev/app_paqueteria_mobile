@@ -22,6 +22,8 @@ import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
 import { clearBiometricLock } from "@/lib/security-preferences";
 import { clearPendingNavigation } from "@/lib/pending-navigation";
 import { createScopeTracker, resetQueryCache } from "@/lib/session-scope";
+import { requestLogin } from "@/lib/login-flow";
+import { isSessionForTenant, WRONG_ORGANIZATION, wrongOrganizationMessage } from "@/lib/session-tenant";
 
 const AuthContext = createContext(null);
 
@@ -80,6 +82,13 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.get("/auth/me");
       const nextUser = normalizeAuthUser(response.data?.user || response.data || null, response.data || {});
+
+      // Una sesion de otra organizacion no vale en esta app (lib/session-tenant).
+      if (nextUser && !isSessionForTenant(nextUser, brand.tenantSlug)) {
+        await endLocalSession();
+        return null;
+      }
+
       setSessionUnavailable(false);
       applyUser(nextUser);
 
@@ -102,6 +111,10 @@ export function AuthProvider({ children }) {
       }
 
       const cachedUser = await getAuthUser();
+      if (cachedUser && !isSessionForTenant(cachedUser, brand.tenantSlug)) {
+        await endLocalSession();
+        return null;
+      }
       if (cachedUser) {
         applyUser(cachedUser);
         setSessionUnavailable(false);
@@ -121,7 +134,8 @@ export function AuthProvider({ children }) {
 
     (async () => {
       const cachedUser = await getAuthUser();
-      if (!cancelled && cachedUser) applyUser(cachedUser);
+      // Solo se pinta si es de esta organizacion; si no, reload la descarta.
+      if (!cancelled && cachedUser && isSessionForTenant(cachedUser, brand.tenantSlug)) applyUser(cachedUser);
       await reload();
     })();
 
@@ -133,12 +147,23 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (email, password) => {
       try {
-        // La organizacion de esta app (the_worx / hdg). Sin ella el servidor la
-        // deduce del dominio, y core.theworxoffices.com es de The Worx: un
-        // cliente de HDG no podia entrar desde su propia app.
-        const response = await api.post("/auth/login", { email, password, tenantSlug: brand.tenantSlug });
-        const data = response.data || {};
+        // La organizacion de esta app (the_worx / hdg), fijada en la build. Sin
+        // portal el backend la necesita para encontrar la cuenta (lib/login-flow).
+        const result = await requestLogin(api, { email, password, tenantSlug: brand.tenantSlug });
 
+        // El backend puede resolver otra organizacion si el correo solo existe
+        // alli (tenantIdByUniqueEmail). Esa sesion no se guarda: ni tokens ni usuario.
+        if (!result.ok) {
+          return {
+            ok: false,
+            code: WRONG_ORGANIZATION,
+            message: wrongOrganizationMessage(brand.shortName || brand.name),
+            network: false,
+            status: null,
+          };
+        }
+
+        const data = result.data;
         await setTokens({
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,

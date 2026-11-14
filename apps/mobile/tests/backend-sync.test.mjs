@@ -36,7 +36,8 @@ test("la app no lleva URLs de desarrollo ni secretos del servidor", () => {
 });
 
 test("login y recuperar contrasena mandan la organizacion de la app", () => {
-  assert.match(read("src/context/AuthContext.jsx"), /api\.post\("\/auth\/login", \{ email, password, tenantSlug: brand\.tenantSlug \}\)/);
+  assert.match(read("src/context/AuthContext.jsx"), /requestLogin\(api, \{ email, password, tenantSlug: brand\.tenantSlug \}\)/);
+  assert.match(read("src/lib/login-flow.js"), /api\.post\("\/auth\/login", loginPayload\(email, password, tenantSlug\)\)/);
   assert.deepEqual(forgotPasswordPayload("  ana@example.com ", "hdg"), { email: "ana@example.com", tenantSlug: "hdg" });
   assert.deepEqual(forgotPasswordPayload("ana@example.com"), { email: "ana@example.com" });
 });
