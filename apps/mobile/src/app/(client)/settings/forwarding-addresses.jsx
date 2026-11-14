@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
 import { US_STATES } from "@/lib/us-states";
+import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY } from "@/lib/forwarding-addresses";
 import { addressErrorMessage, describeAddressVerification, serverVerifiesAddresses } from "@/lib/address-verification";
 import AddressVerificationBadge from "@/components/common/address-verification-badge";
 import EmptyState from "@/components/common/empty-state";
@@ -17,8 +18,8 @@ import { Modal, Notice } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const ENDPOINT = "/client/forwarding-addresses";
-const QUERY_KEY = ["client-forwarding-addresses"];
+const ENDPOINT = FORWARDING_ADDRESSES_ENDPOINT;
+const QUERY_KEY = FORWARDING_ADDRESSES_KEY;
 
 const EMPTY_FORM = {
   label: "",

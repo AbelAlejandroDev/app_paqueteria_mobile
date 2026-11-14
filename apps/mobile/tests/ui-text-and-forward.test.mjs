@@ -32,14 +32,16 @@ test("ningun texto de la interfaz lleva la raya larga (—)", () => {
 test("Forward usa la direccion de reenvio guardada como predeterminada y la ensena", () => {
   const screen = read("src/app/(client)/mail-items/[id].jsx");
   assert.doesNotMatch(screen, /clientProfile/, "el perfil del cliente no es una direccion de reenvio");
-  assert.match(screen, /api\.get\("\/client\/forwarding-addresses"\)/);
-  assert.match(screen, /queryKey: \["client-forwarding-addresses"\]/, "la misma cache que Settings");
-  assert.match(screen, /\.find\(\(address\) => address\?\.isDefault\)/);
+  // Endpoint, clave y "cual es la predeterminada" salen de lib/forwarding-addresses,
+  // el mismo modulo que usa Settings (ver tests/forwarding-addresses.test.mjs).
+  assert.match(screen, /api\.get\(FORWARDING_ADDRESSES_ENDPOINT\)/);
+  assert.match(screen, /queryKey: FORWARDING_ADDRESSES_KEY/, "la misma cache que Settings");
+  assert.match(screen, /findDefaultAddress\(addressesQuery\.data\)/);
   assert.match(screen, /Your default address/);
   assert.match(screen, /Use this address/);
   assert.doesNotMatch(screen, /Use my default address/);
   // Settings lee la misma clave y el mismo campo `items`.
   const settings = read("src/app/(client)/settings/forwarding-addresses.jsx");
-  assert.match(settings, /const QUERY_KEY = \["client-forwarding-addresses"\]/);
+  assert.match(settings, /const QUERY_KEY = FORWARDING_ADDRESSES_KEY/);
   assert.match(settings, /\.data\?\.items \|\| \[\]/);
 });

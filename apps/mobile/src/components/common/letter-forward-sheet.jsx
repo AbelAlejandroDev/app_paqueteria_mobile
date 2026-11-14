@@ -168,6 +168,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
   const [step, setStep] = useState("fee");
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [destinationPhone, setDestinationPhone] = useState("");
   const [addingAddress, setAddingAddress] = useState(false);
   const [draft, setDraft] = useState(EMPTY_ADDRESS);
   const [saveForLater, setSaveForLater] = useState(true);
@@ -199,6 +200,9 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   // El servidor vuelve a verificar al crear el reenvio; esto solo avisa antes.
   const draftVerified = isVerifiedCheck(addressCheck);
   const destinationVerified = addingAddress ? draftVerified : isAddressUsableForForwarding(selectedAddress);
+  // Guardar una direccion sin telefono es valido; reenviar sin el, no: lo lleva la
+  // etiqueta. Se pide aqui y viaja con esta peticion, sin tocar la guardada.
+  const selectedNeedsPhone = !addingAddress && Boolean(selectedAddress) && !String(selectedAddress.phone || "").trim();
 
   const setDraftField = (field) => (value) => {
     // Cambiar la direccion invalida lo que dijo el transportista de la anterior.
@@ -299,6 +303,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         type: "FORWARD",
         // Una guardada viaja por su id: el servidor usa la que tiene verificada.
         ...forwardDestinationFields(destination),
+        ...(selectedNeedsPhone ? { phone: destinationPhone.trim() } : {}),
         shippingOptions: {
           trackingRequested,
           insuranceRequested,
@@ -328,7 +333,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const insuranceIsValid =
     !insuranceRequested || (insuredNumber >= MIN_INSURED_VALUE && insuredNumber <= MAX_INSURED_VALUE);
   const canSubmit =
-    (addingAddress ? draftIsComplete : Boolean(selectedAddress)) && destinationVerified && insuranceIsValid && !pending;
+    (addingAddress ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && insuranceIsValid && !pending;
 
   const feeHeadline =
     feeCents === null
@@ -494,6 +499,15 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
             </View>
           );
         })}
+
+        {selectedNeedsPhone && destinationVerified ? (
+          <Field label="Recipient phone">
+            <Input value={destinationPhone} onChangeText={setDestinationPhone} keyboardType="phone-pad" autoComplete="tel" />
+            <Text className="mt-1 text-xs leading-4 text-muted-foreground">
+              This address has no phone number, and the carrier needs one for the label.
+            </Text>
+          </Field>
+        ) : null}
 
         {addresses.length === 0 && !previewQuery.isLoading ? (
           <View className="rounded-lg border border-border bg-muted p-4">

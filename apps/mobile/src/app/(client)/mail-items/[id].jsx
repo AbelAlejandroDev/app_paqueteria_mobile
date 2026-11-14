@@ -26,6 +26,8 @@ import {
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
+import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
+import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
 import { stripeReturnBody } from "@/lib/stripe-return";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
@@ -337,10 +339,18 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   // traen dentro la gestion-- y se cobra igual, asi que sin sumarlo aqui el
   // cliente elegiria viendo menos de lo que se le va a cobrar.
   const [immediateFeeCents, setImmediateFeeCents] = useState(0);
+  // El entorno que devolvio la cotizacion: sandbox se avisa, produccion no.
+  const [ratesEnvironment, setRatesEnvironment] = useState("");
 
   const isLetter = item?.type === "LETTER";
 
+  // Cada cambio de destino deja atras la cotizacion en curso: su respuesta,
+  // si llega despues, es de la direccion anterior.
+  const quoteGeneration = useRef(0);
+
   const clearRates = () => {
+    quoteGeneration.current += 1;
+
     // Se llama en cada pulsación, así que conviene no re-renderizar de balde.
     if (!forwardQuoteId && forwardRates.length === 0 && !selectedRateId) return;
 
@@ -348,6 +358,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     setForwardRates([]);
     setSelectedRateId("");
     setImmediateFeeCents(0);
+    setRatesEnvironment("");
   };
 
   /**
@@ -355,7 +366,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
    * cambiar cualquiera de los dos invalida las que ya estén cargadas: dejarlas
    * en pantalla mostraría un importe que el backend ya no cobraría.
    */
-  const onQuoteField = (field) => (value) => {
+  const onQuoteField = (field, value) => {
     clearRates();
     setForwardForm((current) => ({ ...current, [field]: value }));
   };
@@ -367,28 +378,21 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
    * direccion de reenvio: el formulario se llenaba con datos que el cliente
    * no reconocia y sin enseñarselos antes.
    */
-  const savedAddressesQuery = useQuery({
-    queryKey: ["client-forwarding-addresses"],
-    queryFn: async () => (await api.get("/client/forwarding-addresses")).data?.items || [],
+  const addressesQuery = useQuery({
+    queryKey: FORWARDING_ADDRESSES_KEY,
+    queryFn: async () => (await api.get(FORWARDING_ADDRESSES_ENDPOINT)).data?.items || [],
     enabled: forwardOpen,
   });
-  const defaultAddress = (savedAddressesQuery.data || []).find((address) => address?.isDefault) || null;
+  const defaultAddress = findDefaultAddress(addressesQuery.data);
   const hasDefaultAddress = Boolean(defaultAddress?.addressLine1 && defaultAddress?.city);
 
   const useDefaultAddress = () => {
     if (!hasDefaultAddress) return;
 
     clearRates();
-    setForwardForm((current) => ({
-      ...current,
-      recipient: defaultAddress.name || current.recipient,
-      address1: defaultAddress.addressLine1 || "",
-      address2: defaultAddress.addressLine2 || "",
-      city: defaultAddress.city || "",
-      state: defaultAddress.state || "",
-      zip: defaultAddress.zip || "",
-      phone: defaultAddress.phone || current.phone,
-    }));
+    // El telefono se sustituye aunque falte: el escrito era de otro destino, y
+    // si no hay, lo pide la validacion del formulario.
+    setForwardForm((current) => ({ ...current, ...forwardFieldsFromAddress(defaultAddress) }));
   };
 
   const createRequest = useMutation({
@@ -456,17 +460,21 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       });
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { generation }) => {
+      if (generation !== quoteGeneration.current) return;
       setForwardQuoteId(data?.quoteId || "");
       setForwardRates(data?.rates || []);
       setSelectedRateId(data?.rates?.[0]?.optionId || "");
       setImmediateFeeCents(Number(data?.immediateForwardFeeCents || 0));
+      setRatesEnvironment(data?.environment || "");
     },
-    onError: (error) => {
+    onError: (error, { generation }) => {
+      if (generation !== quoteGeneration.current) return;
       setForwardQuoteId("");
       setForwardRates([]);
       setSelectedRateId("");
       setImmediateFeeCents(0);
+      setRatesEnvironment("");
       Alert.alert("No rates available", formatErrorMessage(error, "Failed to load shipping rates"));
     },
   });
@@ -540,7 +548,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
   const getRates = () => {
     if (!forwardFormIsValid()) return;
-    quoteRates.mutate();
+    quoteRates.mutate({ generation: quoteGeneration.current });
   };
 
   const continueWithRate = () => {
@@ -710,38 +718,48 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                     .join("\n")}
                 </Text>
               </View>
-              <Button variant="outline" size="sm" onPress={useDefaultAddress}>
+              <Button variant="outline" size="sm" disabled={anyPending} onPress={useDefaultAddress}>
                 Use this address
               </Button>
+              {!String(defaultAddress.phone || "").trim() ? (
+                <Notice tone="amber">This address has no phone number. Add one below: the carrier needs it for the label.</Notice>
+              ) : null}
+              {!isAddressUsableForForwarding(defaultAddress) ? (
+                <Notice tone="amber">{describeAddressVerification(defaultAddress.verification).hint}</Notice>
+              ) : null}
             </View>
+          ) : addressesQuery.isError ? (
+            <Notice tone="amber">We could not load your saved addresses. You can enter the address below.</Notice>
+          ) : addressesQuery.isSuccess ? (
+            <Notice tone="amber">You have no default forwarding address. Enter one below, or add it in Settings.</Notice>
           ) : null}
 
           <Field label="Recipient">
-            <Input value={forwardForm.recipient} onChangeText={onQuoteField("recipient")} />
+            <Input value={forwardForm.recipient} onChangeText={(value) => onQuoteField("recipient", value)} />
           </Field>
           <Field label="Address line 1">
-            <Input value={forwardForm.address1} onChangeText={onQuoteField("address1")} />
+            <Input value={forwardForm.address1} onChangeText={(value) => onQuoteField("address1", value)} />
           </Field>
           <Field label="Address line 2 (optional)">
-            <Input value={forwardForm.address2} onChangeText={onQuoteField("address2")} />
+            <Input value={forwardForm.address2} onChangeText={(value) => onQuoteField("address2", value)} />
           </Field>
           <Field label="City">
-            <Input value={forwardForm.city} onChangeText={onQuoteField("city")} />
+            <Input value={forwardForm.city} onChangeText={(value) => onQuoteField("city", value)} />
           </Field>
           <Field label="State">
             <Select
               value={forwardForm.state}
-              onValueChange={onQuoteField("state")}
+              onValueChange={(value) => onQuoteField("state", value)}
               options={US_STATES}
               placeholder="Select state"
               title="State"
             />
           </Field>
           <Field label="ZIP">
-            <Input value={forwardForm.zip} onChangeText={onQuoteField("zip")} keyboardType="number-pad" />
+            <Input value={forwardForm.zip} onChangeText={(value) => onQuoteField("zip", value)} keyboardType="number-pad" />
           </Field>
           <Field label="Recipient phone">
-            <Input value={forwardForm.phone} onChangeText={onQuoteField("phone")} keyboardType="phone-pad" />
+            <Input value={forwardForm.phone} onChangeText={(value) => onQuoteField("phone", value)} keyboardType="phone-pad" />
           </Field>
 
           <View className="gap-3">
@@ -749,19 +767,19 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
               label="Add tracking"
               description="First-Class adds Certified Mail; Priority Mail uses Delivery Confirmation."
               value={forwardForm.trackingRequested}
-              onValueChange={onQuoteField("trackingRequested")}
+              onValueChange={(value) => onQuoteField("trackingRequested", value)}
             />
             <ToggleRow
               label="Add insurance"
               description="Covers the declared value if the shipment is lost or damaged. Tracking included."
               value={forwardForm.insuranceRequested}
-              onValueChange={onQuoteField("insuranceRequested")}
+              onValueChange={(value) => onQuoteField("insuranceRequested", value)}
             />
             {forwardForm.insuranceRequested ? (
               <Field label={"Insured value (USD, max $" + MAX_INSURED_VALUE_USD + ")"}>
                 <Input
                   value={forwardForm.insuredValue}
-                  onChangeText={onQuoteField("insuredValue")}
+                  onChangeText={(value) => onQuoteField("insuredValue", value)}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                 />
@@ -776,7 +794,12 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-foreground">Shipping rates</Text>
-                <Text className="text-xs text-muted-foreground">Sandbox rates. Labels are not purchased yet.</Text>
+                <Text className="text-xs text-muted-foreground">Get rates for the address above. Changing it clears them.</Text>
+                {ratesEnvironment === "sandbox" ? (
+                  <Text className="mt-1 text-xs font-medium text-amber-900">
+                    Test mode: these are sandbox rates. Any label created is a test label and will not ship.
+                  </Text>
+                ) : null}
               </View>
               <Button variant="outline" size="sm" loading={quoteRates.isPending} onPress={getRates}>
                 Get Rates
