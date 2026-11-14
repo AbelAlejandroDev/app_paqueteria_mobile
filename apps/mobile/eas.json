@@ -94,6 +94,17 @@
         "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
       }
     },
+    "hdg-testflight-sandbox": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "channel": "testflight-sandbox",
+      "environment": "preview",
+      "env": {
+        "APP_BRAND": "hdg",
+        "APP_ENV": "sandbox",
+        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+      }
+    },
     "hdg-production": {
       "extends": "base-production",
       "env": {

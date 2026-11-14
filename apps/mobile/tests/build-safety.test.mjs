@@ -217,3 +217,32 @@ test("en runtime la app comprueba la URL contra su marca", () => {
 test("el submit de HDG production no tiene destino configurado", () => {
   assert.deepEqual(eas.submit["hdg-production"], {});
 });
+
+// ── TestFlight de HDG contra Sandbox ────────────────────────────────────────
+
+test("hdg-testflight-sandbox: build de tienda contra HDG Sandbox, con canal OTA propio", () => {
+  const profile = eas.build["hdg-testflight-sandbox"];
+  assert.equal(profile.distribution, "store", "TestFlight necesita distribucion de tienda");
+  assert.equal(profile.autoIncrement, true);
+  assert.equal(profile.channel, "testflight-sandbox", "nunca el canal production: ningun OTA de produccion le llega");
+  assert.notEqual(profile.environment, "production", "no carga variables de produccion de EAS");
+  assert.deepEqual(resolveProfile("hdg-testflight-sandbox"), {
+    brandId: "hdg",
+    environment: "sandbox",
+    url: HDG_SANDBOX,
+    host: "core.hdgexecutivesuites.com",
+  });
+  const expo = appConfigWith(profileEnv("hdg-testflight-sandbox"));
+  assert.equal(expo.ios.bundleIdentifier, "com.hdgexecutivesuites.clientportal");
+  assert.equal(expo.extra.eas.projectId, BRANDS.hdg.easProjectId);
+  assert.equal(expo.extra.api.environment, "sandbox");
+});
+
+test("ningun otro perfil usa el canal de TestFlight Sandbox, y hdg-production sigue bloqueado", () => {
+  for (const name of buildProfiles.filter((n) => n !== "hdg-testflight-sandbox")) {
+    assert.notEqual(profileEnv(name).channel ?? eas.build[name].channel, "testflight-sandbox", name);
+  }
+  assert.throws(() => resolveProfile("hdg-production"), /production estan bloqueados/);
+  // Sin ascAppId todavia: no se puede enviar hasta crear la app en App Store Connect.
+  assert.equal(eas.submit["hdg-testflight-sandbox"], undefined);
+});
