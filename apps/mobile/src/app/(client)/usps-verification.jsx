@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, FileCheck2, Mail, Upload } from "lucide-react-native";
 
 import { api } from "@/lib/api";
+import { UPLOAD_TIMEOUT_MS } from "@/lib/query-defaults";
 import { brand } from "@/lib/brand";
 import { formatDate, formatErrorMessage } from "@/lib/utils";
 import {
@@ -142,6 +143,8 @@ export default function UspsVerificationScreen() {
 
       return api.post("/client/usps-compliance", data, {
         headers: { "Content-Type": "multipart/form-data" },
+        // Dos fotos por la red movil tardan mas que el limite general.
+        timeout: UPLOAD_TIMEOUT_MS,
       });
     },
     onSuccess: (response) => {

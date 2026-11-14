@@ -2,6 +2,7 @@ import axios from "axios";
 import { clearAuthUser, clearTokens, getTokens, setAuthUser, setTokens } from "./storage.js";
 import { broadcastAuthUserUpdated, normalizeAuthUser } from "./auth.js";
 import { isRefreshRejection } from "./session.js";
+import { DEFAULT_TIMEOUT_MS, isReachableResponse } from "./availability.js";
 
 /**
  * Crea el cliente HTTP con refresh automático de token.
@@ -20,6 +21,10 @@ import { isRefreshRejection } from "./session.js";
  * @param {() => void} [options.onUnauthorized] - Se invoca cuando la sesión
  *   queda irrecuperable y hay que mandar al usuario al login.
  * @param {Record<string, string>} [options.headers]
+ * @param {number} [options.timeout] - Milisegundos antes de dar una peticion
+ *   por perdida (axios no tiene limite por defecto: una peticion colgada no
+ *   terminaria nunca). Se puede alargar por peticion (`{ timeout }`), p. ej. en
+ *   subidas de ficheros.
  * @param {Function} [options.adapter] - Adaptador de axios. Solo para tests:
  *   permite simular respuestas sin red.
  */
@@ -42,7 +47,7 @@ export function isPublicAuthRequest(url) {
   return PUBLIC_AUTH_PATHS.includes(normalized);
 }
 
-export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter }) {
+export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter, timeout = DEFAULT_TIMEOUT_MS }) {
   if (!baseURL) {
     throw new Error("createApiClient requiere baseURL.");
   }
@@ -70,7 +75,11 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter
     onUnauthorized?.(reason);
   }
 
-  const config = { baseURL, headers, ...(adapter ? { adapter } : {}) };
+  // Ningun reintento automatico aqui: solo se repite una peticion tras un 401
+  // con refresh correcto (una vez, _retry), y eso es seguro porque el 401 lo da
+  // authMiddleware antes de que el controlador haga nada. Un timeout o un 5xx
+  // NO se repiten: un POST de pago podria haberse ejecutado ya.
+  const config = { baseURL, headers, timeout, ...(adapter ? { adapter } : {}) };
   const api = axios.create(config);
   const refreshClient = axios.create(config);
 
@@ -145,4 +154,30 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter
   );
 
   return api;
+}
+
+/**
+ * Comprueba si la API responde, sin sesion y sin interceptores.
+ *
+ * El backend no tiene una ruta de salud en /api/v1. Se usa GET /auth/me sin
+ * token: authMiddleware contesta 401 en JSON en el acto, sin tocar la base de
+ * datos ni la sesion del cliente. Cualquier respuesta del backend prueba que
+ * esta vivo; un 502/503/504 del proxy, sin red o un timeout, que no.
+ *
+ * Nunca manda el token: una sonda no puede provocar un refresh ni cerrar nada.
+ */
+export const PROBE_PATH = "/auth/me";
+
+export function createApiProbe({ baseURL, timeout = DEFAULT_TIMEOUT_MS, adapter }) {
+  if (!baseURL) throw new Error("createApiProbe requiere baseURL.");
+  const client = axios.create({ baseURL, timeout, validateStatus: () => true, ...(adapter ? { adapter } : {}) });
+
+  return async function probe() {
+    try {
+      const response = await client.get(PROBE_PATH);
+      return isReachableResponse(response);
+    } catch {
+      return false;
+    }
+  };
 }

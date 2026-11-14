@@ -130,4 +130,31 @@ function assertApiUrlForBrand(url, brandId, brands = BRANDS) {
   return normalizeUrl(url);
 }
 
-module.exports = { ENVIRONMENTS, assertApiUrlForBrand, brandForApiUrl, resolveApiConfig };
+/**
+ * Cuanto espera la app una respuesta (ms). API_TIMEOUT_MS en el entorno del
+ * build; por defecto 20 s. Fuera de 5-120 s se considera un error de
+ * configuracion: demasiado corto da falsos "sin conexion", demasiado largo deja
+ * al cliente mirando una pantalla que no avanza.
+ */
+const DEFAULT_API_TIMEOUT_MS = 20000;
+const MIN_API_TIMEOUT_MS = 5000;
+const MAX_API_TIMEOUT_MS = 120000;
+
+function resolveApiTimeout(env = process.env) {
+  const raw = env.API_TIMEOUT_MS;
+  if (raw === undefined || raw === null || String(raw).trim() === "") return DEFAULT_API_TIMEOUT_MS;
+  const value = Number(String(raw).trim());
+  if (!Number.isInteger(value) || value < MIN_API_TIMEOUT_MS || value > MAX_API_TIMEOUT_MS) {
+    throw fail(`API_TIMEOUT_MS=${raw} no vale: tiene que ser un entero entre ${MIN_API_TIMEOUT_MS} y ${MAX_API_TIMEOUT_MS}.`);
+  }
+  return value;
+}
+
+module.exports = {
+  DEFAULT_API_TIMEOUT_MS,
+  ENVIRONMENTS,
+  assertApiUrlForBrand,
+  brandForApiUrl,
+  resolveApiConfig,
+  resolveApiTimeout,
+};

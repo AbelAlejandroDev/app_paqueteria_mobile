@@ -5,6 +5,7 @@ import { brand } from "@/lib/brand";
 
 import { useAuth } from "@/context/AuthContext";
 import SessionUnavailable from "@/components/common/session-unavailable";
+import BillingRequiredHandler from "@/components/common/billing-required-handler";
 import PaymentAlerts from "@/components/common/payment-alerts";
 import TermsGate from "@/components/common/terms-gate";
 import BiometricGate from "@/components/common/biometric-gate";
@@ -74,6 +75,8 @@ export default function ClientLayout() {
         {/* Cubre todas las pantallas del cliente, no solo el panel: el aviso
             debe salir entre por donde entre. */}
         <PaymentAlerts />
+        {/* 402 BILLING_REQUIRED de cualquier pantalla: aviso con ir a Facturacion. */}
+        <BillingRequiredHandler />
         {/* Aqui y no antes: un push que abre la app solo navega con la sesion
             desbloqueada y las pestanas montadas. */}
         <NotificationTapHandler />

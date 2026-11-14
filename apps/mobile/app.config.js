@@ -3,7 +3,7 @@ const path = require("path");
 
 const { getBrand } = require("./brands");
 const { getForegroundForColor } = require("./brands/color");
-const { resolveApiConfig } = require("./brands/api-environment");
+const { resolveApiConfig, resolveApiTimeout } = require("./brands/api-environment");
 
 const brand = getBrand();
 
@@ -12,6 +12,7 @@ const brand = getBrand();
 // HDG apuntando a The Worx (o al reves), un production de HDG sin autorizar,
 // o un EXPO_PUBLIC_API_URL que no es el de esa marca y entorno.
 const apiConfig = resolveApiConfig({ brand });
+const apiTimeoutMs = resolveApiTimeout();
 
 const brandDir = "./assets/brands/" + brand.id;
 // Identificadores publicos de Firebase; se versiona. La clave privada de la
@@ -171,6 +172,8 @@ module.exports = {
     extra: {
       // La lee src/lib/api.js: la URL ya validada, no la variable suelta.
       api: apiConfig,
+      // Cuanto espera una peticion antes de darla por perdida (API_TIMEOUT_MS).
+      network: { timeoutMs: apiTimeoutMs },
       // Proyecto de expo.dev de esta marca. Lo lee getExpoPushTokenAsync; sin
       // el, la app detecta que no puede registrarse y no lo intenta.
       eas: { projectId: brand.easProjectId || null },

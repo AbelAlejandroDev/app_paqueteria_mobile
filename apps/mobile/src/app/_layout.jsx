@@ -11,6 +11,10 @@ import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-c
 
 import { AuthProvider } from "@/context/AuthContext";
 import PushIntentCapture from "@/components/common/push-intent-capture";
+import SandboxFrame from "@/components/common/sandbox-frame";
+import ServiceUnavailable from "@/components/common/service-unavailable";
+import { apiEnvironment } from "@/lib/api";
+import { QUERY_DEFAULT_OPTIONS } from "@/lib/query-defaults";
 import { setupStorage } from "@/lib/storage";
 import { brandFontFiles } from "@/lib/brand-fonts";
 
@@ -21,13 +25,8 @@ setupStorage();
 // La pantalla de carga se queda hasta tener la tipografia de la marca.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-    },
-  },
-});
+// Consultas: un reintento como mucho; mutaciones (pagos, peticiones): ninguno.
+const queryClient = new QueryClient({ defaultOptions: QUERY_DEFAULT_OPTIONS });
 
 export default function RootLayout() {
   // Se espera a la tipografia antes de pintar: Android mide el texto con la
@@ -56,7 +55,11 @@ export default function RootLayout() {
             {/* Fuera de todas las puertas: guarda el toque de un push aunque la app
                 este cerrada, sin sesion o bloqueada. No navega. */}
             <PushIntentCapture />
-            <Stack screenOptions={{ headerShown: false }} />
+            <SandboxFrame apiEnvironment={apiEnvironment} deployment={null}>
+              <Stack screenOptions={{ headerShown: false }} />
+            </SandboxFrame>
+            {/* Por encima de todo, sin desmontar nada debajo. */}
+            <ServiceUnavailable />
             <StatusBar style="dark" />
           </AuthProvider>
         </QueryClientProvider>

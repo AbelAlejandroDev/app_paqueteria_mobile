@@ -1,4 +1,16 @@
-export { createApiClient, isPublicAuthRequest } from "./api.js";
+export { createApiClient, createApiProbe, isPublicAuthRequest, PROBE_PATH } from "./api.js";
+
+export {
+  AVAILABILITY_OFFLINE,
+  AVAILABILITY_TIMEOUT,
+  AVAILABILITY_UNAVAILABLE,
+  classifyAvailability,
+  DEFAULT_TIMEOUT_MS,
+  isBackendErrorBody,
+  isCancellation,
+  isReachableResponse,
+  isTimeoutError,
+} from "./availability.js";
 
 export {
   AUTH_USER_UPDATED_EVENT,
