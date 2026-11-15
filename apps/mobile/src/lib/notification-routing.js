@@ -36,7 +36,9 @@ export async function loadNotificationDetail(api, id) {
  * El de pago del franqueo lleva a la pieza principal del envio, que es donde
  * se paga, tambien para las cartas que van en el mismo sobre.
  */
-const ITEM_ACTION_TYPES = new Set(["FORWARD_PAYMENT_REQUIRED"]);
+// SCAN_APPROVAL_REQUIRED lleva a la pieza: alli esta "Approve" (data.mailItemId,
+// backend quoteScan.js).
+const ITEM_ACTION_TYPES = new Set(["FORWARD_PAYMENT_REQUIRED", "SCAN_APPROVAL_REQUIRED"]);
 
 export function isItemActionNotification(data) {
   return Boolean(data && ITEM_ACTION_TYPES.has(data.type) && data.mailItemId);

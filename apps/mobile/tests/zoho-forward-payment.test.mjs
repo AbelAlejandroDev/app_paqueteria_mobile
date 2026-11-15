@@ -93,7 +93,7 @@ test("enlace caducado (o a menos de un minuto): se pide una pagina nueva", () =>
   assert.equal(isPaymentLinkExpired("no-date", now), false);
 });
 
-test("payment-status: completado, pendiente, fallido, revision, cerrado y enlace caducado", () => {
+test("payment-status: completado, pendiente, fallido, revision, reembolsado, cancelado y enlace caducado", () => {
   assert.deepEqual(
     [
       { paymentStatus: "PAID" },
@@ -105,7 +105,7 @@ test("payment-status: completado, pendiente, fallido, revision, cerrado y enlace
       { paymentStatus: "PAYMENT_PENDING", chargeStatus: "INVOICE_OPEN", paymentLinkExpired: true },
       {},
     ].map((s) => interpretPaymentStatus(s).state),
-    ["paid", "pending", "failed", "review", "closed", "closed", "link-expired", "pending"]
+    ["paid", "pending", "failed", "review", "refunded", "cancelled", "link-expired", "pending"]
   );
   assert.equal(interpretPaymentStatus({ paymentStatus: "PAYMENT_PENDING" }).terminal, false);
   assert.equal(interpretPaymentStatus({ paymentStatus: "PAID" }).terminal, true);
@@ -261,11 +261,11 @@ test("un error de red en el sondeo no para nada ni cobra: sigue preguntando a su
 test("prepare-payment solo dentro de mutaciones (acciones del cliente), nunca en efectos ni al montar", () => {
   const card = read("src/components/common/zoho-forward-payment-card.jsx");
   const code = card.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
-  const effects = code.match(/useEffect\(\(\) => \{[\s\S]*?\n  \}, \[[^\]]*\]\);/g) || [];
-  assert.ok(effects.length >= 2);
-  for (const effect of effects) {
-    assert.doesNotMatch(effect, /preparePaymentPath|\.mutate\(/, "un efecto no prepara ni cobra");
-  }
+  // Sin efectos: lo que pasa solo (sondeo, volver a primer plano) es lib/use-payment-status, que solo lee.
+  assert.doesNotMatch(code, /useEffect\(/);
+  const hook = read("src/lib/use-payment-status.js").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  assert.doesNotMatch(hook, /api\.post|preparePaymentPath|checkout-session|\.mutate/);
+  assert.match(hook, /api\.get\(paymentStatusPath\(serviceRequestId\)\)/);
   const prepareCalls = code.match(/api\.post\(preparePaymentPath\(request\.id\)/g) || [];
   assert.equal(prepareCalls.length, 3, "revision, tarjeta guardada y regenerar la pagina caducada");
   for (const mutation of code.match(/useMutation\(\{[\s\S]*?\n  \}\);/g) || []) {
@@ -276,8 +276,8 @@ test("prepare-payment solo dentro de mutaciones (acciones del cliente), nunca en
   // Abre el navegador del sistema; nunca un WebView.
   assert.match(code, /WebBrowser\.openBrowserAsync\(current\.paymentUrl\)/);
   assert.doesNotMatch(code, /WebView/);
-  // payment-status: solo lectura (GET).
-  assert.match(code, /api\.get\(paymentStatusPath\(request\.id\)\)/);
+  // payment-status: el hook comun (solo GET).
+  assert.match(code, /usePaymentStatus\(\{/);
 });
 
 test("un prepare-payment con la tarjeta guardada que agota el timeout se envia una sola vez", async () => {

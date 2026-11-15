@@ -282,12 +282,14 @@ test("el pago del reenvio elige el flujo por las capacidades; el de Stripe sigue
   const start = detail.indexOf("function ForwardPaymentCard(");
   const card = detail.slice(start, detail.indexOf("\nfunction ", start + 10));
   assert.match(card, /const mode = forwardPaymentMode\(capabilities\);/);
-  assert.match(card, /mode === FORWARD_PAYMENT_STRIPE_CHECKOUT/);
+  assert.match(card, /mode === FORWARD_PAYMENT_STRIPE_CHECKOUT \? \(\s*<StripeForwardPayment/);
   assert.match(card, /mode === FORWARD_PAYMENT_ZOHO_HOSTED \? \(\s*<ZohoForwardPaymentCard/);
   assert.match(card, /mode === FORWARD_PAYMENT_UNKNOWN/);
-  // Stripe: el mismo Checkout de siempre.
-  assert.match(card, /"\/client\/forwarding\/" \+ request\.id \+ "\/checkout-session"/);
-  assert.match(card, /stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
+  // Stripe: el mismo Checkout de siempre, en su componente.
+  const stripe = read("src/components/common/stripe-forward-payment.jsx");
+  assert.match(stripe, /"\/client\/forwarding\/" \+ request\.id \+ "\/checkout-session"/);
+  assert.match(stripe, /stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
+  assert.match(stripe, /WebBrowser\.openAuthSessionAsync\(url, returnUrl\)/);
 });
 
 test("las acciones de la pieza pasan por itemActions", () => {

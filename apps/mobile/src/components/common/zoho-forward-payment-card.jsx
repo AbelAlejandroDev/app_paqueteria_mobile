@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -7,21 +7,13 @@ import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { notifyCapabilitiesStale } from "@/lib/capabilities-events";
 import { paymentStatusMinPollMs, savedCardAllowed, zohoBillingActions } from "@/lib/capabilities";
+import { confirmRepricedRatePath, createSingleFlight, forwardPaymentError, preparePaymentPath } from "@/lib/forward-payment";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { sessionScope } from "@/lib/session-scope";
 import { BILLING_PAYMENT_QUERY_KEY, billingPaymentQueryOptions } from "@/lib/use-capabilities";
+import { usePaymentStatus } from "@/lib/use-payment-status";
 import { ZOHO_ADD_PAYMENT_METHOD_PATH, ZOHO_UPDATE_CARD_PATH, zohoBillingErrorMessage, zohoPageUrl } from "@/lib/zoho-billing";
-import {
-  confirmRepricedRatePath,
-  createStatusPoller,
-  interpretPrepareResponse,
-  isPaymentLinkExpired,
-  paymentStatusPath,
-  preparePaymentError,
-  preparePaymentPath,
-  REVIEW_BODY,
-  SAVED_CARD_BODY,
-} from "@/lib/zoho-forward-payment";
+import { interpretPrepareResponse, isPaymentLinkExpired, REVIEW_BODY, SAVED_CARD_BODY } from "@/lib/zoho-forward-payment";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/modal";
 
@@ -36,7 +28,8 @@ function Line({ label, value, strong }) {
 }
 
 /**
- * Pago de un reenvio con Zoho (lib/zoho-forward-payment).
+ * Pago de un reenvio con Zoho (lib/zoho-forward-payment; lo comun con Stripe en
+ * lib/forward-payment y lib/use-payment-status).
  *
  * Pasos, todos por decision del cliente:
  *   1. "Review payment": POST prepare-payment {} (emite la factura en Zoho) y
@@ -46,23 +39,23 @@ function Line({ label, value, strong }) {
  *   3. "Pay on the secure page": abre paymentUrl (si caduco, otra revision
  *      primero). Al volver, payment-status cada >= 15 s, unas pocas veces, y
  *      "Check again". Solo PAID del backend da el pago por hecho.
+ *
+ * Un candado (createSingleFlight) impide que una doble pulsacion mande dos POST.
  */
 export default function ZohoForwardPaymentCard({ request, capabilities, onRefresh }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const scope = sessionScope(user);
+  const [lock] = useState(createSingleFlight);
 
   const [invoice, setInvoice] = useState(null); // interpretPrepareResponse(...) de kind "invoice"
   const [notice, setNotice] = useState(null);
-  const [reading, setReading] = useState(null); // interpretPaymentStatus
-  const [waiting, setWaiting] = useState(false);
   const [savedCardBlockedUntil, setSavedCardBlockedUntil] = useState(0);
   const [noSavedCard, setNoSavedCard] = useState(false);
+  const [declined, setDeclined] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const zohoActions = zohoBillingActions(capabilities);
-  // Un numero, no el objeto: el sondeo no se rehace en cada render.
-  const minPollMs = paymentStatusMinPollMs(capabilities);
   const allowSavedCard = savedCardAllowed(capabilities) && !noSavedCard && nowMs >= savedCardBlockedUntil;
 
   // Tarjeta guardada (last4) solo una vez en revision: billing/payment lee Zoho.
@@ -78,43 +71,31 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
     await onRefresh?.();
   }, [onRefresh, queryClient]);
 
-  // ── payment-status ──
-  const pollerRef = useRef(null);
-  useEffect(() => {
-    const poller = createStatusPoller({
-      minIntervalMs: minPollMs,
-      fetchStatus: async () => (await api.get(paymentStatusPath(request.id))).data,
-      onResult: ({ ok, reading: next }) => {
-        if (!ok || !next) return;
-        setReading(next);
-        if (next.state === "paid") {
-          setWaiting(false);
-          refreshAfterPayment();
-        } else if (next.terminal) {
-          setWaiting(false);
-          // La pagina caduco o el pago fallo: la proxima vez, factura/URL nuevas.
-          if (next.state === "link-expired" || next.state === "failed") setInvoice(null);
-        }
-      },
-    });
-    pollerRef.current = poller;
-    return () => poller.stop();
-  }, [minPollMs, refreshAfterPayment, request.id]);
+  const status = usePaymentStatus({
+    serviceRequestId: request.id,
+    minPollMs: paymentStatusMinPollMs(capabilities),
+    onResult: ({ reading }) => {
+      if (!reading) return;
+      if (reading.state === "paid") refreshAfterPayment();
+      // La pagina caduco o el pago fallo: la proxima vez, factura/URL nuevas.
+      if (reading.state === "link-expired" || reading.state === "failed") setInvoice(null);
+    },
+  });
 
-  useEffect(() => {
-    if (!waiting) return undefined;
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") pollerRef.current?.checkNow();
-    });
-    return () => subscription.remove();
-  }, [waiting]);
+  const guarded = (mutation, variables) => lock.run(() => mutation.mutateAsync(variables).catch(() => {}));
 
   // ── prepare-payment ──
   const handlePrepareError = (error) => {
-    const outcome = preparePaymentError(error);
+    const outcome = forwardPaymentError(error);
     if (outcome.kind === "paid") {
       setNotice({ tone: "emerald", text: "This shipment is already paid." });
       refreshAfterPayment();
+      return;
+    }
+    if (outcome.kind === "reprice" && outcome.currentAmount === null) {
+      // Sin el importe nuevo no se puede aceptar a ciegas.
+      setNotice({ tone: "amber", text: "The shipping price changed. Pull down to refresh, then try again." });
+      onRefresh?.();
       return;
     }
     if (outcome.kind === "reprice") {
@@ -123,15 +104,13 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
         "The new total is " + formatMoneyFromCents(outcome.currentAmount) + ". Do you accept the new price?",
         [
           { text: "Not now", style: "cancel" },
-          { text: "Accept new price", onPress: () => confirmReprice.mutate() },
+          { text: "Accept new price", onPress: () => guarded(confirmReprice) },
         ]
       );
       return;
     }
-    if (outcome.checkStatus) {
-      setWaiting(true);
-      pollerRef.current?.start();
-    }
+    if (outcome.checkStatus) status.start();
+    if (outcome.kind === "unavailable") notifyCapabilitiesStale("payment-unavailable");
     setNotice({ tone: "amber", text: outcome.message });
   };
 
@@ -149,7 +128,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
         return;
       }
       setNotice(null);
-      setReading(null);
+      status.setReading(null);
       setInvoice(result);
     },
     onError: handlePrepareError,
@@ -157,8 +136,12 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
 
   const confirmReprice = useMutation({
     mutationFn: async () => (await api.post(confirmRepricedRatePath(request.id))).data,
-    // Precio aceptado: se vuelve a revisar con el importe nuevo (otra accion del cliente ya hecha).
-    onSuccess: () => review.mutate(),
+    // Precio aceptado: se vuelve a revisar con el importe nuevo. Revisar no
+    // cobra; pagar sigue necesitando otra pulsacion.
+    onSuccess: () => {
+      setInvoice(null);
+      setNotice({ tone: "emerald", text: "New price confirmed. Review the payment to continue." });
+    },
     onError: handlePrepareError,
   });
 
@@ -175,12 +158,14 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       if (result.kind === "invoice") setInvoice(result);
       const outcome = result.autoCharge;
       if (outcome?.reason === "NO_SAVED_CARD") setNoSavedCard(true);
+      if (outcome?.reason === "DECLINED") {
+        setDeclined(true);
+        queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
+      }
       if (outcome?.holdMs) {
         setSavedCardBlockedUntil(Date.now() + outcome.holdMs);
-        setWaiting(true);
-        pollerRef.current?.start();
+        status.start();
       }
-      if (outcome?.reason === "DECLINED") queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
       setNotice({ tone: "amber", text: outcome?.message || "Your saved card was not charged." });
     },
     onError: handlePrepareError,
@@ -208,9 +193,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       }
       // De vuelta del navegador: la pagina no confirma nada; se pregunta al backend.
       setNotice(null);
-      setReading({ state: "pending", terminal: false, message: "Checking your payment..." });
-      setWaiting(true);
-      pollerRef.current?.start();
+      status.start();
     },
     onError: (error) => {
       if (error?.message === "INVALID_PAYMENT_URL") {
@@ -230,6 +213,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
     onSuccess: () => {
       // La tarjeta pudo cambiar: se relee, y la siguiente revision la usa.
       setNoSavedCard(false);
+      setDeclined(false);
       queryClient.invalidateQueries({ queryKey: [BILLING_PAYMENT_QUERY_KEY] });
       notifyCapabilitiesStale("payment-method");
     },
@@ -241,30 +225,35 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
 
   const checkAgain = () => {
     setNowMs(Date.now());
-    const wait = pollerRef.current?.checkNow() || 0;
+    const wait = status.checkNow();
     if (wait > 0) setNotice({ tone: "amber", text: "Checking again in " + Math.ceil(wait / 1000) + " seconds." });
   };
 
+  const reading = status.reading;
   const breakdown = invoice?.breakdown;
   const totalLabel = useMemo(() => (breakdown?.total != null ? formatMoneyFromCents(breakdown.total) : null), [breakdown]);
 
   if (reading?.state === "paid") {
-    return <Notice tone="emerald" className="mt-2">{reading.message}</Notice>;
+    return (
+      <Notice tone="emerald" className="mt-2">
+        {reading.message}
+      </Notice>
+    );
   }
+
+  const blocked = ["review", "cancelled", "refunded"].includes(reading?.state);
 
   return (
     <View className="mt-2 gap-2">
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
 
-      {!invoice ? (
+      {blocked ? null : !invoice ? (
         <>
-          <Button loading={review.isPending || confirmReprice.isPending} disabled={busy || reading?.state === "review"} onPress={() => review.mutate()}>
+          <Button loading={review.isPending || confirmReprice.isPending} disabled={busy || status.waiting} onPress={() => guarded(review)}>
             Review payment
           </Button>
-          <Text className="font-brand text-[12px] leading-4 text-ink/60">
-            You will see the total before anything is charged.
-          </Text>
+          <Text className="font-brand text-[12px] leading-4 text-ink/60">You will see the total before anything is charged.</Text>
         </>
       ) : (
         <View className="gap-2 rounded-lg border border-border bg-background p-3">
@@ -279,28 +268,33 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
           </Text>
 
           {allowSavedCard ? (
-            <Button loading={payWithSavedCard.isPending} disabled={busy} onPress={() => payWithSavedCard.mutate()}>
+            <Button loading={payWithSavedCard.isPending} disabled={busy || status.waiting} onPress={() => guarded(payWithSavedCard)}>
               {"Pay " + (totalLabel || "") + " with saved card" + (card?.last4 ? " •••• " + card.last4 : "")}
             </Button>
           ) : null}
-          <Button variant={allowSavedCard ? "outline" : "default"} loading={openSecurePage.isPending} disabled={busy} onPress={() => openSecurePage.mutate()}>
+          <Button
+            variant={allowSavedCard ? "outline" : "default"}
+            loading={openSecurePage.isPending}
+            disabled={busy || status.waiting}
+            onPress={() => guarded(openSecurePage)}
+          >
             Pay on the secure page
           </Button>
 
           {noSavedCard && zohoActions.addPaymentMethod ? (
-            <Button variant="outline" disabled={busy} onPress={() => openZohoPage.mutate(ZOHO_ADD_PAYMENT_METHOD_PATH)}>
+            <Button variant="outline" disabled={busy} onPress={() => guarded(openZohoPage, ZOHO_ADD_PAYMENT_METHOD_PATH)}>
               Add a payment method
             </Button>
           ) : null}
-          {payWithSavedCard.data?.autoCharge?.reason === "DECLINED" && zohoActions.updateCard ? (
-            <Button variant="outline" disabled={busy} onPress={() => openZohoPage.mutate(ZOHO_UPDATE_CARD_PATH)}>
+          {declined && zohoActions.updateCard ? (
+            <Button variant="outline" disabled={busy} onPress={() => guarded(openZohoPage, ZOHO_UPDATE_CARD_PATH)}>
               Update your card
             </Button>
           ) : null}
         </View>
       )}
 
-      {waiting || reading?.state === "pending" ? (
+      {status.waiting || reading?.state === "pending" ? (
         <View className="gap-2">
           <Text className="font-brand text-[13px] leading-5 text-ink/70">
             {reading?.message || "We don't have a confirmation yet. It can take a minute."}

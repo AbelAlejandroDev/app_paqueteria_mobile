@@ -21,19 +21,17 @@
  */
 
 import { isSecurePageUrl } from "./zoho-billing.js";
-import { MIN_PAYMENT_STATUS_POLL_SECONDS } from "./capabilities.js";
+import { centsOrNull, forwardPaymentError } from "./forward-payment.js";
 
-export function preparePaymentPath(serviceRequestId) {
-  return "/client/forwarding/" + encodeURIComponent(String(serviceRequestId)) + "/prepare-payment";
-}
-
-export function confirmRepricedRatePath(serviceRequestId) {
-  return "/client/forwarding/" + encodeURIComponent(String(serviceRequestId)) + "/confirm-repriced-rate";
-}
-
-export function paymentStatusPath(serviceRequestId) {
-  return "/client/forwarding/" + encodeURIComponent(String(serviceRequestId)) + "/payment-status";
-}
+// Lo comun a Stripe y Zoho (rutas, recotizacion, estado y sondeo) esta en
+// lib/forward-payment; se reexporta para quien importa desde aqui.
+export {
+  confirmRepricedRatePath,
+  createStatusPoller,
+  interpretPaymentStatus,
+  paymentStatusPath,
+  preparePaymentPath,
+} from "./forward-payment.js";
 
 /** Cuerpos permitidos: la revision ({}) o el cobro con la tarjeta guardada. */
 export const REVIEW_BODY = Object.freeze({});
@@ -47,7 +45,7 @@ export const SAVED_CARD_BODY = Object.freeze({ useSavedCard: true });
  * recargo = adminFeeAmount; total = amount. Todo en centavos.
  */
 export function paymentBreakdown(data) {
-  const cents = (value) => (Number.isFinite(Number(value)) ? Number(value) : null);
+  const cents = centsOrNull;
   const postageAmount = cents(data?.postageAmount);
   const handling = cents(data?.postageFeeAmount);
   return {
@@ -135,181 +133,5 @@ export function autoChargeOutcome(autoCharge) {
 
 // ── Errores de prepare-payment / confirm-repriced-rate ──────────────────────
 
-/** Codigos con los que la tarifa ya no se puede pagar (backend REPRICE_BLOCKING_CODES). */
-const REPRICE_BLOCKING_CODES = [
-  "FORWARDING_SERVICE_UNAVAILABLE",
-  "FORWARDING_PACKAGE_CHANGED",
-  "FORWARDING_ORIGIN_CHANGED",
-  "CENTER_SHIPPING_ADDRESS_NOT_VERIFIED",
-  "FORWARDING_CARRIER_ACCOUNT_UNAVAILABLE",
-  "FORWARDING_REPRICE_NOT_PAYABLE",
-];
-
-/**
- * Que significa un error del pago. `retryable` dice si se puede ofrecer el
- * mismo boton otra vez (siempre por decision del cliente, nunca solo).
- */
-export function preparePaymentError(error) {
-  if (!error?.response) {
-    return {
-      kind: "unknown-outcome",
-      retryable: false,
-      checkStatus: true,
-      message: "We couldn't confirm the result. Nothing is shown as paid until we confirm it: check the status before trying again.",
-    };
-  }
-
-  const { status, data } = error.response;
-  const code = data?.code;
-
-  if (code === "FORWARDING_PRICE_RECONFIRMATION_REQUIRED") {
-    return {
-      kind: "reprice",
-      retryable: false,
-      currentAmount: Number(data?.reprice?.currentAmount) || null,
-      previousAmount: Number(data?.reprice?.previousAmount) || null,
-      currency: data?.reprice?.currency || "USD",
-      message: "The shipping price changed. Review the new amount before paying.",
-    };
-  }
-  if (code === "FORWARDING_ALREADY_PAID") return { kind: "paid", retryable: false, message: null };
-  if (code === "ZOHO_PAYMENT_UNDER_REVIEW") {
-    return { kind: "review", retryable: false, message: "This payment is being reviewed by your center. Please don't pay again; contact your center." };
-  }
-  if (code === "ZOHO_PAYMENT_IN_PROGRESS") {
-    return { kind: "in-progress", retryable: true, checkStatus: true, message: "A payment is already in progress. Wait a moment and check the status." };
-  }
-  if (code === "ZOHO_OUTCOME_UNCERTAIN" || code === "ZOHO_VOID_UNCONFIRMED") {
-    return { kind: "unknown-outcome", retryable: false, checkStatus: true, message: "Nothing new was charged. We're still confirming an earlier attempt: check the status in a moment." };
-  }
-  if (code === "FORWARDING_REPRICE_EXPIRED") {
-    return { kind: "reprice-expired", retryable: true, message: "The new price expired. Review the payment again to get the current amount." };
-  }
-  if (REPRICE_BLOCKING_CODES.includes(code) || code === "FORWARD_REQUEST_NOT_PAYABLE") {
-    return { kind: "not-payable", retryable: false, message: "This shipment can't be paid as it is. Please contact your center." };
-  }
-  if (["ONLINE_PAYMENTS_UNAVAILABLE", "ZOHO_FORWARDING_PAYMENTS_UNAVAILABLE", "CENTER_POLICY_NOT_CONFIGURED", "BILLING_PROVIDER_NOT_ZOHO", "ZOHO_CUSTOMER_NOT_LINKED"].includes(code)) {
-    return { kind: "unavailable", retryable: false, message: "Online payment isn't available for this shipment. Please contact your center." };
-  }
-  if (code === "PITNEY_POSTAGE_BALANCE_LOW" || code === "PITNEY_BOWES_TIMEOUT" || status >= 500) {
-    return { kind: "temporary", retryable: true, message: "The payment couldn't be prepared right now. Nothing was charged. Please try again in a few minutes." };
-  }
-  if (status === 404) return { kind: "not-found", retryable: false, message: "We couldn't find this shipment. Pull down to refresh." };
-  return { kind: "error", retryable: true, message: (typeof data?.error === "string" && data.error) || "Unable to prepare the payment." };
-}
-
-// ── payment-status ──────────────────────────────────────────────────────────
-
-/**
- * Lectura de GET payment-status (alineada con describeZohoReturn del web).
- *   paid          PAID: listo; la etiqueta se prepara despues.
- *   review        chargeStatus REVIEW: en revision del centro; no pagar otra vez.
- *   failed        FAILED: ofrecer pagar de nuevo.
- *   closed        REFUNDED / CANCELLED: ya no se paga.
- *   link-expired  paymentLinkExpired: "Pay" vuelve a llamar a prepare-payment (reutiliza la factura).
- *   pending       el resto: aun sin confirmacion.
- */
-export function interpretPaymentStatus(status) {
-  const paymentStatus = status?.paymentStatus || null;
-  if (paymentStatus === "PAID") return { state: "paid", terminal: true, message: "Payment received. We're preparing your label." };
-  if (status?.chargeStatus === "REVIEW") {
-    return { state: "review", terminal: true, message: "Your payment is being reviewed by your center. Please don't pay again." };
-  }
-  if (paymentStatus === "REFUNDED" || paymentStatus === "CANCELLED") {
-    return { state: "closed", terminal: true, message: "This payment can no longer be completed." };
-  }
-  if (paymentStatus === "FAILED") return { state: "failed", terminal: true, message: "The payment didn't go through. You can try again." };
-  if (status?.paymentLinkExpired === true) {
-    return { state: "link-expired", terminal: true, message: "The payment page expired. Tap Pay to open a new one." };
-  }
-  return { state: "pending", terminal: false, message: "We don't have a confirmation yet. It can take a minute." };
-}
-
-// ── Sondeo de payment-status ────────────────────────────────────────────────
-
-/**
- * Pregunta payment-status como mucho cada `minIntervalMs` (>= 15 s) y hasta
- * `maxAttempts` veces seguidas (~1 min con 4), parando en un estado final.
- * `checkNow()` ("Check again", volver a primer plano) respeta el minimo: si es
- * pronto, programa la consulta para cuando toque y devuelve cuanto falta.
- *
- * Solo lee: nunca vuelve a llamar a prepare-payment ni cobra nada.
- */
-export function createStatusPoller({
-  fetchStatus,
-  onResult,
-  minIntervalMs = MIN_PAYMENT_STATUS_POLL_SECONDS * 1000,
-  maxAttempts = 4,
-  now = () => Date.now(),
-  schedule = setTimeout,
-  cancel = clearTimeout,
-}) {
-  const interval = Math.max(MIN_PAYMENT_STATUS_POLL_SECONDS * 1000, Number(minIntervalMs) || 0);
-  let lastCheckAt = null;
-  let attempts = 0;
-  let timer = null;
-  let stopped = false;
-  let inFlight = false;
-
-  const clear = () => {
-    if (timer !== null) cancel(timer);
-    timer = null;
-  };
-
-  const run = async () => {
-    timer = null;
-    if (stopped || inFlight) return;
-    inFlight = true;
-    lastCheckAt = now();
-    attempts += 1;
-    let result;
-    try {
-      result = { ok: true, status: await fetchStatus() };
-    } catch (error) {
-      result = { ok: false, error };
-    }
-    inFlight = false;
-    if (stopped) return;
-
-    const reading = result.ok ? interpretPaymentStatus(result.status) : null;
-    onResult?.({ ...result, reading, attempts });
-
-    if (reading?.terminal) {
-      stopped = true;
-      return;
-    }
-    if (attempts < maxAttempts) timer = schedule(run, interval);
-  };
-
-  const waitFor = () => (lastCheckAt === null ? 0 : Math.max(0, lastCheckAt + interval - now()));
-
-  return {
-    /** Empieza (o reanuda) una tanda de `maxAttempts` comprobaciones. */
-    start() {
-      stopped = false;
-      attempts = 0;
-      clear();
-      const wait = waitFor();
-      timer = schedule(run, wait);
-      return wait;
-    },
-    /** "Check again": ya, o en cuanto pase el minimo. Devuelve los ms que faltan. */
-    checkNow() {
-      if (stopped) {
-        stopped = false;
-        attempts = Math.max(0, maxAttempts - 1);
-      }
-      clear();
-      const wait = waitFor();
-      timer = schedule(run, wait);
-      return wait;
-    },
-    stop() {
-      stopped = true;
-      clear();
-    },
-    get attempts() {
-      return attempts;
-    },
-  };
-}
+/** Errores de prepare-payment: los comunes de lib/forward-payment (con los de Zoho). */
+export const preparePaymentError = forwardPaymentError;

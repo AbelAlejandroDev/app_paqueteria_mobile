@@ -3,8 +3,6 @@ import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Switch
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
-// Construye el deep link de vuelta del pago de Stripe.
-import * as ExpoLinking from "expo-linking";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Flag, ImageIcon, ScanLine, Store, Trash2, Truck } from "lucide-react-native";
 
@@ -28,7 +26,6 @@ import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/
 import { US_STATES } from "@/lib/us-states";
 import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
 import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
-import { stripeReturnBody } from "@/lib/stripe-return";
 import {
   billingHold,
   FORWARD_PAYMENT_STRIPE_CHECKOUT,
@@ -36,11 +33,13 @@ import {
   FORWARD_PAYMENT_UNKNOWN,
   FORWARD_PAYMENT_ZOHO_HOSTED,
   forwardPaymentMode,
-  isCapabilityError,
   itemActions,
 } from "@/lib/capabilities";
-import { CAPABILITIES_QUERY_KEY, useCapabilities } from "@/lib/use-capabilities";
+import { useCapabilities } from "@/lib/use-capabilities";
 import ZohoForwardPaymentCard from "@/components/common/zoho-forward-payment-card";
+import StripeForwardPayment from "@/components/common/stripe-forward-payment";
+import ScanApprovalCard from "@/components/common/scan-approval-card";
+import { findScanAwaitingApproval } from "@/lib/scan-approval";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -186,49 +185,19 @@ function ToggleRow({ label, description, value, onValueChange }) {
 /**
  * Cobro del reenvio de un paquete.
  *
- * El pago lo aloja Stripe y se abre en el navegador: asi el reto 3DS del banco
- * se resuelve donde Stripe sabe hacerlo, sin meter su SDK nativo en la app.
- * Al volver solo se recarga; quien da el pago por bueno es el webhook, no esta
- * pantalla, que no puede saber si el cargo cuajo.
+ * Como se paga lo dice GET /client/capabilities (forwarding.checkout y
+ * forwarding.methods). Stripe y Zoho son flujos distintos, cada uno en su
+ * componente; lo comun (recotizacion, payment-status, candado contra dobles
+ * cobros) esta en lib/forward-payment. Ninguno da un pago por bueno sin
+ * payment-status del backend.
  */
 function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   const details = request.forwardDetails || {};
   const needsAuthentication = details.paymentStatus === "AUTHENTICATION_REQUIRED";
-  const queryClient = useQueryClient();
 
-  // Como se paga en esta cuenta: lo dice GET /client/capabilities
-  // (forwarding.checkout y forwarding.methods). Stripe y Zoho son flujos distintos.
   const capabilities = useCapabilities();
   const mode = forwardPaymentMode(capabilities);
   const waitingForCapabilities = !capabilities.known && capabilities.isLoading;
-
-  const pay = useMutation({
-    mutationFn: async () => {
-      // La misma URL para las dos salidas: la app no distingue entre pagar y
-      // desistir, y en ambos casos hay que volver al item y recargar. A Stripe
-      // no se le manda el deep link (lib/stripe-return): vuelve al portal web
-      // del centro por https, y el navegador lo cierra el cliente.
-      const returnUrl = ExpoLinking.createURL("/mail-items/" + mailItemId);
-      const response = await api.post(
-        "/client/forwarding/" + request.id + "/checkout-session",
-        stripeReturnBody({ successUrl: returnUrl, cancelUrl: returnUrl })
-      );
-
-      const url = response.data?.url;
-      if (!url) throw new Error("Stripe did not return a payment URL.");
-
-      return WebBrowser.openAuthSessionAsync(url, returnUrl);
-    },
-    onSuccess: async () => {
-      await onRefresh?.();
-    },
-    onError: (error) => {
-      // El centro no cobra asi: las capacidades estaban viejas. Se releen.
-      if (isCapabilityError(error)) queryClient.invalidateQueries({ queryKey: [CAPABILITIES_QUERY_KEY] });
-      Alert.alert("Could not open payment", formatErrorMessage(error, "Unable to start the payment."));
-    },
-  });
-
 
   return (
     <NoticeCard
@@ -254,15 +223,7 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
           Pay now
         </Button>
       ) : mode === FORWARD_PAYMENT_STRIPE_CHECKOUT ? (
-        <>
-          <Button className="mt-3" loading={pay.isPending} disabled={pay.isPending} onPress={() => pay.mutate()}>
-            {needsAuthentication ? "Verify and pay" : "Pay now"}
-          </Button>
-
-          <Text className="mt-1 font-brand text-[12px] leading-4 text-ink/60">
-            Payment opens in a secure Stripe page. It can take a moment to show as paid here.
-          </Text>
-        </>
+        <StripeForwardPayment request={request} mailItemId={mailItemId} capabilities={capabilities} onRefresh={onRefresh} />
       ) : mode === FORWARD_PAYMENT_ZOHO_HOSTED ? (
         <ZohoForwardPaymentCard request={request} capabilities={capabilities} onRefresh={onRefresh} />
       ) : mode === FORWARD_PAYMENT_UNKNOWN ? (
@@ -1088,6 +1049,9 @@ export default function MailItemDetailScreen() {
    * Se exige que siga sin aceptarse: una vez aceptado, la solicitud sigue su
    * curso y la tarjeta no debe volver a pedir nada.
    */
+  // Escaneo cotizado por el centro que espera que el cliente lo apruebe.
+  const scanApprovalRequest = useMemo(() => findScanAwaitingApproval(serviceRequests), [serviceRequests]);
+
   const trackingApprovalRequest = useMemo(
     () =>
       findRequest(
@@ -1321,6 +1285,12 @@ export default function MailItemDetailScreen() {
             {completedScanRequest.scanDetails.quoteNotes ? (
               <Text className="mt-2 font-brand text-[14px] text-ink/60">{completedScanRequest.scanDetails.quoteNotes}</Text>
             ) : null}
+          </NoticeCard>
+        ) : null}
+
+        {scanApprovalRequest ? (
+          <NoticeCard tone="amber" title="Scan approval" description="Your center quoted this scan. Review it and approve to receive it.">
+            <ScanApprovalCard request={scanApprovalRequest} onRefresh={() => query.refetch()} />
           </NoticeCard>
         ) : null}
 
