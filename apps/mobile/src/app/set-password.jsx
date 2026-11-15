@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
+import * as ExpoLinking from "expo-linking";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,6 +24,7 @@ import {
 
 import { api } from "@/lib/api";
 import { isSessionForTenant } from "@/lib/session-tenant";
+import { parseActivationLink } from "@/lib/activation-link";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from "@/lib/auth-messages";
@@ -120,18 +122,21 @@ function Shell({ children }) {
 
 /**
  * Activación de cuenta y restablecimiento de contraseña. El token llega por el
- * enlace del correo, que abre la app con el esquema propio de la marca:
+ * enlace del correo (lib/activation-link), en el fragmento o en la query:
  *
- *   worxclient://set-password?token=...              (alta)
- *   worxclient://set-password?token=...&mode=reset   (olvide mi contraseña)
+ *   https://<portal>/set-password#token=...&email=...   (formato actual)
+ *   https://<portal>/set-password?token=...             (formato antiguo)
+ *   worxclient://set-password?token=...&mode=reset      (esquema de la app)
  *
  * Es el mismo POST /auth/set-password en los dos casos; solo cambia el texto.
  */
 export default function SetPasswordScreen() {
   const params = useLocalSearchParams();
-  const token = typeof params.token === "string" ? params.token.trim() : "";
-  const email = typeof params.email === "string" ? params.email.trim() : "";
-  const isReset = params.mode === "reset";
+  // La URL completa: expo-router no da el fragmento (#token=), que es donde lo
+  // manda el backend.
+  const linkUrl = ExpoLinking.useLinkingURL();
+  const { token, email, mode } = parseActivationLink({ url: linkUrl, params });
+  const isReset = mode === "reset";
   const [isSuccess, setIsSuccess] = useState(false);
   const [formError, setFormError] = useState("");
   const [linkExpired, setLinkExpired] = useState(false);

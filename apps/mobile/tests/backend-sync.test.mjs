@@ -159,7 +159,7 @@ test("12. app: el push de pago abre la pieza donde se paga, no el detalle del av
   assert.equal(routing.isItemActionNotification({ type: "FORWARD_PAYMENT_REQUIRED" }), false, "sin pieza no hay donde llevar");
 
   const list = fs.readFileSync(path.join(root, "src/app/(client)/notifications/index.jsx"), "utf8");
-  assert.match(list, /if \(isItemActionNotification\(data\)\) \{\s*router\.push\(routeForNotification\(data\)\)/, "la lista va al mismo sitio");
+  assert.match(list, /if \(opensDirectly\(data\)\) \{\s*router\.push\(routeForNotification\(data\)\)/, "la lista va al mismo sitio");
 });
 
 test("app: se puede pagar cualquier envio con tarifa, no solo paquetes (cartas del mes incluidas)", () => {

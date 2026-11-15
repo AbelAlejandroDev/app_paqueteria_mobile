@@ -19,6 +19,8 @@ const brandDir = "./assets/brands/" + brand.id;
 // cuenta de servicio NO va aqui: esa se sube a EAS y queda fuera del repo.
 const googleServicesFile = brandDir + "/google-services.json";
 const generatedIcon = brandDir + "/generated/icon.png";
+// Sin el google-services.json de la marca no hay Firebase: ni push en Android.
+const hasGoogleServices = fs.existsSync(path.join(__dirname, googleServicesFile));
 
 /** Ruta del asset si esta marca lo tiene; null si no, para poder caer atras. */
 function brandAsset(name) {
@@ -41,6 +43,33 @@ const adaptiveForeground = brandAsset("adaptive-icon.png");
 const monochromeIcon = brandAsset("monochrome-icon.png");
 
 const appIcon = brandIcon || generatedIcon;
+
+/**
+ * Universal Links (iOS) y App Links (Android) de los enlaces de activacion.
+ * Solo si la marca los tiene encendidos (brands/index.js, appLinks.enabled):
+ * encenderlos cambia lo nativo (entitlement de Associated Domains y filtros de
+ * intent), asi que pide un build nuevo y subir RUNTIME_VERSION. Sin los ficheros
+ * publicados en los portales, el enlace se abre en el navegador como hoy.
+ */
+function appLinksConfig(appLinks) {
+  if (!appLinks?.enabled || !Array.isArray(appLinks.hosts) || !appLinks.hosts.length) return { ios: {}, android: {} };
+  const paths = appLinks.paths?.length ? appLinks.paths : ["/set-password"];
+  return {
+    ios: { associatedDomains: appLinks.hosts.map((host) => "applinks:" + host) },
+    android: {
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: appLinks.hosts.flatMap((host) => paths.map((pathPrefix) => ({ scheme: "https", host, pathPrefix }))),
+          category: ["BROWSABLE", "DEFAULT"],
+        },
+      ],
+    },
+  };
+}
+
+const appLinks = appLinksConfig(brand.appLinks);
 
 /**
  * Runtime de OTA del binario, aparte de la version comercial.
@@ -101,8 +130,10 @@ module.exports = {
       // El icono completo, sin esquinas redondeadas: iOS aplica su propia
       // máscara y redondearlo a mano dejaría un borde doble.
       icon: appIcon,
+      ...appLinks.ios,
     },
     android: {
+      ...appLinks.android,
       package: brand.bundleId,
       // Android compone el icono en dos capas. El símbolo va delante con
       // transparencia y el color sólido detrás; el gradiente del icono
@@ -119,9 +150,7 @@ module.exports = {
       // Registra la app ante Firebase y sin el no hay notificaciones en
       // Android. Es por marca porque cada una tiene su propio paquete y por
       // tanto su propio proyecto de Firebase.
-      ...(fs.existsSync(path.join(__dirname, googleServicesFile))
-        ? { googleServicesFile }
-        : {}),
+      ...(hasGoogleServices ? { googleServicesFile } : {}),
     },
     web: {
       output: "static",
@@ -172,6 +201,9 @@ module.exports = {
     extra: {
       // La lee src/lib/api.js: la URL ya validada, no la variable suelta.
       api: apiConfig,
+      // Push en Android: solo con el google-services.json de esta marca. Sin el
+      // la app lo dice y no intenta registrarse (lib/push-presentation).
+      push: { androidFcmConfigured: hasGoogleServices },
       // Cuanto espera una peticion antes de darla por perdida (API_TIMEOUT_MS).
       network: { timeoutMs: apiTimeoutMs },
       // Proyecto de expo.dev de esta marca. Lo lee getExpoPushTokenAsync; sin

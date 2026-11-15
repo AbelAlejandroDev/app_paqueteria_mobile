@@ -33,9 +33,14 @@ export function mailReceivedTitle(count) {
   return count > 1 ? "You have " + count + " new mail items" : "You have a new mail item";
 }
 
+// Solo ids con la forma del backend: un push no compone rutas raras.
+const MAIL_ITEM_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const validId = (value) => (value !== null && value !== undefined && MAIL_ITEM_ID.test(String(value)) ? String(value) : null);
+
 function mailItemIdsOf(data) {
-  if (Array.isArray(data?.mailItemIds) && data.mailItemIds.length) return data.mailItemIds.map(String);
-  return data?.mailItemId ? [String(data.mailItemId)] : [];
+  if (Array.isArray(data?.mailItemIds) && data.mailItemIds.length) return data.mailItemIds.map(validId).filter(Boolean);
+  const single = validId(data?.mailItemId);
+  return single ? [single] : [];
 }
 
 /**
@@ -127,7 +132,7 @@ export function stackMailNotifications(items) {
  */
 export function routeForMailReceived(data) {
   const ids = mailItemIdsOf(data);
-  const latest = data?.mailItemId ? String(data.mailItemId) : ids[0];
+  const latest = validId(data?.mailItemId) || ids[0];
 
   // El push trae screen: se sigue tal cual. Sin el (la lista, avisos antiguos) se
   // decide por la cuenta.

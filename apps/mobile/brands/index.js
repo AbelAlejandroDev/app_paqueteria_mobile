@@ -75,6 +75,15 @@ const BRANDS = {
     },
     defaultEnvironment: "production",
     productionRelease: { authorized: true },
+    // Universal Links / App Links para los enlaces de activacion de los
+    // portales de miembros (backend src/config/centers.js, memberHost). Apagado
+    // hasta que cada portal publique /.well-known/apple-app-site-association y
+    // assetlinks.json (hoy devuelven el HTML del portal): docs/deep-links.md.
+    appLinks: {
+      enabled: false,
+      hosts: ["memberssandlake.theworxoffices.com", "membershallandale.theworxoffices.com", "membershunterscreek.theworxoffices.com"],
+      paths: ["/set-password"],
+    },
     primaryColor: "#65baaf",
     splashBackground: "#0e0d13",
     // Capa de fondo del icono adaptativo de Android. Coincide con la esquina
@@ -125,6 +134,13 @@ const BRANDS = {
       production: null,
     },
     defaultEnvironment: "sandbox",
+    // El portal de miembros de HDG Sandbox (PORTAL_MEMBER_HOST__HDG__HOLLYWOOD).
+    // El de produccion aun no existe. Apagado por lo mismo que The Worx.
+    appLinks: {
+      enabled: false,
+      hosts: ["members.hdgexecutivesuites.com"],
+      paths: ["/set-password"],
+    },
     productionRelease: {
       authorized: false,
       reason: "La API de produccion de HDG no esta configurada y el lanzamiento no esta autorizado.",

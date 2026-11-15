@@ -9,7 +9,7 @@ import {
   takeInitialNotificationTap,
 } from "@/lib/push-notifications";
 import { isMailReceived } from "@/lib/mail-notifications";
-import { navigationKeyFor, routeForNotification } from "@/lib/notification-routing";
+import { navigationKeyFor, readIdsForNavigation, routeForNotification } from "@/lib/notification-routing";
 import { setPendingNavigation } from "@/lib/pending-navigation";
 
 /**
@@ -30,12 +30,13 @@ export default function PushIntentCapture() {
   useEffect(() => {
     const capture = (data, requestId) => {
       const mail = isMailReceived(data);
+      const route = routeForNotification(data);
 
       setPendingNavigation({
-        route: routeForNotification(data),
+        route,
         key: navigationKeyFor(data, requestId),
-        // Un aviso de correo no abre su detalle, que es donde se marcan leidos.
-        readIds: mail && data?.notificationId ? [String(data.notificationId)] : [],
+        // Lo que no abre el detalle del aviso (donde se marca leido) se marca al llegar.
+        readIds: readIdsForNavigation(data, route),
       });
 
       if (mail) dismissAllMailNotifications();

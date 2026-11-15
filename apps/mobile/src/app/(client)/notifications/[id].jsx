@@ -13,6 +13,7 @@ import { isSafeUrl, planLabel, toBlocks, toSegments } from "@/lib/notification-c
 import { loadNotificationDetail, notificationDetailQueryKey } from "@/lib/notification-routing";
 import { notificationDisplay } from "@/lib/mail-notifications";
 import { notificationKind, relatedAction } from "@/lib/notification-kind";
+import { useCapabilities } from "@/lib/use-capabilities";
 import EmptyState from "@/components/common/empty-state";
 import { ActionButton, DetailCard, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { NotificationIcon, notificationStyle } from "@/components/common/notification-icon";
@@ -165,6 +166,8 @@ export default function NotificationDetailScreen() {
   const { id } = useLocalSearchParams();
   const queryClient = useQueryClient();
   const marked = useRef(null);
+  // El proveedor decide a donde lleva un cobro fallido (Stripe: factura; Zoho: Facturacion).
+  const capabilities = useCapabilities();
 
   // Por su id y nada mas: no se descarga la lista para buscarla dentro.
   const query = useQuery({
@@ -211,7 +214,7 @@ export default function NotificationDetailScreen() {
   // Un aviso de una sola linea (el de correo) no repite el titulo como cuerpo.
   const body = HEADERS[notification.type] ? notification.message : notificationDisplay(notification).message;
   const trackingNumber = notification.data?.trackingNumber ? String(notification.data.trackingNumber) : "";
-  const action = relatedAction(notification);
+  const action = relatedAction(notification, { provider: capabilities.provider });
   // El color del aviso tiñe la franja de arriba, para que el detalle se
   // reconozca con la misma mirada que la fila de la lista.
   const accent = HEADERS[notification.type] ? palette.success : notificationStyle(notification).color;
@@ -233,7 +236,7 @@ export default function NotificationDetailScreen() {
       {action ? (
         <ActionButton
           variant="primary"
-          onPress={() => router.push(action.route)}
+          onPress={() => (action.url ? WebBrowser.openBrowserAsync(action.url) : router.push(action.route))}
           accessibilityHint={notificationKind(notification) === "mail" ? "Opens your mail" : undefined}
         >
           {action.label}

@@ -18,7 +18,8 @@ import {
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
-import { registerForPush, unregisterFromPush } from "@/lib/push-notifications";
+import { dismissAllNotifications, registerForPush, unregisterFromPush } from "@/lib/push-notifications";
+import { setPushSessionActive } from "@/lib/push-presentation";
 import { clearBiometricLock } from "@/lib/security-preferences";
 import { clearPendingNavigation } from "@/lib/pending-navigation";
 import { createScopeTracker, resetQueryCache } from "@/lib/session-scope";
@@ -56,6 +57,8 @@ export function AuthProvider({ children }) {
   const applyUser = useCallback(
     (nextUser) => {
       trackScope(nextUser);
+      // Sin sesion no se enseñan avisos con la app delante (lib/push-presentation).
+      setPushSessionActive(Boolean(nextUser));
       setUser(nextUser ?? null);
     },
     [trackScope]
@@ -68,6 +71,8 @@ export function AuthProvider({ children }) {
     broadcastAuthUserUpdated(null);
     setSessionUnavailable(false);
     applyUser(null);
+    // Nada de esta cuenta queda en la bandeja del sistema.
+    dismissAllNotifications();
   }, [applyUser]);
 
   const reload = useCallback(async () => {

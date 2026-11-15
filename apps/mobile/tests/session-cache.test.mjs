@@ -105,7 +105,8 @@ test("AuthContext: todo cambio de usuario pasa por el tracker y vacia React Quer
   assert.match(source, /createScopeTracker\(\(nextScope\) => \{\s*resetQueryCache\(queryClient\);\s*\/\/[^\n]*\n\s*clearPendingNavigation\(\);/);
   // Un solo setUser, dentro de applyUser, despues de trackScope.
   assert.equal((source.match(/setUser\(/g) || []).length, 1);
-  assert.match(source, /trackScope\(nextUser\);\s*setUser\(nextUser \?\? null\);/);
+  // (entre medias, setPushSessionActive: sin sesion no se enseñan avisos con la app delante)
+  assert.match(source, /trackScope\(nextUser\);\s*(\/\/[^\n]*\n\s*)?setPushSessionActive\(Boolean\(nextUser\)\);\s*setUser\(nextUser \?\? null\);/);
   // Logout, sesion invalida y el aviso del cliente HTTP (sesion revocada) pasan por ahi.
   assert.match(source, /finally \{\s*\/\/[^\n]*\n\s*await endLocalSession\(\);/);
   assert.match(source, /on\(AUTH_USER_UPDATED_EVENT, \(nextUser\) => \{[\s\S]*?applyUser\(nextUser \?\? null\);/);

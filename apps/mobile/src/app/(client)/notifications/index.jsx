@@ -9,7 +9,7 @@ import { brand } from "@/lib/brand";
 import { overWhite } from "@/lib/colors";
 import { cn, formatErrorMessage } from "@/lib/utils";
 import { formatEventTime } from "@/lib/mail-item-detail";
-import { NOTIFICATIONS_QUERY_KEY, isItemActionNotification, routeForNotification } from "@/lib/notification-routing";
+import { NOTIFICATIONS_QUERY_KEY, opensDirectly, routeForNotification } from "@/lib/notification-routing";
 import { isUpdateNotification } from "@/lib/notification-kind";
 import {
   isMailReceived,
@@ -157,7 +157,7 @@ export default function NotificationsScreen() {
     // El de pagar el franqueo abre la pieza, donde esta el pago (el mismo
     // destino que el push). Se marca leido aqui porque no pasa por el detalle.
     const data = { ...(notification.data || {}), type: notification.type };
-    if (isItemActionNotification(data)) {
+    if (opensDirectly(data)) {
       router.push(routeForNotification(data));
       if (!notification.readAt) {
         api.patch("/client/notifications/" + encodeURIComponent(notification.id) + "/read")

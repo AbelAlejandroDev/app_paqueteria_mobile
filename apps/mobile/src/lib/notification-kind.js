@@ -1,4 +1,6 @@
 import { isMailReceived, routeForMailReceived } from "./mail-notifications.js";
+import { safeId } from "./notification-routing.js";
+import { isSecurePageUrl } from "./zoho-billing.js";
 
 /**
  * De que va un aviso, para elegir su icono y su color en la lista.
@@ -66,18 +68,36 @@ export function isUpdateNotification(notification) {
  * abrir. Un aviso de correo va a su pieza (o a la bandeja si son varias);
  * cualquier otro que nombre una pieza, a esa pieza; los de pago, a Billing; y
  * los del 1583, a su pantalla.
+ *
+ * `provider` ("STRIPE" | "ZOHO", de /client/capabilities) decide el del cobro
+ * fallido de un escaneo: con Stripe se paga su factura (stripeInvoiceUrl, solo
+ * https); con Zoho no hay enlace y se paga la factura SCAN desde Facturacion.
+ * Sin proveedor conocido no se adivina: la pieza.
  */
-export function relatedAction(notification) {
+export function relatedAction(notification, { provider } = {}) {
   const data = notification?.data || {};
+  const type = String(notification?.type || "").toUpperCase();
+  const mailItemId = safeId(data.mailItemId);
+  const itemAction = mailItemId
+    ? { label: "View mail item", route: { pathname: "/mail-items/[id]", params: { id: mailItemId } } }
+    : null;
 
   if (isMailReceived(notification)) {
     const route = routeForMailReceived(data);
     return { label: route.pathname === "/mail-items/[id]" ? "View mail item" : "Open inbox", route };
   }
 
-  if (data.mailItemId) {
-    return { label: "View mail item", route: { pathname: "/mail-items/[id]", params: { id: String(data.mailItemId) } } };
+  if (type === "SCAN_PAYMENT_FAILED") {
+    if (provider === "ZOHO") return { label: "Go to Billing", route: "/billing" };
+    if (provider === "STRIPE" && isSecurePageUrl(data.stripeInvoiceUrl)) {
+      return { label: "Pay invoice", url: String(data.stripeInvoiceUrl).trim() };
+    }
+    return itemAction || { label: "Go to Billing", route: "/billing" };
   }
+
+  if (type.startsWith("ACCOUNT_DELETION")) return { label: "View account deletion", route: "/settings/delete-account" };
+
+  if (itemAction) return itemAction;
 
   const kind = notificationKind(notification);
   if (kind === "payment") return { label: "Go to Billing", route: "/billing" };

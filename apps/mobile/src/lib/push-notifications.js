@@ -4,6 +4,7 @@ import * as Device from "expo-device";
 
 import { api } from "@/lib/api";
 import { MAIL_RECEIVED_TYPE, staleMailNotificationIds } from "@/lib/mail-notifications";
+import { foregroundPresentation, isPushSessionActive, pushSupport } from "@/lib/push-presentation";
 
 /**
  * En Expo Go sobre Android, expo-notifications lanza nada mas importarse:
@@ -39,13 +40,9 @@ function loadNotifications() {
 function ensureHandler(Notifications) {
   if (handlerReady || !Notifications) return;
 
+  // Sin sesion no se enseña nada con la app delante (lib/push-presentation).
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async () => foregroundPresentation({ sessionActive: isPushSessionActive() }),
   });
 
   handlerReady = true;
@@ -63,24 +60,16 @@ function getProjectId() {
  * mismo que el cliente haya dicho que no a que falte configurar el proyecto.
  */
 export async function getPushSupport() {
-  if (isExpoGo) {
-    return { available: false, reason: "Notifications require a development build, not Expo Go." };
-  }
-
-  if (!loadNotifications()) {
-    return { available: false, reason: "The notifications module is not available." };
-  }
-
-  // El simulador no tiene servicio de notificaciones al que registrarse.
-  if (!Device.isDevice) {
-    return { available: false, reason: "Notifications require a physical device." };
-  }
-
-  if (!getProjectId()) {
-    return { available: false, reason: "This project is not linked to EAS yet." };
-  }
-
-  return { available: true };
+  // El simulador no tiene servicio de notificaciones al que registrarse; una
+  // build de Android sin google-services.json de su marca, tampoco.
+  return pushSupport({
+    isExpoGo,
+    hasModule: !isExpoGo && Boolean(loadNotifications()),
+    isDevice: Device.isDevice,
+    projectId: getProjectId(),
+    platform: Platform.OS,
+    androidFcmConfigured: Constants.expoConfig?.extra?.push?.androidFcmConfigured,
+  });
 }
 
 /**
@@ -241,5 +230,21 @@ export async function dismissAllMailNotifications() {
     await Promise.all(ids.map((id) => Notifications.dismissNotificationAsync(id)));
   } catch {
     // Igual que arriba.
+  }
+}
+
+/**
+ * Al cerrar sesion: fuera de la bandeja todo lo de la cuenta que sale, y el
+ * contador a cero. Asi un aviso de una cuenta no queda a mano de la siguiente.
+ */
+export async function dismissAllNotifications() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.setBadgeCountAsync(0);
+  } catch {
+    // Limpiar la bandeja nunca debe impedir cerrar la sesion.
   }
 }
