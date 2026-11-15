@@ -10,6 +10,22 @@
 | 4. `returnUrl` a la app desde Zoho | Respondida: no hace falta; la vuelta se detecta con `AppState` + `payment-status` cada ≥ 15 s | Implementado (`zoho-forward-payment.js`) |
 | Motivo del fallo de pago / marca de tarjeta | Siguen abiertos (opcionales) | — |
 
+## Fase 5 (2026-11-15, rama `feat/mobile-fase-5`): pendientes del backend
+
+Revisado contra `348c327` (`approveScan.js`, `checkoutSession.js`,
+`forwardingPayments.createForwardingCheckoutSession`, `cancelPaymentIntentIfPossible`,
+`stripe/webhook.js`). Nada cambiado en el backend; la app mitiga lo que puede.
+
+| # | Hallazgo | Riesgo | Mitigacion en la app | Propuesta minima al backend |
+|---|---|---|---|---|
+| 1 | `checkout-session` crea otra sesion aunque el PaymentIntent anterior ya este `succeeded`: `cancelPaymentIntentIfPossible` solo cancela `requires_*`/`processing` y si no, sigue | **Doble cobro** si el cliente paga, vuelve y paga otra vez antes de que llegue el webhook (el estado sigue `PAYMENT_PENDING`) | Con `PAYMENT_PENDING` primero se lee `payment-status`; "Pay again" pide confirmacion explicita ("could charge you twice"); candado contra doble pulsacion | Antes de crear la sesion, si el PaymentIntent guardado esta `succeeded` o `processing`, responder `409 FORWARDING_PAYMENT_IN_PROGRESS` (o confirmar el pago) en vez de abrir otro Checkout |
+| 2 | No se procesa `checkout.session.expired` | Un Checkout abandonado deja `PAYMENT_PENDING` indefinidamente; la app no puede distinguir "abandonado" de "pagado sin webhook" | La confirmacion de #1 | Al expirar la sesion, volver a `READY_FOR_PAYMENT` (o exponer `checkoutExpiresAt` en `forwardDetails`) |
+| 3 | `approve-scan` responde `409 { reason: "Online payments are not available..." }` **sin `code`** | La app tiene que reconocer el texto | Se compara el texto | Añadir `code: "ONLINE_PAYMENTS_UNAVAILABLE"` |
+| 4 | Tras `402 Payment failed` de `approve-scan`, la solicitud queda `IN_PROGRESS` y el cliente no ve por que (`scanDetails` no expone `paymentError` ni estado de factura) | Al reabrir la pieza no se sabe que el escaneo espera pago | El aviso `SCAN_PAYMENT_FAILED` (alertas de pago) y, en HDG, la factura `SCAN` en Facturacion | Exponer `scanDetails.paymentStatus` (`PENDING_PAYMENT`/`PAID`) al cliente |
+| 5 | Con Zoho, el `402` de `approve-scan` no trae el `invoiceId` de Zoho | No se puede abrir directamente esa factura | Se lleva a Facturacion | Incluir `zohoInvoiceId` (o la referencia `MW-SCAN-*`) |
+
+---
+
 Lo que sigue es el analisis original (backend `dac158a`), conservado como historia.
 
 ---
