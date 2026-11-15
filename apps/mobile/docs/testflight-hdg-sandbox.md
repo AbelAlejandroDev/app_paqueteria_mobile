@@ -11,7 +11,7 @@ construido, enviado ni publicado nada.
 | Sesion EAS en este equipo | `alejandrogenesisdma` (Owner de `ab-estrategia-360`) | `eas whoami` |
 | Nombre / bundle id | `My HDG Mail` / `com.hdgexecutivesuites.clientportal` | `eas config --profile hdg-testflight-sandbox --platform ios` |
 | Perfil de build | `hdg-testflight-sandbox`: `distribution: store`, `autoIncrement`, canal OTA `testflight-sandbox`, entorno EAS `preview`, `APP_ENV=sandbox`, API `https://core.hdgexecutivesuites.com/api/v1` | `eas config` + `tests/build-safety.test.mjs` |
-| Runtime OTA | `native-2` (igual que The Worx); un OTA del canal `production` nunca le llega | `app.config.js` |
+| Runtime OTA | `native-3` (igual que The Worx); un OTA del canal `production` nunca le llega | `app.config.js` |
 | iOS | `usesNonExemptEncryption: false`; textos de Face ID, camara y fotos; sin microfono; sin iPad | `app.config.js` |
 | Push | `expo-notifications` con `projectId` de HDG (no comparte proyecto con The Worx) | `app.config.js`, `brands/index.js` |
 | Login | `tenantSlug: "hdg"`; organizacion resuelta en HDG Sandbox (comprobado con una cuenta ficticia: 401 credenciales, no 400) | `tests/login-tenant.test.mjs` |

@@ -33,11 +33,13 @@ fuera del repositorio: son los pasos manuales que faltan.
 
 | Pieza | Estado | Que hacer |
 |---|---|---|
-| Proyecto Firebase de HDG | **No existe en el repo** | Crear (o usar) un proyecto Firebase de HDG y registrar la app Android `com.hdgexecutivesuites.clientportal` |
-| `assets/brands/hdg/google-services.json` | **Falta** | Descargarlo de esa app de Firebase y añadirlo (es publico; ninguna clave privada). `app.config.js` lo detecta solo y `extra.push.androidFcmConfigured` pasa a `true` |
-| Clave FCM v1 en EAS (`hdg-client`) | **Falta** | Firebase → Cuentas de servicio → generar clave JSON → `eas credentials` (Android, perfil de HDG) → subirla. **Esa clave no va a Git** |
-| Clave APNs en EAS (`hdg-client`) | **Falta** (no hay ninguna build de HDG) | Al primer `eas build` de iOS (fase 7) EAS ofrece crearla con la cuenta de Apple; o crear una clave APNs en Apple Developer y subirla con `eas credentials` |
-| Subir `RUNTIME_VERSION` | **Al añadir `google-services.json`** | Cambia lo nativo de Android: `tests/native-runtime.test.mjs` lo exige |
+| Proyecto Firebase de HDG | **No existe en el repo** | Un proyecto **propio de HDG**, nunca `the-worx-client` (el de The Worx). El nombre lo decide HDG (p. ej. "My HDG Mail"); el id lo asigna Firebase |
+| App Android en ese proyecto | **Falta** | Registrar el application id **`com.hdgexecutivesuites.clientportal`** (exacto). No hace falta SHA-1 para FCM |
+| `assets/brands/hdg/google-services.json` | **Falta** | Descargarlo de esa app y dejarlo en `apps/mobile/assets/brands/hdg/google-services.json` (publico, no esta ignorado por Git). `app.config.js` lo detecta: `android.googleServicesFile` y `extra.push.androidFcmConfigured: true`. Validar con `node scripts/check-google-services.js` (paquete exacto y que no sea el proyecto de The Worx; tambien lo comprueba `tests/release-config.test.mjs`) |
+| API "Firebase Cloud Messaging API (V1)" | **Comprobar** | En Google Cloud del proyecto de HDG, habilitada |
+| Clave FCM v1 en EAS (`@ab-estrategia-360/hdg-client`) | **Falta** | Firebase → Configuracion → Cuentas de servicio → generar clave privada (JSON) → `APP_BRAND=hdg APP_ENV=sandbox npx eas-cli credentials -p android` → perfil de HDG → Push Notifications: FCM V1 → subirla. **Esa clave no va a Git** |
+| Clave APNs en EAS (`hdg-client`) | **Falta** (no hay ninguna build de HDG) | Al primer `eas build` de iOS EAS ofrece crearla con la cuenta de Apple; o crear una clave APNs en Apple Developer y subirla con `eas credentials` |
+| Cambios nativos | Solo Android: el plugin de Gradle de Google Services y el fichero | **No** cambia la runtime (`native-3`): ningun modulo nativo nuevo ni distinto para el JS (`expo-notifications` ya esta). Si pide **un binario nuevo** de Android: las builds anteriores no tienen Firebase |
 
 Mientras falte `google-services.json`, la app de HDG en Android **no intenta**
 registrarse y lo explica ("Android notifications are not configured for this app yet

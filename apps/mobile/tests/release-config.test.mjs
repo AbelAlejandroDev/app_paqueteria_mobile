@@ -285,3 +285,44 @@ test("cableado: la baja local solo toca este dispositivo; el registro limpia la 
   const reload = auth.slice(auth.indexOf("const reload = useCallback("));
   assert.ok(reload.indexOf("retryPendingPushUnregister()") < reload.indexOf("const response = await api.get(\"/auth/me\")"), "sin token, antes de pedir /auth/me");
 });
+
+// ── Firebase (push en Android) por marca ────────────────────────────────────
+
+const { googleServicesProblems, readGoogleServices } = require("../scripts/check-google-services.js");
+
+test("google-services.json: el de cada marca es de su app y de su proyecto", () => {
+  for (const brand of Object.values(BRANDS)) {
+    assert.deepEqual(googleServicesProblems(brand.id), [], brand.id);
+  }
+  assert.equal(readGoogleServices("the_worx").project_info.project_id, "the-worx-client");
+});
+
+test("HDG hoy: sin google-services.json -> Android no registra push (y no usa el de The Worx)", () => {
+  const hasHdg = Boolean(readGoogleServices("hdg"));
+  const expo = appConfigWith({ APP_BRAND: "hdg", APP_ENV: "sandbox" });
+  assert.equal(expo.extra.push.androidFcmConfigured, hasHdg);
+  assert.equal(Boolean(expo.android.googleServicesFile), hasHdg);
+  if (!hasHdg) assert.equal(expo.android.googleServicesFile, undefined, "nunca cae al fichero de otra marca");
+});
+
+test("un google-services.json de HDG con el proyecto o el paquete de The Worx se rechaza", () => {
+  const worx = readGoogleServices("the_worx");
+  const fakeRead = (id) => (id === "hdg" ? worx : worx);
+  const problems = googleServicesProblems("hdg", { read: fakeRead });
+  assert.ok(problems.some((p) => /no tiene el application id com\.hdgexecutivesuites\.clientportal/.test(p)), problems.join("; "));
+  assert.ok(problems.some((p) => /usa el proyecto de Firebase de the_worx/.test(p)), problems.join("; "));
+  const ownPackageButWorxProject = {
+    ...worx,
+    client: [{ client_info: { mobilesdk_app_id: "1:2:android:3", android_client_info: { package_name: "com.hdgexecutivesuites.clientportal" } }, api_key: [{ current_key: "x" }] }],
+  };
+  const sameProject = googleServicesProblems("hdg", { read: (id) => (id === "hdg" ? ownPackageButWorxProject : worx) });
+  assert.deepEqual(sameProject, ["usa el proyecto de Firebase de the_worx (the-worx-client)"]);
+});
+
+test("añadir google-services.json no cambia lo nativo que usa el JS (no exige subir la runtime)", () => {
+  // El registro de lo nativo son modulos y plugins: el fichero de Firebase no esta.
+  const { currentNativeRuntime } = require("../scripts/native-runtime.js");
+  const record = currentNativeRuntime();
+  assert.deepEqual(Object.keys(record).sort(), ["modules", "plugins", "runtimeVersion"]);
+  assert.ok(record.plugins.includes("expo-notifications"), "expo-notifications ya esta en el binario");
+});

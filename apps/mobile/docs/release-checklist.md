@@ -1,21 +1,24 @@
 # Checklist final: builds de prueba iOS y Android (The Worx y HDG)
 
-Estado a 2026-11-15, rama `feat/mobile-fase-7`. Revisado en solo lectura: no se ha
-ejecutado `eas build`, `eas submit` ni `eas update`.
+Estado a 2026-11-15, rama `chore/mobile-cierre-tecnico` (sobre `feat/mobile-fase-7`).
+Revisado en solo lectura: no se ha ejecutado `eas build`, `eas submit` ni `eas update`.
 
 ## 0. Antes de la primera build (decisiones)
 
-- [ ] **Dependencias del SDK 57.** `npx expo install --check` pide 12 parches
-      (`expo` 57.0.27 → ~57.0.33, `expo-router` → ~57.0.31, `expo-notifications` →
-      ~57.0.25, `expo-updates` → ~57.0.28, …). Instalarlos cambia lo nativo: subir
-      `RUNTIME_VERSION` (`native-3`) y regenerar `native-runtime.json`
-      (`npm run native-runtime`). Consecuencia: las builds de tienda de The Worx que ya
-      existen (`native-2`) no recibiran OTAs del codigo nuevo; necesitan binario nuevo.
+- [x] **Dependencias del SDK 57**: los 12 parches instalados (sin cambiar de SDK);
+      `expo-doctor` 21/21. Seis traen codigo nativo nuevo, asi que la runtime es
+      **`native-3`** (`native-runtime.json` regenerado). Las builds de tienda de The
+      Worx que ya existen (`native-2`) **no recibiran OTAs** de este codigo: necesitan
+      binario nuevo. Si hiciera falta un parche urgente para ellas, tendria que salir de
+      una rama con `native-2`.
+- [x] **pdf.js** empaquetado en la app (sin CDN); el WebView del visor no tiene red.
 - [ ] **Firebase de HDG** (si la build de Android de HDG debe tener push): añadir
-      `google-services.json` tambien sube `RUNTIME_VERSION`. Hacerlo a la vez que lo
-      anterior evita dos subidas.
-- [ ] Rama de la build: fusionar `feat/mobile-fase-7` donde corresponda (no a `main`
-      sin revision).
+      `google-services.json` **no** cambia la runtime (no cambia ningun modulo nativo
+      que use el JS; la app lo detecta con `extra.push.androidFcmConfigured`), pero si
+      pide un **binario nuevo** de Android. Comprobar con
+      `node scripts/check-google-services.js`.
+- [ ] Rama de la build: fusionar `chore/mobile-cierre-tecnico` donde corresponda (no a
+      `main` sin revision).
 - [ ] Lanzar todo desde `apps/mobile` y, en Windows, desde `D:\` (mayuscula): con
       `d:\` Metro no resuelve `@paqueteria/core`.
 
@@ -29,7 +32,7 @@ ejecutado `eas build`, `eas submit` ni `eas update`.
 | Perfiles | development, preview (APK), simulator, production, production-apk | development, preview (APK), simulator, **testflight-sandbox**, production (**bloqueado**) |
 | Canales OTA | development, preview, production → production | development, preview, testflight-sandbox → sandbox; production → bloqueado |
 | Version / build | `1.0.0`; numeros de build remotos en EAS (`appVersionSource: remote`), `autoIncrement` en tienda | igual |
-| Runtime | `native-2` | `native-2` |
+| Runtime | `native-3` | `native-3` |
 | Submit | iOS `ascAppId 6822867406`; Android `internal`/`draft` | **sin destino** (falta `ascAppId`) |
 | Identificacion de pruebas | — | franja "Sandbox" desde el arranque; canal propio |
 

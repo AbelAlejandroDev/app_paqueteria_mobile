@@ -68,12 +68,12 @@ baja SIN sesion y sin poder tocar dispositivos ajenos.
 - La app guardaria el secreto en SecureStore junto a los tokens y lo usaria en el
   reintento al arrancar.
 
-### 3. Riesgo en la app (pendiente, no del backend)
+### 3. Riesgo en la app: resuelto en `chore/mobile-cierre-tecnico`
 
-El visor de PDF (`components/common/pdf-viewer.jsx`) carga **pdf.js desde
-`cdn.jsdelivr.net`** dentro de un WebView que recibe el PDF del escaneo. Si ese CDN
-sirviera codigo malicioso, tendria acceso al documento. Propuesta: empaquetar pdf.js con
-la app (asset local) y bloquear la red del WebView salvo ese origen.
+El visor de PDF cargaba **pdf.js desde `cdn.jsdelivr.net`** dentro del WebView que
+recibe el escaneo. Ahora va empaquetado (`src/vendor/pdfjs`, generado y verificado por
+SHA-256 con `scripts/vendor-pdfjs.js`) y el WebView no tiene red (CSP sin conexiones,
+origen `https://pdf-viewer.invalid`, navegaciones bloqueadas): `src/lib/pdf-html.js`.
 
 ---
 
