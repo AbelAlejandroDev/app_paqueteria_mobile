@@ -49,3 +49,65 @@ export function pushSupport({ isExpoGo, hasModule, isDevice, projectId, platform
   }
   return { available: true, reason: null };
 }
+
+// ── Logout sin conexion ─────────────────────────────────────────────────────
+
+/** Marca (AsyncStorage, sin datos de la cuenta): falta invalidar el token en el dispositivo. */
+export const PUSH_LOCAL_UNREGISTER_PENDING_KEY = "push-local-unregister-pending";
+
+/**
+ * La baja del push al cerrar sesion, en orden:
+ *   1. POST /client/push-devices/unregister con la sesion que sale (lo normal).
+ *   2. Si falla (sin red, 5xx): invalidar el token EN ESTE DISPOSITIVO
+ *      (expo-notifications unregisterForNotificationsAsync). Los avisos de esa
+ *      cuenta dejan de llegar aqui y el backend borra el token al recibir
+ *      DeviceNotRegistered de Expo. Solo afecta a este telefono: no hay forma
+ *      de dar de baja el dispositivo de otro.
+ *   3. Si tampoco se puede (Android necesita red para borrar el token de FCM):
+ *      se deja marcado y se reintenta al arrancar sin sesion; el siguiente login
+ *      reasigna el token a la nueva cuenta igualmente (upsert del backend).
+ *
+ * Nunca lanza: cerrar sesion no puede fallar por esto.
+ */
+export async function logoutPushCleanup({ unregisterOnServer, unregisterLocally, markPending, clearPending }) {
+  try {
+    await unregisterOnServer();
+    return { server: true, local: "skipped", pending: false };
+  } catch {
+    // Sigue abajo.
+  }
+  try {
+    await unregisterLocally();
+  } catch {
+    try {
+      await markPending?.();
+    } catch {
+      // Ni marcarlo: el siguiente login reasigna el token.
+    }
+    return { server: false, local: false, pending: true };
+  }
+  try {
+    await clearPending?.();
+  } catch {
+    // La marca vieja solo provoca otra baja local, inofensiva.
+  }
+  return { server: false, local: true, pending: false };
+}
+
+/** Al arrancar sin sesion: si quedo pendiente, otra vez la baja local. */
+export async function retryPendingPushCleanup({ isPending, unregisterLocally, clearPending }) {
+  let pending = false;
+  try {
+    pending = Boolean(await isPending());
+  } catch {
+    return "unknown";
+  }
+  if (!pending) return "none";
+  try {
+    await unregisterLocally();
+    await clearPending();
+    return "done";
+  } catch {
+    return "still-pending";
+  }
+}

@@ -127,5 +127,8 @@ test("AsyncStorage: lo guardado es por cuenta o se borra al salir", () => {
     const source = read("src/lib/" + file);
     if (/setJsonValue\(/.test(source)) keys.push(file);
   }
-  assert.deepEqual(keys.sort(), ["onboarding-state.js", "security-preferences.js", "terms-state.js"]);
+  // push-notifications: solo la marca "falta invalidar el token en este
+  // dispositivo" tras un logout sin red (una fecha, ningun dato de la cuenta).
+  assert.deepEqual(keys.sort(), ["onboarding-state.js", "push-notifications.js", "security-preferences.js", "terms-state.js"]);
+  assert.match(read("src/lib/push-notifications.js"), /setJsonValue\(PUSH_LOCAL_UNREGISTER_PENDING_KEY, \{ at: new Date\(\)\.toISOString\(\) \}\)/);
 });

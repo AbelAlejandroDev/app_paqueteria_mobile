@@ -75,6 +75,9 @@ const BRANDS = {
     },
     defaultEnvironment: "production",
     productionRelease: { authorized: true },
+    // Canales de EAS Update y el entorno de API que puede llevar cada uno
+    // (brands/update-channels.js). Todos los de The Worx van a produccion.
+    updateChannels: { development: "production", preview: "production", production: "production" },
     // Universal Links / App Links para los enlaces de activacion de los
     // portales de miembros (backend src/config/centers.js, memberHost). Apagado
     // hasta que cada portal publique /.well-known/apple-app-site-association y
@@ -134,6 +137,9 @@ const BRANDS = {
       production: null,
     },
     defaultEnvironment: "sandbox",
+    // Canales de EAS Update -> entorno. "production" es de HDG produccion, que
+    // sigue bloqueado: ningun build ni update de Sandbox puede ir alli.
+    updateChannels: { development: "sandbox", preview: "sandbox", "testflight-sandbox": "sandbox", production: "production" },
     // El portal de miembros de HDG Sandbox (PORTAL_MEMBER_HOST__HDG__HOLLYWOOD).
     // El de produccion aun no existe. Apagado por lo mismo que The Worx.
     appLinks: {

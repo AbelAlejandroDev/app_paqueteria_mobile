@@ -54,7 +54,10 @@ Comprobado en solo lectura con `curl -D - https://<host>/.well-known/apple-app-s
    APPLE_TEAM_ID=<team> ANDROID_SHA256=<sha256>[,<sha256-play>] \
      node scripts/deep-link-files.js hdg ./well-known-hdg
    ```
-3. **Publicarlos en cada portal** (equipo del portal web; la app no los publica):
+3. **Publicarlos en cada portal.** Los portales los sirve el **backend** (Express, con
+   `express.static`, que ignora las rutas con punto, y el `index.html` de la SPA como
+   respaldo): hace falta una ruta propia en el backend. Contrato exacto en
+   `docs/backend-contract-gaps.md` (fase 7, #1). Requisitos:
    `https://<host>/.well-known/apple-app-site-association` y
    `https://<host>/.well-known/assetlinks.json`, con `Content-Type: application/json`,
    HTTP 200, **sin redirecciones** y sin que la SPA los sustituya por su `index.html`.

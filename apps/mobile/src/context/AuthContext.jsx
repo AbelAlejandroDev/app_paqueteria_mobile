@@ -18,8 +18,9 @@ import {
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
-import { dismissAllNotifications, registerForPush, unregisterFromPush } from "@/lib/push-notifications";
+import { dismissAllNotifications, registerForPush, retryPendingPushUnregister, unregisterFromPush } from "@/lib/push-notifications";
 import { setPushSessionActive } from "@/lib/push-presentation";
+import { clearPrivateFilesOnDevice } from "@/lib/private-files-native";
 import { clearBiometricLock } from "@/lib/security-preferences";
 import { clearPendingNavigation } from "@/lib/pending-navigation";
 import { createScopeTracker, resetQueryCache } from "@/lib/session-scope";
@@ -46,6 +47,8 @@ export function AuthProvider({ children }) {
       resetQueryCache(queryClient);
       // Un push tocado con la cuenta anterior no se abre en la siguiente.
       clearPendingNavigation();
+      // PDFs de escaneos y fotos en disco: de la cuenta anterior (lib/private-files).
+      clearPrivateFilesOnDevice();
       if (nextScope === null) {
         // Tambien si la sesion la cerro el servidor (revocada), no solo el boton.
         clearBiometricLock().catch(() => {});
@@ -78,6 +81,8 @@ export function AuthProvider({ children }) {
   const reload = useCallback(async () => {
     const { accessToken } = await getTokens();
     if (!accessToken) {
+      // Sin sesion: si un logout sin red dejo el token vivo, se invalida ahora.
+      retryPendingPushUnregister().catch(() => {});
       setSessionUnavailable(false);
       applyUser(null);
       setLoading(false);

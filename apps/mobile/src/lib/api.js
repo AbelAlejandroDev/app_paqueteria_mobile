@@ -1,10 +1,13 @@
 import Constants from "expo-constants";
 import { router } from "expo-router";
+import * as Updates from "expo-updates";
 import { createApiClient, createApiProbe, DEFAULT_TIMEOUT_MS } from "@paqueteria/core";
 
 import { brand } from "@/lib/brand";
 import { attachAppInterceptors } from "@/lib/api-interceptors";
 import { assertApiUrlForBrand } from "../../brands/api-environment";
+import { BRANDS } from "../../brands";
+import { assertChannelMatchesEnvironment } from "../../brands/update-channels";
 
 /**
  * La API sale de `extra.api`, que app.config.js ya valido para esta marca y
@@ -19,6 +22,10 @@ if (!apiConfig?.url) {
 }
 
 const API_BASE_URL = assertApiUrlForBrand(apiConfig.url, brand.id);
+
+// Un OTA de otro entorno (p. ej. un bundle de Sandbox en el canal production) no
+// llega a hablar con ninguna API: el canal del binario manda (brands/update-channels).
+assertChannelMatchesEnvironment({ brand: BRANDS[brand.id], channel: Updates.channel, environment: apiConfig.environment });
 
 /** "sandbox" | "production": de que entorno es esta build. */
 export const apiEnvironment = apiConfig.environment;

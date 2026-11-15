@@ -4,7 +4,15 @@ import * as Device from "expo-device";
 
 import { api } from "@/lib/api";
 import { MAIL_RECEIVED_TYPE, staleMailNotificationIds } from "@/lib/mail-notifications";
-import { foregroundPresentation, isPushSessionActive, pushSupport } from "@/lib/push-presentation";
+import { getJsonValue, setJsonValue } from "@paqueteria/core";
+import {
+  foregroundPresentation,
+  isPushSessionActive,
+  logoutPushCleanup,
+  PUSH_LOCAL_UNREGISTER_PENDING_KEY,
+  pushSupport,
+  retryPendingPushCleanup,
+} from "@/lib/push-presentation";
 
 /**
  * En Expo Go sobre Android, expo-notifications lanza nada mas importarse:
@@ -108,6 +116,8 @@ export async function registerForPush() {
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() });
     await api.post("/client/push-devices", { token, platform: Platform.OS });
+    // El token ya es de esta cuenta: una baja local pendiente no hace falta.
+    setJsonValue(PUSH_LOCAL_UNREGISTER_PENDING_KEY, null).catch(() => {});
 
     return { token, reason: null };
   } catch (error) {
@@ -123,17 +133,34 @@ export async function registerForPush() {
  */
 export async function unregisterFromPush() {
   const support = await getPushSupport();
-  if (!support.available) return;
+  if (!support.available) return { server: false, local: "skipped", pending: false };
 
   const Notifications = loadNotifications();
 
-  try {
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() });
-    await api.post("/client/push-devices/unregister", { token });
-  } catch (error) {
-    // Cerrar sesion no puede fallar porque el servidor no responda.
-    console.warn("Unable to unregister push device", error?.message || error);
-  }
+  // Primero el servidor; si no responde, el token se invalida en el dispositivo
+  // (lib/push-presentation, logoutPushCleanup). Cerrar sesion nunca falla por esto.
+  const result = await logoutPushCleanup({
+    unregisterOnServer: async () => {
+      const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() });
+      await api.post("/client/push-devices/unregister", { token });
+    },
+    unregisterLocally: () => Notifications.unregisterForNotificationsAsync(),
+    markPending: () => setJsonValue(PUSH_LOCAL_UNREGISTER_PENDING_KEY, { at: new Date().toISOString() }),
+    clearPending: () => setJsonValue(PUSH_LOCAL_UNREGISTER_PENDING_KEY, null),
+  });
+  if (!result.server) console.warn("[push] baja sin servidor:", result.local === true ? "token invalidado en el dispositivo" : "pendiente");
+  return result;
+}
+
+/** Al arrancar sin sesion: termina una baja local que quedo pendiente. */
+export async function retryPendingPushUnregister() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return "none";
+  return retryPendingPushCleanup({
+    isPending: async () => Boolean(await getJsonValue(PUSH_LOCAL_UNREGISTER_PENDING_KEY)),
+    unregisterLocally: () => Notifications.unregisterForNotificationsAsync(),
+    clearPending: () => setJsonValue(PUSH_LOCAL_UNREGISTER_PENDING_KEY, null),
+  });
 }
 
 function dataFromResponse(response) {

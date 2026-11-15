@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Download, FileText, X } from "lucide-react-native";
 
 import { brand } from "@/lib/brand";
+import { PDF_CACHE_DIRECTORY } from "@/lib/private-files";
 
 /**
  * PDFs del item (los escaneos) vistos dentro de la app.
@@ -40,7 +41,7 @@ function usePdfFile(media) {
     gcTime: 30 * 60_000,
     retry: 1,
     queryFn: async () => {
-      const directory = new Directory(Paths.cache, "item-pdfs");
+      const directory = new Directory(Paths.cache, PDF_CACHE_DIRECTORY);
       directory.create({ intermediates: true, idempotent: true });
 
       const file = new File(directory, id + ".pdf");

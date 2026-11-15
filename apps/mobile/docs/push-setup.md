@@ -15,6 +15,11 @@ fuera del repositorio: son los pasos manuales que faltan.
 - Al cerrar sesion: `push-devices/unregister` (mientras el token vale), se vacia la
   bandeja del sistema y el contador. Sin sesion, un aviso que llegue con la app
   delante no se enseña (`src/lib/push-presentation.js`).
+- **Logout sin red** (fase 7): si `unregister` falla, el token se invalida en el propio
+  dispositivo (`unregisterForNotificationsAsync`); si tampoco se puede, se reintenta al
+  arrancar sin sesion. El siguiente login obtiene un token nuevo. Solo afecta a este
+  telefono. Hay que **probarlo en dispositivo** (modo avion → logout → enviar un aviso a
+  esa cuenta → no debe llegar).
 
 ## The Worx
 

@@ -10,6 +10,73 @@
 | 4. `returnUrl` a la app desde Zoho | Respondida: no hace falta; la vuelta se detecta con `AppState` + `payment-status` cada ≥ 15 s | Implementado (`zoho-forward-payment.js`) |
 | Motivo del fallo de pago / marca de tarjeta | Siguen abiertos (opcionales) | — |
 
+## Fase 7 (2026-11-15, rama `feat/mobile-fase-7`): dependencias del VPS / backend
+
+### 1. Servir `/.well-known/` en los portales (Universal Links / App Links)
+
+**Por que no basta con el frontend.** Los portales los sirve el backend
+(`src/app.js`): `express.static(FRONTEND_DIST_PATH)` para los hosts de portal y, si no
+encuentra el fichero, el `index.html` de la SPA. `express.static` **ignora por defecto las
+rutas con punto** (`dotfiles: "ignore"`), asi que `/.well-known/...` cae en el
+`index.html` aunque el frontend incluyera los ficheros en su `dist` (comprobado: hoy
+responden `200 text/html`). Y `apple-app-site-association` no tiene extension, asi que
+saldria como `application/octet-stream`.
+
+**Contrato propuesto** (en `src/app.js`, antes del estatico y del fallback de la SPA):
+
+```
+GET|HEAD /.well-known/apple-app-site-association
+GET|HEAD /.well-known/assetlinks.json
+```
+
+- Solo en hosts de **portal de miembros** (`isFrontendPortalHost` + portal MEMBER); en
+  cualquier otro host, `404`.
+- El contenido depende del **tenant del host** (`resolveHostname(host).tenantSlug`):
+  `memberssandlake/hallandale/hunterscreek.theworxoffices.com` → The Worx;
+  `members.hdgexecutivesuites.com` → HDG.
+- `Content-Type: application/json`, `200`, sin redireccion, `Cache-Control: public,
+  max-age=3600`.
+- Datos por tenant desde la configuracion del despliegue (no secretos):
+  `APPLE_TEAM_ID__<TENANT>`, `IOS_BUNDLE_ID__<TENANT>`, `ANDROID_PACKAGE__<TENANT>`,
+  `ANDROID_SHA256__<TENANT>` (lista separada por comas). Sin ellos, `404` (nunca un
+  fichero a medias).
+- Cuerpos: exactamente los que genera `apps/mobile/scripts/deep-link-files.js` (rama
+  movil): AASA con `appIDs: ["<TEAM>.<bundle>"]` y `components: [{ "/": "/set-password" }]`;
+  `assetlinks.json` con `delegate_permission/common.handle_all_urls`, `package_name` y
+  `sha256_cert_fingerprints`.
+
+Hasta entonces la app los tiene apagados y los enlaces abren el portal web.
+
+### 2. Baja del push sin sesion (opcional: la app ya lo cubre)
+
+**Lo que hace la app desde esta fase:** al cerrar sesion, si
+`POST /client/push-devices/unregister` falla (sin red), invalida el token **en el propio
+dispositivo** (`expo-notifications unregisterForNotificationsAsync`): no llegan mas avisos
+y el backend borra el token cuando Expo responde `DeviceNotRegistered`. Si ni eso se puede
+(Android sin red), queda marcado y se reintenta al arrancar sin sesion. Solo afecta a este
+telefono.
+
+**Defensa adicional propuesta** (no imprescindible): un secreto por dispositivo para dar de
+baja SIN sesion y sin poder tocar dispositivos ajenos.
+
+- `POST /client/push-devices` (con sesion) devuelve ademas `revocationSecret` (32 bytes
+  aleatorios, base64url); el backend guarda solo `sha256(secret)` en la fila del token.
+  Cada registro (o reasignacion a otro usuario) genera uno nuevo e invalida el anterior.
+- `POST /public/push-devices/revoke` (sin sesion) `{ token, revocationSecret }` →
+  `204` si coincide el hash (borra la fila), `204` tambien si no existe (no revela nada),
+  `400` si el cuerpo es invalido; con limite de intentos por IP. Nunca acepta `userId`.
+- La app guardaria el secreto en SecureStore junto a los tokens y lo usaria en el
+  reintento al arrancar.
+
+### 3. Riesgo en la app (pendiente, no del backend)
+
+El visor de PDF (`components/common/pdf-viewer.jsx`) carga **pdf.js desde
+`cdn.jsdelivr.net`** dentro de un WebView que recibe el PDF del escaneo. Si ese CDN
+sirviera codigo malicioso, tendria acceso al documento. Propuesta: empaquetar pdf.js con
+la app (asset local) y bloquear la red del WebView salvo ese origen.
+
+---
+
 ## Fase 5 (2026-11-15, rama `feat/mobile-fase-5`): pendientes del backend
 
 Revisado contra `348c327` (`approveScan.js`, `checkoutSession.js`,
