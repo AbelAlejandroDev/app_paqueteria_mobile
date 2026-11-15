@@ -142,7 +142,7 @@ test("version comercial, numeros de build remotos y autoIncrement solo en builds
     assert.equal(expo.version, "1.0.0");
     assert.equal(expo.ios.buildNumber, undefined);
     assert.equal(expo.android.versionCode, undefined);
-    assert.equal(expo.runtimeVersion, "native-2", "misma runtime en las dos marcas (mismo codigo nativo)");
+    assert.equal(expo.runtimeVersion, "native-3", "misma runtime en las dos marcas (mismo codigo nativo)");
   }
   for (const name of ["worx-production", "hdg-testflight-sandbox", "hdg-production"]) {
     assert.equal(resolved(name).autoIncrement, true, name);
@@ -152,7 +152,7 @@ test("version comercial, numeros de build remotos y autoIncrement solo en builds
     assert.equal(resolved(name).autoIncrement, undefined, name);
     assert.equal(resolved(name).distribution, "internal", name);
   }
-  assert.equal(JSON.parse(read("native-runtime.json")).runtimeVersion, "native-2");
+  assert.equal(JSON.parse(read("native-runtime.json")).runtimeVersion, "native-3");
 });
 
 // ── Envio a tiendas ─────────────────────────────────────────────────────────

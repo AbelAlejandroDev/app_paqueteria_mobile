@@ -10,7 +10,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { currentNativeRuntime, nativeChanges, readRecord } = require("../scripts/native-runtime.js");
 
 /** Runtimes de builds ya instalados, con lo nativo distinto: no se reutilizan. */
-const RETIRED_RUNTIMES = ["1.0.0"];
+// native-2: builds de tienda de The Worx hasta 2026-11; su nativo es otro (SDK 57.0.27).
+const RETIRED_RUNTIMES = ["1.0.0", "native-2"];
 
 const appConfig = (brandId) => {
   const previous = process.env.APP_BRAND;

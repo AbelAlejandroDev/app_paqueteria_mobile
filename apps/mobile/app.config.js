@@ -83,7 +83,11 @@ const appLinks = appLinksConfig(brand.appLinks);
  * habia antes), con modulos nativos distintos entre si: ningun OTA de esta
  * runtime les llega.
  */
-const RUNTIME_VERSION = "native-2";
+// native-3 (2026-11-15): parches del SDK 57 con codigo nativo nuevo en
+// expo-sharing, expo-notifications, expo-updates, expo-router, @expo/ui y
+// expo-glass-effect (docs/release-checklist.md). Los builds native-2 (las de
+// tienda de The Worx hasta ahora) no reciben OTAs de este codigo.
+const RUNTIME_VERSION = "native-3";
 
 if (!fs.existsSync(path.join(__dirname, appIcon))) {
   throw new Error(

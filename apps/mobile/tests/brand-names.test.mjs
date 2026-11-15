@@ -71,7 +71,7 @@ for (const [brandId, want] of Object.entries(EXPECTED)) {
     assert.equal(expo.extra.brand.tenantSlug, want.tenantSlug);
     assert.equal(expo.android.googleServicesFile, want.googleServices);
     assert.equal(expo.version, "1.0.0");
-    assert.equal(expo.runtimeVersion, "native-2");
+    assert.equal(expo.runtimeVersion, "native-3");
   });
 }
 
