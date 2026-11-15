@@ -167,5 +167,6 @@ test("app: se puede pagar cualquier envio con tarifa, no solo paquetes (cartas d
   assert.doesNotMatch(screen, /item\?\.type !== "PACKAGE"\) return false/);
   assert.match(screen, /&& amount > 0/, "sigue haciendo falta un importe real");
   assert.match(screen, /<StripeForwardPayment /, "el mismo pago de siempre (Stripe Checkout)");
-  assert.match(fs.readFileSync(path.join(root, "src/components/common/stripe-forward-payment.jsx"), "utf8"), /checkout-session/);
+  assert.match(fs.readFileSync(path.join(root, "src/components/common/stripe-forward-payment.jsx"), "utf8"), /startStripeCheckout\(api, \{/);
+  assert.match(fs.readFileSync(path.join(root, "src/lib/stripe-checkout-flow.js"), "utf8"), /api\.post\(checkoutSessionPath\(serviceRequestId\)/);
 });

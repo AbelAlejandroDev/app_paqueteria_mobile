@@ -46,7 +46,11 @@ const EXPECTED = {
     slug: "hdg-client",
     projectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
     tenantSlug: "hdg",
-    googleServices: undefined, // HDG aun no tiene google-services.json
+    // Solo si ya esta su google-services.json (proyecto Firebase propio de HDG,
+    // validado por scripts/check-google-services.js); si no, ninguno.
+    googleServices: fs.existsSync(path.join(root, "assets/brands/hdg/google-services.json"))
+      ? "./assets/brands/hdg/google-services.json"
+      : undefined,
   },
 };
 

@@ -21,7 +21,7 @@
  */
 
 import { billingHold, PROVIDER_STRIPE, PROVIDER_ZOHO, serviceAllowed } from "./capabilities.js";
-import { isSecurePageUrl } from "./zoho-billing.js";
+import { isSecurePageUrl, isValidZohoInvoiceId } from "./zoho-billing.js";
 import { centsOrNull } from "./forward-payment.js";
 
 export const SCAN_AWAITING_APPROVAL = "AWAITING_CLIENT_APPROVAL";
@@ -98,29 +98,61 @@ export function approveScanError(error, provider) {
   }
 
   const { status, data } = error.response;
+  const code = data?.code;
+  // El proveedor que dice el backend en el 402 manda sobre el de las capacidades.
+  const payProvider = data?.provider === PROVIDER_ZOHO || data?.provider === PROVIDER_STRIPE ? data.provider : provider;
 
-  if (status === 402 && data?.code === "BILLING_REQUIRED") {
+  if (status === 402 && code === "BILLING_REQUIRED") {
     return { kind: "billing-required", message: data.error || "Your account has a billing issue.", route: "/billing", refresh: true };
   }
 
-  if (status === 402 && data?.pending === true) {
+  // 402 SCAN_PAYMENT_PENDING (backend nuevo) o { pending: true } (anterior).
+  if (status === 402 && (code === "SCAN_PAYMENT_PENDING" || data?.pending === true)) {
+    const paymentState = typeof data?.paymentState === "string" ? data.paymentState : null;
     const base = {
       kind: "payment-pending",
       refresh: true,
+      paymentState,
       message: "The scan was approved, but the payment didn't go through. Your mail is safe; the scan is delivered once it's paid.",
     };
-    if (provider === PROVIDER_ZOHO) {
+    // Zoho no confirmo nada: no se ofrece pagar (podria cobrarse dos veces). Se comprueba mas tarde.
+    if (paymentState === "UNCERTAIN") {
+      return { ...base, action: "check", message: "We couldn't confirm the scan payment yet. Nothing new was charged; we'll check it again." };
+    }
+    if (paymentState === "NEEDS_REVIEW") {
+      return { ...base, action: "contact", message: "Your center is reviewing the scan payment. Please don't pay again; contact your center." };
+    }
+    if (payProvider === PROVIDER_ZOHO) {
+      // Con la factura concreta de Zoho (si el backend la da y se puede pagar), a esa factura.
+      const invoice = data?.zohoInvoice;
+      if (invoice?.payable === true && isValidZohoInvoiceId(invoice.invoiceId)) {
+        return { ...base, action: "zoho-invoice", invoiceId: String(invoice.invoiceId), invoiceNumber: invoice.number || null, actionLabel: "Pay invoice" };
+      }
       return { ...base, action: "billing", route: "/billing", actionLabel: "Go to Billing" };
     }
-    if (provider === PROVIDER_STRIPE && isSecurePageUrl(data.invoiceUrl)) {
+    if (payProvider === PROVIDER_STRIPE && isSecurePageUrl(data.invoiceUrl)) {
       return { ...base, action: "invoice", url: data.invoiceUrl.trim(), actionLabel: "Pay invoice" };
     }
     return { ...base, action: "contact", message: base.message + " Contact your center to complete the payment." };
   }
 
   if (status === 409) {
-    if (data?.code === "SCAN_QUOTE_OUTDATED") {
-      return { kind: "quote-outdated", refresh: true, message: "The scan quote is out of date. Your center has to quote it again." };
+    // Codigos estables del backend nuevo; el texto de `reason` solo como respaldo (backend anterior).
+    switch (code) {
+      case "SCAN_QUOTE_OUTDATED":
+        return { kind: "quote-outdated", refresh: true, message: "The scan quote is out of date. Your center has to quote it again." };
+      case "SCAN_QUOTE_INCOMPLETE":
+        return { kind: "quote-incomplete", refresh: true, message: "Your center hasn't finished quoting this scan yet." };
+      case "ONLINE_PAYMENTS_UNAVAILABLE":
+        return { kind: "unavailable", refresh: true, message: "Paid scans can't be approved online for your account. Please contact your center." };
+      case "SERVICE_REQUEST_NOT_AWAITING_APPROVAL":
+        return { kind: "state-changed", refresh: true, serviceRequestStatus: data?.serviceRequestStatus || null, message: "This scan request was already handled. We'll refresh it." };
+      case "SCAN_NOT_AVAILABLE_FOR_PACKAGE":
+        return { kind: "not-scannable", refresh: true, message: "Packages can't be scanned." };
+      case "CLIENT_PROFILE_NOT_FOUND":
+        return { kind: "account-incomplete", refresh: true, message: "Your account isn't fully set up. Please contact your center." };
+      default:
+        break;
     }
     if (/online payments are not available/i.test(String(data?.reason || ""))) {
       return { kind: "unavailable", refresh: true, message: "Paid scans can't be approved online for your account. Please contact your center." };

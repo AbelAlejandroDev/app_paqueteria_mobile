@@ -10,6 +10,8 @@ import { createSingleFlight } from "@/lib/forward-payment";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { approveScanError, approveScanPath, interpretApproveScan, scanApprovalAvailability } from "@/lib/scan-approval";
 import { BILLING_PAYMENT_QUERY_KEY, useCapabilities } from "@/lib/use-capabilities";
+import { SCAN_PAYMENT_QUERY_KEY } from "@/lib/scan-payment";
+import { zohoBillingErrorMessage, zohoInvoicePayPath, zohoPageUrl } from "@/lib/zoho-billing";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/modal";
 
@@ -43,8 +45,24 @@ export default function ScanApprovalCard({ request, onRefresh }) {
     queryClient.invalidateQueries({ queryKey: ["client-billing-usage"] });
     queryClient.invalidateQueries({ queryKey: ["client-payment-alerts"] });
     queryClient.invalidateQueries({ queryKey: ["client-notifications"] });
+    queryClient.invalidateQueries({ queryKey: [SCAN_PAYMENT_QUERY_KEY] });
     await onRefresh?.();
   };
+
+  // 402 con la factura de Zoho: la pagina segura de ESA factura (nunca Stripe en HDG).
+  const payZohoInvoice = useMutation({
+    mutationFn: async (invoiceId) => {
+      const url = zohoPageUrl((await api.post(zohoInvoicePayPath(invoiceId))).data);
+      if (!url) throw new Error("INVALID_PAYMENT_URL");
+      await WebBrowser.openBrowserAsync(url);
+    },
+    onSettled: () => refreshAll(),
+    onError: (error) =>
+      Alert.alert(
+        "Could not open the invoice",
+        error?.message === "INVALID_PAYMENT_URL" ? "We could not open the secure payment page. Please try again." : zohoBillingErrorMessage(error)
+      ),
+  });
 
   const approve = useMutation({
     mutationFn: async () => (await api.post(approveScanPath(request.id))).data,
@@ -100,6 +118,21 @@ export default function ScanApprovalCard({ request, onRefresh }) {
       {outcome?.action === "invoice" ? (
         <Button variant="outline" onPress={() => WebBrowser.openBrowserAsync(outcome.url).then(refreshAll)}>
           {outcome.actionLabel}
+        </Button>
+      ) : null}
+      {outcome?.action === "zoho-invoice" ? (
+        <Button
+          variant="outline"
+          loading={payZohoInvoice.isPending}
+          disabled={payZohoInvoice.isPending}
+          onPress={() => lock.run(() => payZohoInvoice.mutateAsync(outcome.invoiceId).catch(() => {}))}
+        >
+          {outcome.actionLabel + (outcome.invoiceNumber ? " " + outcome.invoiceNumber : "")}
+        </Button>
+      ) : null}
+      {outcome?.action === "check" ? (
+        <Button variant="outline" onPress={() => refreshAll()}>
+          Check again
         </Button>
       ) : null}
       {outcome?.action === "billing" || outcome?.kind === "billing-required" ? (

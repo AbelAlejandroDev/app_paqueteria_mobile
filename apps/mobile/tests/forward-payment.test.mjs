@@ -225,10 +225,13 @@ const stripe = () => read("src/components/common/stripe-forward-payment.jsx");
 
 test("Stripe Checkout: el de siempre, con URL https y vuelta que solo lee el estado", () => {
   const card = stripe();
-  assert.match(card, /"\/client\/forwarding\/" \+ request\.id \+ "\/checkout-session"/);
+  assert.match(card, /startStripeCheckout\(api, \{/);
+  assert.match(read("src/lib/stripe-checkout-flow.js"), /api\.post\(checkoutSessionPath\(serviceRequestId\), body \|\| \{\}\)/);
   assert.match(card, /stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
-  assert.match(card, /if \(!isSecurePageUrl\(url\)\) throw/);
-  assert.match(card, /WebBrowser\.openAuthSessionAsync\(url, returnUrl\)/);
+  assert.match(read("src/lib/stripe-checkout-flow.js"), /session: interpretCheckoutSession\(response\)/);
+  assert.match(card, /const session = result\.session;/);
+  assert.match(card, /if \(!session\.url\) throw/, "solo una URL https");
+  assert.match(card, /WebBrowser\.openAuthSessionAsync\(session\.url, returnUrl\)/);
   assert.match(card, /usePaymentStatus\(\{/);
   // No reutiliza rutas de Zoho.
   assert.doesNotMatch(card, /prepare-payment|preparePaymentPath|useSavedCard|\/zoho\//);
@@ -244,13 +247,20 @@ test("Stripe: precio modificado solo con confirmacion explicita, y pagar sigue s
   assert.match(confirm, /Tap Pay now to continue/);
 });
 
-test("Stripe: con un pago en curso, pagar otra vez pide confirmacion; candado y sin reintentos", () => {
+test("Stripe: cada pago lee payment-status justo antes del POST y decide con el servidor; candado y sin reintentos", () => {
   const card = stripe();
-  assert.match(card, /const inFlight = isPaymentInFlight\(details\.paymentStatus\) \|\| reading\?\.state === "pending";/);
-  assert.match(card, /"A payment may already be in progress"/);
-  assert.match(card, /Paying again could charge you twice/);
-  assert.match(card, /\{ text: "Pay again", style: "destructive", onPress: go \}/);
-  assert.match(card, /const go = \(\) => lock\.run\(\(\) => pay\.mutateAsync\(\)/);
+  const start = card.slice(card.indexOf("const startPayment = () =>"), card.indexOf("const checkAgain = () =>"));
+  assert.match(start, /lock\.run\(async \(\) => \{/);
+  assert.match(start, /if \(isStillBusy\(busyUntil\)\)/, "respeta el Retry-After de un 409 BUSY");
+  assert.match(start, /await checkout\.mutateAsync\(\)/);
+  assert.match(card, /const result = await startStripeCheckout\(api, \{\s*serviceRequestId: request\.id,\s*localPaymentStatus: details\.paymentStatus,/);
+  // En el flujo: primero el estado, la decision, y solo entonces el POST.
+  const flow = read("src/lib/stripe-checkout-flow.js");
+  assert.ok(flow.indexOf("api.get(paymentStatusPath(serviceRequestId))") < flow.indexOf("api.post(checkoutSessionPath("), "primero el estado, despues el POST");
+  assert.match(flow, /if \(decision\.action === ACTION_NONE\) return \{ outcome: "blocked", status, decision \};/);
+  assert.match(flow, /catch \{[\s\S]*?return \{ outcome: "status-unavailable" \};/, "sin estado, no se paga");
+  // Ya no existe "pagar otra vez con confirmacion": con un pago sin confirmar, el servidor decide.
+  assert.doesNotMatch(card, /"Pay again"|Paying again could charge you twice/);
   assert.doesNotMatch(card, /\bretry\s*:/);
   assert.doesNotMatch(card, /useEffect\(/, "nada se paga solo");
 });

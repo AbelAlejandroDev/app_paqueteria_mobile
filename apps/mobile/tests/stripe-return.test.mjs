@@ -49,8 +49,9 @@ test("el cuerpo omite lo que Stripe no acepta y el backend rellena con su portal
 test("Checkout del reenvio y portal de facturacion pasan por stripeReturnBody", () => {
   // El Checkout del reenvio vive en su componente (fase 5); es el mismo de siempre.
   const item = read("src/components/common/stripe-forward-payment.jsx");
-  assert.match(item, /"\/checkout-session",\s*stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
-  assert.match(item, /WebBrowser\.openAuthSessionAsync\(url, returnUrl\)/);
+  assert.match(item, /body: stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
+  assert.match(read("src/lib/stripe-checkout-flow.js"), /api\.post\(checkoutSessionPath\(serviceRequestId\), body \|\| \{\}\)/);
+  assert.match(item, /WebBrowser\.openAuthSessionAsync\(session\.url, returnUrl\)/);
 
   const billing = read("src/app/(client)/billing.jsx");
   assert.match(billing, /"\/client\/billing\/payment-portal", stripeReturnBody\(\{ returnUrl \}\)\)/);
@@ -65,9 +66,9 @@ test("Checkout del reenvio y portal de facturacion pasan por stripeReturnBody", 
 
 test("volver del navegador no da nada por pagado: pregunta payment-status y recarga", () => {
   const card = read("src/components/common/stripe-forward-payment.jsx");
-  const pay = card.slice(card.indexOf("const pay = useMutation({"), card.indexOf("const confirmReprice = useMutation({"));
+  const pay = card.slice(card.indexOf("const checkout = useMutation({"), card.indexOf("const confirmReprice = useMutation({"));
   // De vuelta: se sondea payment-status (la unica fuente de verdad) y se recarga la pieza.
-  assert.match(pay, /onSuccess: \(\) => \{[\s\S]*?status\.start\(\);[\s\S]*?onRefresh\?\.\(\);/);
+  assert.match(pay, /onSuccess: \(\{ expired, blocked \}\) => \{[\s\S]*?status\.start\(\);[\s\S]*?onRefresh\?\.\(\);/);
   assert.doesNotMatch(card, /paymentStatus:\s*"PAID"/);
   // Pagado solo cuando lo lee de payment-status.
   assert.match(card, /reading\?\.state === "paid"/);

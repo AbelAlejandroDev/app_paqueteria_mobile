@@ -40,6 +40,8 @@ import ZohoForwardPaymentCard from "@/components/common/zoho-forward-payment-car
 import StripeForwardPayment from "@/components/common/stripe-forward-payment";
 import ScanApprovalCard from "@/components/common/scan-approval-card";
 import { findScanAwaitingApproval } from "@/lib/scan-approval";
+import { shouldTrackScanPayment } from "@/lib/scan-payment";
+import ScanPaymentCard from "@/components/common/scan-payment-card";
 import { describePickupGroup } from "@/lib/pickup-group";
 import { describePaidForwardProgress, findPaidForwardAwaitingLabel, shouldPollForLabel } from "@/lib/forward-progress";
 import { applyReadyPickup, PICKUP_DIALOG_DESCRIPTION, PICKUP_READY_CONFIRMATION, PICKUP_READY_TITLE } from "@/lib/pickup-ready";
@@ -1051,6 +1053,11 @@ export default function MailItemDetailScreen() {
    */
   // Escaneo cotizado por el centro que espera que el cliente lo apruebe.
   const scanApprovalRequest = useMemo(() => findScanAwaitingApproval(serviceRequests), [serviceRequests]);
+  // Escaneo con cobro sin confirmar (GET scan-payment decide si hay algo que decir).
+  const scanPaymentRequest = useMemo(
+    () => (Array.isArray(serviceRequests) ? serviceRequests.find(shouldTrackScanPayment) : null) || null,
+    [serviceRequests]
+  );
 
   const trackingApprovalRequest = useMemo(
     () =>
@@ -1293,6 +1300,8 @@ export default function MailItemDetailScreen() {
             <ScanApprovalCard request={scanApprovalRequest} onRefresh={() => query.refetch()} />
           </NoticeCard>
         ) : null}
+
+        {scanPaymentRequest ? <ScanPaymentCard request={scanPaymentRequest} onRefresh={() => query.refetch()} /> : null}
 
         {payableForwardRequest?.forwardDetails ? (
           <ForwardPaymentCard

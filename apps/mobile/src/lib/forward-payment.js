@@ -22,6 +22,7 @@
  */
 
 import { MIN_PAYMENT_STATUS_POLL_SECONDS } from "./capabilities.js";
+import { retryAfterSeconds } from "./stripe-payment-guard.js";
 
 const segment = (id) => encodeURIComponent(String(id));
 
@@ -90,6 +91,35 @@ export function forwardPaymentError(error) {
 
   const { status, data } = error.response;
   const code = data?.code;
+  // Desde fix/stripe-forwarding-double-charge: charged false = seguro que no se
+  // cobro; null = aun no se sabe (consultar payment-status).
+  const charged = data?.charged === false ? false : data?.charged === null ? null : undefined;
+  const withCharged = (outcome) => (charged === undefined ? outcome : { ...outcome, charged, checkStatus: outcome.checkStatus || charged === null });
+
+  // Stripe, contrato nuevo: un solo intento vivo por envio.
+  if (code === "FORWARDING_PAYMENT_BUSY") {
+    return withCharged({
+      kind: "busy",
+      retryable: true,
+      retryAfterSeconds: retryAfterSeconds(error) ?? 3,
+      message: "This payment is already being prepared. Try again in a few seconds.",
+    });
+  }
+  if (code === "FORWARDING_PAYMENT_PROCESSING") {
+    return withCharged({ kind: "processing", retryable: false, checkStatus: true, message: "An earlier payment is still being processed. Nothing new was charged; check the status." });
+  }
+  if (code === "FORWARDING_PAYMENT_UNCERTAIN") {
+    return withCharged({
+      kind: "unknown-outcome",
+      retryable: false,
+      checkStatus: true,
+      retryAfterSeconds: retryAfterSeconds(error),
+      message: "We couldn't confirm the payment with Stripe. Nothing new was charged; check the status before trying again.",
+    });
+  }
+  if (code === "FORWARDING_PAYMENT_NEEDS_REVIEW") {
+    return withCharged({ kind: "review", retryable: false, message: "Your center is reviewing an earlier payment for this shipment. Please don't pay again; contact your center." });
+  }
 
   if (code === "FORWARDING_PRICE_RECONFIRMATION_REQUIRED") {
     return {
@@ -142,12 +172,25 @@ export function forwardPaymentError(error) {
  *   failed         FAILED o AUTHENTICATION_REQUIRED (Stripe: el banco pide 3DS).
  *   cancelled      CANCELLED: el pago se anulo; no se paga.
  *   refunded       REFUNDED.
- *   review         (Zoho) chargeStatus REVIEW: en revision del centro.
+ *   review         (Zoho) chargeStatus REVIEW, o (Stripe) needsReview: en revision del centro.
  *   link-expired   (Zoho) paymentLinkExpired: hace falta una pagina nueva.
+ *   expired        (Stripe) la sesion de Checkout caduco sin pagar: se puede pagar de nuevo.
+ *   pending + uncertain (Stripe) el servidor no pudo preguntar a Stripe: seguir comprobando.
  */
 export function interpretPaymentStatus(status) {
   const paymentStatus = status?.paymentStatus || null;
+  const attempt = status?.attempt || null;
   if (paymentStatus === "PAID") return { state: "paid", terminal: true, message: "Payment received. We're preparing your label." };
+  // Stripe, contrato nuevo: revision del centro, sin respuesta de Stripe, sesion caducada.
+  if (status?.needsReview === true || attempt?.state === "NEEDS_REVIEW") {
+    return { state: "review", terminal: true, message: "Your center is reviewing this payment. Please don't pay again." };
+  }
+  if (status?.uncertain === true) {
+    return { state: "pending", terminal: false, uncertain: true, message: "We couldn't confirm the payment with Stripe yet. Nothing new was charged." };
+  }
+  if ((attempt?.state === "EXPIRED" || attempt?.state === "CANCELED") && status?.canStartNewPayment === true) {
+    return { state: "expired", terminal: true, message: "The payment page expired before paying. You can pay again." };
+  }
   if (status?.chargeStatus === "REVIEW") {
     return { state: "review", terminal: true, message: "Your payment is being reviewed by your center. Please don't pay again." };
   }

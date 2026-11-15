@@ -10,6 +10,40 @@
 | 4. `returnUrl` a la app desde Zoho | Respondida: no hace falta; la vuelta se detecta con `AppState` + `payment-status` cada ≥ 15 s | Implementado (`zoho-forward-payment.js`) |
 | Motivo del fallo de pago / marca de tarjeta | Siguen abiertos (opcionales) | — |
 
+## Contrato Stripe sin doble cobro (2026-11-15, rama movil `feat/mobile-stripe-contrato`)
+
+Backend: rama `fix/stripe-forwarding-double-charge` (`7b52ccd`), **sin desplegar** a 2026-11-15
+(comprobado sin sesion: `GET /client/service-requests/:id/scan-payment` responde `404 Not found`
+en The Worx y en HDG Sandbox, igual que una ruta inexistente; con el despliegue responderia `401`).
+Trae una migracion (`ForwardingPaymentAttempt`).
+
+Resuelve los pendientes de la fase 5:
+
+| # fase 5 | Con la rama nueva |
+|---|---|
+| 1. Doble cobro en `checkout-session` | Un intento vivo por envio (indice unico); antes de crear otro mira en Stripe el anterior; `409 FORWARDING_PAYMENT_BUSY/PROCESSING/NEEDS_REVIEW`, `503 FORWARDING_PAYMENT_UNCERTAIN` |
+| 2. Checkout abandonado | `payment-status` concilia con Stripe (cada 15 s como mucho) y cierra la sesion caducada: `attempt.state EXPIRED`, `canStartNewPayment: true` |
+| 3. 409 de `approve-scan` sin `code` | `code` estable siempre |
+| 4. Estado del cobro del escaneo | `GET /client/service-requests/:id/scan-payment` |
+| 5. Factura de Zoho en el 402 | `zohoInvoice { invoiceId, number, status, payable }` |
+
+Como se comporta la app (`src/lib/stripe-payment-guard.js`, `stripe-checkout-flow.js`, `scan-payment.js`):
+
+- **Con el backend nuevo:** paga solo con `canStartNewPayment: true`; continua una sesion `OPEN`
+  (el backend devuelve la misma, `200 reused`); con `uncertain`, `needsReview` o un intento
+  `PROCESSING` no ofrece pagar; respeta `Retry-After` de `BUSY`; enseña el cobro del escaneo y
+  lleva a la factura concreta de Zoho.
+- **Con el backend desplegado hoy:** un `PAYMENT_PENDING` sin confirmar **bloquea** el pago (solo
+  "Check payment status" o contactar con el centro): ese backend no puede garantizar que otro
+  Checkout no cobre dos veces. `scan-payment` no existe y no se enseña nada (el aviso
+  `SCAN_PAYMENT_FAILED` sigue llevando a la factura o a Facturacion). Los 409 de `approve-scan` sin
+  `code` se reconocen por el texto, como antes.
+- **En los dos:** cada pago lee `payment-status` justo antes del `POST` y no hay `POST` si no se
+  puede leer; candado contra la doble pulsacion; ningun reintento automatico; una conexion que
+  falla despues de enviar el `POST` se trata como resultado desconocido (se comprueba el estado).
+
+---
+
 ## Fase 7 (2026-11-15, rama `feat/mobile-fase-7`): dependencias del VPS / backend
 
 ### 1. Servir `/.well-known/` en los portales (Universal Links / App Links)

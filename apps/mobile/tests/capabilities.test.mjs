@@ -287,9 +287,10 @@ test("el pago del reenvio elige el flujo por las capacidades; el de Stripe sigue
   assert.match(card, /mode === FORWARD_PAYMENT_UNKNOWN/);
   // Stripe: el mismo Checkout de siempre, en su componente.
   const stripe = read("src/components/common/stripe-forward-payment.jsx");
-  assert.match(stripe, /"\/client\/forwarding\/" \+ request\.id \+ "\/checkout-session"/);
+  assert.match(stripe, /startStripeCheckout\(api, \{/);
+  assert.match(read("src/lib/stripe-checkout-flow.js"), /api\.post\(checkoutSessionPath\(serviceRequestId\), body \|\| \{\}\)/);
   assert.match(stripe, /stripeReturnBody\(\{ successUrl: returnUrl, cancelUrl: returnUrl \}\)/);
-  assert.match(stripe, /WebBrowser\.openAuthSessionAsync\(url, returnUrl\)/);
+  assert.match(stripe, /WebBrowser\.openAuthSessionAsync\(session\.url, returnUrl\)/);
 });
 
 test("las acciones de la pieza pasan por itemActions", () => {
