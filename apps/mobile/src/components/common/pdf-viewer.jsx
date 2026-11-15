@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Modal, Platform, Pressable, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Directory, File, Paths } from "expo-file-system";
@@ -8,17 +8,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Download, FileText, X } from "lucide-react-native";
 
 import { brand } from "@/lib/brand";
+import { buildPdfHtml, isAllowedPdfViewerNavigation, PDF_VIEWER_ORIGIN } from "@/lib/pdf-html";
+import { PDFJS_LIBRARY_BASE64, PDFJS_WORKER_BASE64 } from "@/vendor/pdfjs/pdfjs-4.10.38";
 import { PDF_CACHE_DIRECTORY } from "@/lib/private-files";
 
 /**
  * PDFs del item (los escaneos) vistos dentro de la app.
  *
  * Ni Android ni expo-image saben pintar un PDF, asi que se dibuja con pdf.js
- * dentro de un WebView. El archivo se baja primero con expo-file-system y se le
- * pasa al WebView ya leido: pedirlo desde el WebView dependeria de que el
- * almacenamiento del backend acepte peticiones de otro origen.
+ * dentro de un WebView. El archivo se baja primero con expo-file-system (URL
+ * firmada) y se le pasa al WebView ya leido: pedirlo desde el WebView dependeria
+ * de que el almacenamiento del backend acepte peticiones de otro origen.
+ *
+ * pdf.js va empaquetado con la app (src/vendor/pdfjs, scripts/vendor-pdfjs.js),
+ * no se carga de un CDN, y el WebView no tiene red (lib/pdf-html): un documento
+ * privado no sale del telefono.
  */
-const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build";
 
 /** Una URL firmada lleva parametros detras, asi que no basta con endsWith(".pdf"). */
 export function isPdfMedia(media) {
@@ -64,64 +69,29 @@ function usePdfFile(media) {
   });
 }
 
-function buildHtml(base64, { thumbnail, background }) {
-  // En miniatura solo la primera pagina, sin margen ni desplazamiento: es una
-  // vista previa, el toque lo recoge la tarjeta.
-  const padding = thumbnail ? 0 : 12;
-
-  return `<!DOCTYPE html>
-<html><head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=${thumbnail ? "no" : "yes"}">
-<style>
-  html, body { margin: 0; padding: 0; background: ${background}; ${thumbnail ? "overflow: hidden;" : ""} }
-  #pages { padding: ${padding}px; }
-  canvas { display: block; width: 100%; max-width: 100%; height: auto; margin-bottom: ${thumbnail ? 0 : 12}px; background: #fff; ${thumbnail ? "" : "border-radius: 4px;"} }
-</style>
-</head><body>
-<div id="pages"></div>
-<script>window.PDF_BASE64 = "${base64}";</script>
-<script type="module">
-  const send = (message) => window.ReactNativeWebView.postMessage(JSON.stringify(message));
-  try {
-    const pdfjs = await import("${PDFJS}/pdf.min.mjs");
-    pdfjs.GlobalWorkerOptions.workerSrc = "${PDFJS}/pdf.worker.min.mjs";
-
-    const raw = atob(window.PDF_BASE64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-
-    const doc = await pdfjs.getDocument({ data: bytes }).promise;
-    const container = document.getElementById("pages");
-    const width = container.clientWidth - ${padding * 2};
-    const ratio = window.devicePixelRatio || 1;
-    const count = ${thumbnail ? 1 : "doc.numPages"};
-
-    for (let number = 1; number <= count; number++) {
-      const page = await doc.getPage(number);
-      const viewport = page.getViewport({ scale: (width / page.getViewport({ scale: 1 }).width) * ratio });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      container.appendChild(canvas);
-      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-      if (number === 1) send({ type: "ready", pages: doc.numPages });
-    }
-  } catch (error) {
-    send({ type: "error", message: String((error && error.message) || error) });
-  }
-</script>
-</body></html>`;
-}
-
 function PdfPages({ base64, thumbnail = false, background, onReady, onError }) {
+  // ~1,8 MB de pdf.js + el PDF: se arma una vez por documento, no en cada render.
+  const html = useMemo(
+    () => buildPdfHtml({ base64, thumbnail, background, libraryBase64: PDFJS_LIBRARY_BASE64, workerBase64: PDFJS_WORKER_BASE64 }),
+    [base64, thumbnail, background]
+  );
+
   return (
     <WebView
-      originWhitelist={["*"]}
-      source={{ html: buildHtml(base64, { thumbnail, background }), baseUrl: "https://cdn.jsdelivr.net" }}
+      originWhitelist={[PDF_VIEWER_ORIGIN, "about:*", "blob:*", "data:*"]}
+      source={{ html, baseUrl: PDF_VIEWER_ORIGIN }}
+      onShouldStartLoadWithRequest={(request) => isAllowedPdfViewerNavigation(request.url)}
       style={{ flex: 1, backgroundColor: background }}
       scrollEnabled={!thumbnail}
       javaScriptEnabled
+      javaScriptCanOpenWindowsAutomatically={false}
       setSupportMultipleWindows={false}
+      allowFileAccess={false}
+      allowFileAccessFromFileURLs={false}
+      allowUniversalAccessFromFileURLs={false}
+      mixedContentMode="never"
+      cacheEnabled={false}
+      incognito
       onMessage={(event) => {
         try {
           const message = JSON.parse(event.nativeEvent.data);
@@ -198,7 +168,10 @@ async function savePdf(file, fileName) {
 
   // Se comparte una copia con el nombre legible: "Guardar en Archivos" usa el
   // nombre del archivo, y el de la cache es el id interno.
-  const named = new File(Paths.cache, fileName);
+  // Dentro de la carpeta de PDFs: se borra con ella al cambiar de cuenta.
+  const shareDirectory = new Directory(Paths.cache, PDF_CACHE_DIRECTORY, "share");
+  shareDirectory.create({ intermediates: true, idempotent: true });
+  const named = new File(shareDirectory, fileName);
   if (named.exists) named.delete();
   await file.copy(named);
   await Sharing.shareAsync(named.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
