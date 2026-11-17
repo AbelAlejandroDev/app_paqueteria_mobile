@@ -157,10 +157,10 @@ test("version comercial, numeros de build remotos y autoIncrement solo en builds
 
 // ── Envio a tiendas ─────────────────────────────────────────────────────────
 
-test("submit: The Worx con su app de App Store Connect; HDG sin destino hasta tener el ascAppId", () => {
+test("submit: cada marca con su app de App Store Connect; HDG production sin destino", () => {
   assert.deepEqual(eas.submit["worx-production"].ios, { ascAppId: "6822867406" });
   assert.deepEqual(eas.submit["worx-production"].android, { track: "internal", releaseStatus: "draft" });
-  assert.equal(eas.submit["hdg-testflight-sandbox"], undefined);
+  assert.deepEqual(eas.submit["hdg-testflight-sandbox"].ios, { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" });
   assert.deepEqual(eas.submit["hdg-production"], {});
   // Ningun fichero de credenciales en el repo.
   assert.doesNotMatch(read("eas.json"), /serviceAccountKeyPath|\.p8|\.p12|\.jks|\.keystore/);

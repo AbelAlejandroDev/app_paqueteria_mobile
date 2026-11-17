@@ -123,6 +123,12 @@
         "releaseStatus": "draft"
       }
     },
+    "hdg-testflight-sandbox": {
+      "ios": {
+        "ascAppId": "6835613644",
+        "appleTeamId": "3KX6P6C79Q"
+      }
+    },
     "hdg-production": {}
   }
 }

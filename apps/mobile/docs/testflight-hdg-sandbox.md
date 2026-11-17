@@ -19,19 +19,18 @@ publicado nada para iOS.
 
 ## Lo que falta (en orden)
 
-1. **App en App Store Connect** para `com.hdgexecutivesuites.clientportal`
-   (nombre "My HDG Mail"). Hace falta saber **en que equipo de Apple Developer** va:
-   el de The Worx (el que firma `com.theworxoffices.clientportal`) u otro de HDG. Quien
-   la cree necesita rol Admin o App Manager en ese equipo.
-2. **`ascAppId`** de esa app → añadir en `eas.json`:
-   `"submit": { "hdg-testflight-sandbox": { "ios": { "ascAppId": "<id>" } } }`.
-   Hoy no existe a proposito (un test lo comprueba).
-3. **Credenciales iOS en EAS** para el proyecto `hdg-client`: hoy ninguna
-   (`iosAppCredentials: []`, comprobado 2026-11-17), y ninguna build iOS. La **clave APNs**
-   se puede configurar antes de la build con `eas credentials -p ios` (pasos exactos y la
-   cuestion de reutilizar la de The Worx: `docs/push-setup.md`, "APNs de HDG"). El primer
-   `eas build` (interactivo, con Apple ID) crea el certificado de distribucion (o reutiliza
-   el del equipo) y el perfil App Store del bundle id.
+1. Hecho: **App en App Store Connect** "My HDG Mail", `com.hdgexecutivesuites.clientportal`,
+   equipo **The Workbox, LLC (3KX6P6C79Q)**, el mismo que firma My Worx Mail.
+2. Hecho: **`ascAppId` 6835613644** en `eas.json` → `submit.hdg-testflight-sandbox.ios`
+   (con `appleTeamId: 3KX6P6C79Q`). Sin auto-submit (lo comprueba `tests/build-safety`).
+3. **Credenciales iOS en EAS** (`hdg-client`: ninguna hoy). Del mismo equipo y vigentes
+   (comprobado en EAS, solo lectura, 2026-11-17), autorizadas para reutilizar:
+   - certificado **Apple Distribution** serie `735B657D10EC07FF2921CEFA55BE356E`,
+     equipo 3KX6P6C79Q, valido hasta 2027-10-14;
+   - clave **APNs `46PKSW3B6D`**, equipo 3KX6P6C79Q.
+   El **perfil de aprovisionamiento** es nuevo y propio de `com.hdgexecutivesuites.clientportal`;
+   el de The Worx (`com.theworxoffices.clientportal`) no se toca. Se crea en el primer
+   `eas build` con inicio de sesion de Apple (2FA): pasos exactos abajo.
 4. **Usuarios de TestFlight**: testers internos (miembros del equipo en App Store
    Connect) o un grupo externo (exige revision beta de Apple: descripcion, correo de
    contacto y una cuenta de prueba de HDG Sandbox para el revisor).
@@ -44,15 +43,39 @@ publicado nada para iOS.
    politica de privacidad de HDG (`https://www.hdgexecutivesuites.com/privacy-policy/`,
    tambien para la ficha de App Store Connect).
 
-## Como se construiria (cuando se autorice; NO ejecutado)
+## Primera build (interactiva: Apple ID y 2FA)
 
-```bash
-cd apps/mobile
-APP_BRAND=hdg APP_ENV=sandbox EXPO_PUBLIC_API_URL=https://core.hdgexecutivesuites.com/api/v1 \
-  npx eas-cli build --profile hdg-testflight-sandbox --platform ios
-# despues, con el ascAppId en eas.json:
-npx eas-cli submit --profile hdg-testflight-sandbox --platform ios
+```powershell
+cd D:\app_paqueter_react_native\apps\mobile
+git switch feat/mobile-hdg-testflight
+npx eas-cli@27.10.0 build --platform ios --profile hdg-testflight-sandbox
 ```
+
+Que contestar (el texto exacto puede variar un poco entre versiones de EAS CLI):
+
+| Pregunta | Respuesta |
+|---|---|
+| (antes de nada) proyecto en la salida | debe ser `@ab-estrategia-360/hdg-client`; si sale `worx-client`, Ctrl+C |
+| Do you want to log in to your Apple account? | **Yes** → Apple ID, contraseña, codigo 2FA |
+| Select a team | **The Workbox, LLC (3KX6P6C79Q)**. Ningun otro |
+| Reuse this distribution certificate? (serie `735B657D…356E`, de `worx-client`) | **Yes** |
+| Generate a new Apple Provisioning Profile? | **Yes** (perfil nuevo del bundle de HDG) |
+| Push Notifications: reuse this Push Key? (`46PKSW3B6D`) | **Yes** |
+| Would you like to submit…? / auto-submit | **No** (la subida va aparte) |
+
+Si pregunta otra cosa (revocar, otro equipo, otro bundle id), parar y no contestar.
+
+## Subida a TestFlight (interna; nunca a revision de App Store)
+
+```powershell
+npx eas-cli@27.10.0 submit --platform ios --profile hdg-testflight-sandbox --id <id de la build>
+```
+
+Destino: `ascAppId 6835613644`. EAS pide credenciales de App Store Connect: o iniciar
+sesion con Apple, o una **clave de la API de App Store Connect**. El proyecto de The Worx
+tiene una (`9P86T93SD9`, rol App Manager, mismo equipo); reutilizarla o generar una
+nueva para HDG es decision tuya (no esta autorizada en este documento). En App Store
+Connect → TestFlight: grupo **interno** solamente.
 
 Lanzarlo desde `D:\` (mayuscula) en Windows: con `d:\` Metro no resuelve `@paqueteria/core`.
 

@@ -33,7 +33,7 @@ Revisado en solo lectura: no se ha ejecutado `eas build`, `eas submit` ni `eas u
 | Canales OTA | development, preview, production → production | development, preview, testflight-sandbox → sandbox; production → bloqueado |
 | Version / build | `1.0.0`; numeros de build remotos en EAS (`appVersionSource: remote`), `autoIncrement` en tienda | igual |
 | Runtime | `native-3` | `native-3` |
-| Submit | iOS `ascAppId 6822867406`; Android `internal`/`draft` | **sin destino** (falta `ascAppId`) |
+| Submit | iOS `ascAppId 6822867406`; Android `internal`/`draft` | `hdg-testflight-sandbox`: iOS `ascAppId 6835613644` (equipo 3KX6P6C79Q); `hdg-production` sin destino |
 | Identificacion de pruebas | — | franja "Sandbox" desde el arranque; canal propio |
 
 `eas config` resuelve los 18 perfiles validos (iOS y Android) con su marca, canal y API;
@@ -53,17 +53,14 @@ node scripts/eas-update.js <marca> <canal> --message "que cambia" --run  # publi
 
 ### Apple (App Store Connect / Developer)
 
-- [ ] **Decidir el equipo de Apple de HDG** (el de The Worx u otro). Rol Admin o App Manager.
-- [ ] Crear la app **My HDG Mail** (`com.hdgexecutivesuites.clientportal`) en App Store
-      Connect y anotar su **Apple ID numerico** (`ascAppId`).
-- [ ] Añadirlo a `eas.json`:
-      `"submit": { "hdg-testflight-sandbox": { "ios": { "ascAppId": "<id>" } } }`
-      (y quitar `submit.hdg-testflight-sandbox === undefined` de `tests/build-safety.test.mjs`).
-- [ ] **APNs de HDG**: en el primer `eas build -p ios` de HDG aceptar "Set up Push
-      Notifications" (EAS crea la clave), o subir una clave `.p8` existente con
-      `eas credentials`. La clave no va a Git.
-- [ ] **The Worx**: `eas credentials` → iOS → comprobar certificado de distribucion,
-      perfil App Store y clave APNs (hay 4 builds de tienda: deberian existir).
+- [x] **Equipo de Apple de HDG**: The Workbox, LLC (`3KX6P6C79Q`), el mismo de The Worx.
+- [x] App **My HDG Mail** (`com.hdgexecutivesuites.clientportal`) en App Store Connect,
+      `ascAppId 6835613644`, en `eas.json` (`submit.hdg-testflight-sandbox`).
+- [ ] **Credenciales iOS de HDG**: en el primer `eas build -p ios` (Apple ID + 2FA),
+      reutilizar el certificado de distribucion y la clave APNs `46PKSW3B6D` del equipo y
+      crear un perfil App Store propio (pasos: `docs/testflight-hdg-sandbox.md`).
+- [x] **The Worx** (solo lectura, 2026-11-17): certificado de distribucion, perfil App
+      Store y clave APNs `46PKSW3B6D` en EAS, equipo 3KX6P6C79Q, vigentes hasta 2027-10-14.
 - [ ] Team ID (Membership) para los Universal Links (seccion 4).
 
 ### Google (Firebase / Play Console)

@@ -243,6 +243,13 @@ test("ningun otro perfil usa el canal de TestFlight Sandbox, y hdg-production si
     assert.notEqual(profileEnv(name).channel ?? eas.build[name].channel, "testflight-sandbox", name);
   }
   assert.throws(() => resolveProfile("hdg-production"), /production estan bloqueados/);
-  // Sin ascAppId todavia: no se puede enviar hasta crear la app en App Store Connect.
-  assert.equal(eas.submit["hdg-testflight-sandbox"], undefined);
+  // Submit: My HDG Mail en App Store Connect (equipo The Workbox, LLC), nunca la app de The Worx.
+  assert.deepEqual(eas.submit["hdg-testflight-sandbox"], { ios: { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" } });
+  assert.notEqual(eas.submit["hdg-testflight-sandbox"].ios.ascAppId, eas.submit["worx-production"].ios.ascAppId);
+  assert.equal(eas.submit["hdg-testflight-sandbox"].android, undefined, "solo iOS: TestFlight");
+});
+
+test("TestFlight de HDG: sin auto-submit en el perfil de build", () => {
+  assert.equal(eas.build["hdg-testflight-sandbox"].autoSubmit, undefined);
+  assert.equal(eas.build["hdg-testflight-sandbox"].ios?.autoSubmit, undefined);
 });
