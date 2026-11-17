@@ -12,7 +12,7 @@ Revisado en solo lectura: no se ha ejecutado `eas build`, `eas submit` ni `eas u
       binario nuevo. Si hiciera falta un parche urgente para ellas, tendria que salir de
       una rama con `native-2`.
 - [x] **pdf.js** empaquetado en la app (sin CDN); el WebView del visor no tiene red.
-- [ ] **Firebase de HDG** (si la build de Android de HDG debe tener push): añadir
+- [x] **Firebase de HDG** (`my-hdg-mail-f00be`, en el repo desde `feat/mobile-hdg-push-android`): añadir
       `google-services.json` **no** cambia la runtime (no cambia ningun modulo nativo
       que use el JS; la app lo detecta con `extra.push.androidFcmConfigured`), pero si
       pide un **binario nuevo** de Android. Comprobar con
@@ -68,12 +68,13 @@ node scripts/eas-update.js <marca> <canal> --message "que cambia" --run  # publi
 
 ### Google (Firebase / Play Console)
 
-- [ ] **Firebase de HDG**: proyecto (o el existente) → app Android
-      `com.hdgexecutivesuites.clientportal` → descargar `google-services.json` →
-      `apps/mobile/assets/brands/hdg/google-services.json` (publico, si va a Git).
-- [ ] **FCM v1 de HDG**: Firebase → Cuentas de servicio → clave JSON →
-      `eas credentials` → Android → Push Notifications (FCM V1). **No va a Git.**
-- [ ] **The Worx**: `eas credentials` → Android → comprobar clave FCM v1 y keystore.
+- [x] **Firebase de HDG**: proyecto `my-hdg-mail-f00be` → app Android
+      `com.hdgexecutivesuites.clientportal` → `apps/mobile/assets/brands/hdg/google-services.json` (en Git).
+- [x] **FCM v1 de HDG**: `expo-push-hdg@my-hdg-mail-f00be.iam.gserviceaccount.com` en EAS
+      (`hdg-client`). **No va a Git.**
+- [ ] **Keystore Android de HDG**: lo genera EAS en la primera build; descargar una copia
+      (`eas credentials` → Android → Keystore) y guardarla **fuera del repo**.
+- [x] **The Worx**: clave FCM v1 (`the-worx-client`) y keystore en EAS (comprobado 2026-11-16).
 - [ ] **Play Console**: app de HDG (para distribuir por Google Play) y, para
       `eas submit` Android, una cuenta de servicio de Google Play con permisos de
       publicacion (en EAS, no en el repo). The Worx: comprobar que ya existe.

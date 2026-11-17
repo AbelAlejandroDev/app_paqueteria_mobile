@@ -8,7 +8,9 @@
  *   - es JSON de Firebase (project_info, client[]);
  *   - TODOS sus clientes Android son del application id de esa marca;
  *   - su proyecto de Firebase no es el de otra marca (HDG nunca puede usar
- *     `the-worx-client`: sus pushes irian por el proyecto de The Worx).
+ *     `the-worx-client`: sus pushes irian por el proyecto de The Worx);
+ *   - es del proyecto fijado en la marca (`firebaseProjectId`);
+ *   - no es una clave privada de cuenta de servicio con el nombre cambiado.
  * Si no existe, lo dice: la app de esa marca no registra push en Android.
  *
  * No imprime claves. El fichero es de identificadores publicos; la clave privada
@@ -38,8 +40,16 @@ function googleServicesProblems(brandId, { read = readGoogleServices, brands = B
   if (!config) return [];
 
   const problems = [];
+  // Una clave de cuenta de servicio guardada con este nombre acabaria dentro
+  // del APK. Se mira antes que nada y no se imprime nada de ella.
+  if (config?.type === "service_account" || "private_key" in (config || {}) || "private_key_id" in (config || {})) {
+    return ["es una clave PRIVADA de cuenta de servicio, no un google-services.json: sacala del repo y subela a EAS"];
+  }
   const projectId = config?.project_info?.project_id;
   if (!projectId) problems.push("sin project_info.project_id");
+  else if (brand.firebaseProjectId && projectId !== brand.firebaseProjectId) {
+    problems.push(`es del proyecto ${projectId}; la marca usa ${brand.firebaseProjectId}`);
+  }
   const clients = Array.isArray(config?.client) ? config.client : [];
   if (!clients.length) problems.push("sin client[]");
 

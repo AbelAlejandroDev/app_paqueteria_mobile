@@ -35,6 +35,11 @@ yarn-error.*
 # google-services.json NO entra: es publico y va dentro del build.
 *service-account*.json
 google-play*.json
+# Claves FCM v1 (cuentas de servicio de Firebase). Google las descarga como
+# <id-del-proyecto>-<id-de-la-clave>.json; viven en EAS, nunca aqui.
+*firebase-adminsdk*.json
+the-worx-client-*.json
+my-hdg-mail-*.json
 *.p8
 *.p12
 *.keystore

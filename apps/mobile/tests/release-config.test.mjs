@@ -295,14 +295,42 @@ test("google-services.json: el de cada marca es de su app y de su proyecto", () 
     assert.deepEqual(googleServicesProblems(brand.id), [], brand.id);
   }
   assert.equal(readGoogleServices("the_worx").project_info.project_id, "the-worx-client");
+  // HDG: el proyecto nuevo, no el viejo `my-hdg-mail` (su clave FCM v1 en EAS es de este).
+  assert.equal(readGoogleServices("hdg").project_info.project_id, "my-hdg-mail-f00be");
+  assert.equal(BRANDS.hdg.firebaseProjectId, "my-hdg-mail-f00be");
+  assert.equal(BRANDS.the_worx.firebaseProjectId, "the-worx-client");
 });
 
-test("HDG hoy: sin google-services.json -> Android no registra push (y no usa el de The Worx)", () => {
-  const hasHdg = Boolean(readGoogleServices("hdg"));
-  const expo = appConfigWith({ APP_BRAND: "hdg", APP_ENV: "sandbox" });
-  assert.equal(expo.extra.push.androidFcmConfigured, hasHdg);
-  assert.equal(Boolean(expo.android.googleServicesFile), hasHdg);
-  if (!hasHdg) assert.equal(expo.android.googleServicesFile, undefined, "nunca cae al fichero de otra marca");
+test("HDG: su google-services.json va en el build y Android registra push con el", () => {
+  const expo = appConfigWith({ APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://core.hdgexecutivesuites.com/api/v1" });
+  assert.equal(expo.extra.push.androidFcmConfigured, true);
+  assert.equal(expo.android.googleServicesFile, "./assets/brands/hdg/google-services.json", "nunca el de otra marca");
+  assert.equal(expo.android.package, "com.hdgexecutivesuites.clientportal");
+  assert.equal(expo.extra.eas.projectId, "2e12104c-c190-48aa-b044-da110d34e8f1", "tokens Expo del proyecto de HDG");
+  // Tener Firebase no abre HDG Production: sigue bloqueado.
+  assert.throws(() => appConfigWith({ APP_BRAND: "hdg", APP_ENV: "production" }), /bloqueados/);
+});
+
+test("un google-services.json del proyecto viejo de HDG, o una clave privada con ese nombre, se rechaza", () => {
+  const hdg = readGoogleServices("hdg");
+  const old = { ...hdg, project_info: { ...hdg.project_info, project_id: "my-hdg-mail" } };
+  assert.deepEqual(googleServicesProblems("hdg", { read: (id) => (id === "hdg" ? old : readGoogleServices(id)) }),
+    ["es del proyecto my-hdg-mail; la marca usa my-hdg-mail-f00be"]);
+  // Forma de una clave de cuenta de servicio (sin ningun valor real).
+  const serviceAccount = { type: "service_account", project_id: "my-hdg-mail-f00be", private_key_id: "x", private_key: "x" };
+  const problems = googleServicesProblems("hdg", { read: (id) => (id === "hdg" ? serviceAccount : readGoogleServices(id)) });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /clave PRIVADA/);
+});
+
+test("ningun fichero versionado es una clave de cuenta de servicio ni un keystore", () => {
+  const { execFileSync } = require("node:child_process");
+  const tracked = execFileSync("git", ["ls-files"], { cwd: path.join(root, "..", ".."), encoding: "utf8" }).split("\n").filter(Boolean);
+  assert.deepEqual(tracked.filter((f) => /\.(jks|keystore|p8|p12|pem)$/i.test(f) && !f.includes("node_modules")), []);
+  for (const file of tracked.filter((f) => /\.json$/i.test(f) && !f.includes("node_modules"))) {
+    const text = fs.readFileSync(path.join(root, "..", "..", file), "utf8");
+    assert.doesNotMatch(text, /"private_key"\s*:|"type"\s*:\s*"service_account"/, file);
+  }
 });
 
 test("un google-services.json de HDG con el proyecto o el paquete de The Worx se rechaza", () => {
@@ -316,7 +344,10 @@ test("un google-services.json de HDG con el proyecto o el paquete de The Worx se
     client: [{ client_info: { mobilesdk_app_id: "1:2:android:3", android_client_info: { package_name: "com.hdgexecutivesuites.clientportal" } }, api_key: [{ current_key: "x" }] }],
   };
   const sameProject = googleServicesProblems("hdg", { read: (id) => (id === "hdg" ? ownPackageButWorxProject : worx) });
-  assert.deepEqual(sameProject, ["usa el proyecto de Firebase de the_worx (the-worx-client)"]);
+  assert.deepEqual(sameProject, [
+    "es del proyecto the-worx-client; la marca usa my-hdg-mail-f00be",
+    "usa el proyecto de Firebase de the_worx (the-worx-client)",
+  ]);
 });
 
 test("añadir google-services.json no cambia lo nativo que usa el JS (no exige subir la runtime)", () => {

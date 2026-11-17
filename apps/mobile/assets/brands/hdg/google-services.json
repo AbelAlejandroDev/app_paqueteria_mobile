@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "249532544967",
+    "project_id": "my-hdg-mail-f00be",
+    "storage_bucket": "my-hdg-mail-f00be.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249532544967:android:bcc5b1dd90ed9fdb5acbe2",
+        "android_client_info": {
+          "package_name": "com.hdgexecutivesuites.clientportal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoRqqI66E4k-FXszmuVYwNc2ZPS7_q8mQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
