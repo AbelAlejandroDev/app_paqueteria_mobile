@@ -13,6 +13,8 @@
  * relee billing/payment. La app nunca ve datos de tarjeta: last4 y caducidad.
  */
 
+import { isSecureHttpsUrl } from "./secure-url.js";
+
 export const ZOHO_UPDATE_CARD_PATH = "/client/billing/zoho/update-card";
 export const ZOHO_ADD_PAYMENT_METHOD_PATH = "/client/billing/zoho/add-payment-method";
 
@@ -26,17 +28,8 @@ export function zohoInvoicePayPath(invoiceId) {
   return "/client/billing/zoho/invoices/" + invoiceId + "/pay";
 }
 
-/** Solo una URL https sin credenciales: lo que el backend devuelve de Zoho. */
-export function isSecurePageUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return false;
-  let url;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    return false;
-  }
-  return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
-}
+/** Solo una URL https sin credenciales: lo que el backend devuelve de Zoho (lib/secure-url). */
+export const isSecurePageUrl = isSecureHttpsUrl;
 
 /**
  * La URL de la pagina segura de una respuesta de Zoho. update-card y

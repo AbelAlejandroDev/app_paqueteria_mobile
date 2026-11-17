@@ -14,12 +14,15 @@ import { api } from "@/lib/api";
 import { formatCenterAddress, getCenterLabel, getClientName, getMailboxCode } from "@/lib/client-profile";
 import { brandWordmarkOnLight, homeHeroFor } from "@/lib/brand-assets";
 import { cn } from "@/lib/utils";
+import { secureHttpsUrlOrNull } from "@/lib/secure-url";
 import EmptyState from "@/components/common/empty-state";
 import { DetailCard } from "@/components/common/mail-item-detail-ui";
 import AccountAlerts from "@/components/common/account-alerts";
 import { TourAnchor } from "@/components/onboarding/tour-anchor";
 
-const CONFERENCE_ROOM_URL = "https://orlando.theworxoffices.com/conference-room/";
+// La sala de reuniones de ESTA marca (brands/index.js -> extra.brand). Sin una
+// https valida no hay tarjeta: nunca se abre la de otra marca.
+const CONFERENCE_ROOM_URL = secureHttpsUrlOrNull(brand.conferenceRoomUrl);
 
 /** Verde oscuro de la tarjeta de bienvenida, de izquierda a derecha. */
 const HERO_FROM = brand.palette.heroFrom;
@@ -278,12 +281,14 @@ export default function DashboardScreen() {
           onPress={openFolder("action_required")}
         />
         <AccessCard title="Recent" icon={CheckCircle2} onPress={openFolder("completed")} />
-        <AccessCard
-          title="Conference Room"
-          icon={UsersRound}
-          external
-          onPress={() => WebBrowser.openBrowserAsync(CONFERENCE_ROOM_URL)}
-        />
+        {CONFERENCE_ROOM_URL ? (
+          <AccessCard
+            title="Conference Room"
+            icon={UsersRound}
+            external
+            onPress={() => WebBrowser.openBrowserAsync(CONFERENCE_ROOM_URL)}
+          />
+        ) : null}
       </View>
     </ScrollView>
   );

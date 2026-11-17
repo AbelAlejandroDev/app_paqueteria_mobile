@@ -225,6 +225,8 @@ module.exports = {
         markBackground: brand.markBackground,
         palette: brand.palette,
         fonts: brand.fonts,
+        // Solo el de esta marca; sin el, el panel no enseña la tarjeta.
+        conferenceRoomUrl: brand.conferenceRoomUrl || null,
       },
     },
   },

@@ -94,6 +94,24 @@ export async function logoutPushCleanup({ unregisterOnServer, unregisterLocally,
   return { server: false, local: true, pending: false };
 }
 
+/**
+ * La sesion se perdio sin pasar por el boton (revocada por el servidor, o de
+ * otra organizacion): no queda sesion con la que llamar a `unregister`, asi que
+ * se salta al paso 2 de logoutPushCleanup (invalidar el token aqui, o dejarlo
+ * marcado). Nunca lanza.
+ */
+export async function sessionLossPushCleanup({ unregisterLocally, markPending, clearPending }) {
+  const result = await logoutPushCleanup({
+    unregisterOnServer: async () => {
+      throw new Error("no session");
+    },
+    unregisterLocally,
+    markPending,
+    clearPending,
+  });
+  return { local: result.local, pending: result.pending };
+}
+
 /** Al arrancar sin sesion: si quedo pendiente, otra vez la baja local. */
 export async function retryPendingPushCleanup({ isPending, unregisterLocally, clearPending }) {
   let pending = false;

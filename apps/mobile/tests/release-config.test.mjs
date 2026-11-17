@@ -277,8 +277,9 @@ test("ni el logout ni el arranque fallan por la limpieza del push", async () => 
 test("cableado: la baja local solo toca este dispositivo; el registro limpia la marca; el arranque sin sesion reintenta", () => {
   const push = read("src/lib/push-notifications.js");
   assert.match(push, /unregisterLocally: \(\) => Notifications\.unregisterForNotificationsAsync\(\)/);
-  assert.match(push, /api\.post\("\/client\/push-devices\/unregister", \{ token \}\)/);
-  assert.doesNotMatch(push, /push-devices\/unregister", \{ token: [^}]*(userId|tenantId)/, "nunca se da de baja por usuario: solo el token propio");
+  assert.match(push, /api\.post\(PUSH_DEVICES_UNREGISTER_PATH, \{ token \}\)/);
+  assert.match(read("src/lib/push-registration.js"), /PUSH_DEVICES_UNREGISTER_PATH = "\/client\/push-devices\/unregister"/);
+  assert.doesNotMatch(push, /PUSH_DEVICES_UNREGISTER_PATH, \{ token: [^}]*(userId|tenantId)/, "nunca se da de baja por usuario: solo el token propio");
   const register = push.slice(push.indexOf("export async function registerForPush("), push.indexOf("export async function unregisterFromPush("));
   assert.match(register, /setJsonValue\(PUSH_LOCAL_UNREGISTER_PENDING_KEY, null\)/);
   const auth = read("src/context/AuthContext.jsx");

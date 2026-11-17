@@ -22,6 +22,10 @@
  * para que un fichero de un proyecto viejo (HDG tuvo `my-hdg-mail`) no entre en
  * un build: la clave FCM v1 subida a EAS es de este proyecto y no entregaria.
  *
+ * `conferenceRoomUrl` es la reserva de la sala de reuniones de la marca (tarjeta
+ * del panel). Sin ella, o si no es https, la tarjeta no aparece: nunca se cae al
+ * enlace de otra marca.
+ *
  * `name` es la empresa (el logo, la cabecera del panel); `appName` es el
  * producto, lo que el telefono muestra bajo el icono. Cambiar `appName` toca lo
  * nativo: un OTA no renombra una app ya instalada, hace falta un build.
@@ -74,6 +78,8 @@ const BRANDS = {
     bundleId: "com.theworxoffices.clientportal",
     easProjectId: "922f4b80-6a1f-4072-a4df-c0d35fe374c8",
     firebaseProjectId: "the-worx-client",
+    // Reserva de la sala de reuniones (tarjeta del panel; mismo enlace que el portal web).
+    conferenceRoomUrl: "https://orlando.theworxoffices.com/conference-room/",
     // APIs de esta marca por entorno (brands/api-environment.js). The Worx solo
     // tiene produccion, operativa: todos sus perfiles van ahi.
     api: {
@@ -136,6 +142,7 @@ const BRANDS = {
     bundleId: "com.hdgexecutivesuites.clientportal",
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
     firebaseProjectId: "my-hdg-mail-f00be",
+    conferenceRoomUrl: "https://www.hdgexecutivesuites.com/conference-room/",
     // HDG Sandbox es su entorno habitual (API y base distintas de produccion).
     // La de produccion no existe todavia: hasta configurarla aqui Y autorizar
     // el lanzamiento, los builds de production de HDG fallan a proposito.

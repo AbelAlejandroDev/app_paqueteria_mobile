@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
+import { paymentAlertView } from "@/lib/payment-alert-view";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { Button } from "@/components/ui/button";
 import { Modal, Notice } from "@/components/ui/modal";
 
@@ -36,6 +38,8 @@ export default function PaymentAlerts() {
   const [dismissed, setDismissed] = useState(() => new Set());
 
   const query = useQuery(paymentAlertsQuery);
+  // Solo para el texto: que proveedor nombrar (lib/payment-alert-view).
+  const capabilities = useCapabilities();
 
   const acknowledge = useMutation({
     mutationFn: async (id) => (await api.patch("/client/notifications/" + id + "/acknowledge")).data,
@@ -50,6 +54,9 @@ export default function PaymentAlerts() {
 
   if (!alert) return null;
 
+  // Factura solo si es https; el texto, segun el proveedor de la cuenta.
+  const view = paymentAlertView(alert, capabilities.provider);
+
   const close = () => {
     // Se oculta en el acto y el reconocimiento viaja despues: si la red falla,
     // el cliente no se queda con una ventana que no se cierra.
@@ -58,9 +65,9 @@ export default function PaymentAlerts() {
   };
 
   const openInvoice = async () => {
-    if (alert.invoiceUrl) {
-      // La URL la da Stripe dentro del aviso; no se compone aqui.
-      await WebBrowser.openBrowserAsync(alert.invoiceUrl);
+    if (view.invoiceUrl) {
+      // La URL la da el backend dentro del aviso (ya validada https); no se compone aqui.
+      await WebBrowser.openBrowserAsync(view.invoiceUrl);
     }
     close();
   };
@@ -72,9 +79,9 @@ export default function PaymentAlerts() {
       title={alert.title || "Payment needed"}
       footer={
         <>
-          {alert.invoiceUrl ? <Button onPress={openInvoice}>Pay now</Button> : null}
+          {view.invoiceUrl ? <Button onPress={openInvoice}>Pay now</Button> : null}
           <Button variant="outline" onPress={close}>
-            {alert.invoiceUrl ? "Later" : "Got it"}
+            {view.invoiceUrl ? "Later" : "Got it"}
           </Button>
         </>
       }
@@ -90,11 +97,7 @@ export default function PaymentAlerts() {
         </View>
       ) : null}
 
-      <Text className="text-xs leading-4 text-muted-foreground">
-        {alert.invoiceUrl
-          ? "Payment opens in a secure Stripe page. Your service resumes once it goes through."
-          : "Contact your center to settle this and resume your service."}
-      </Text>
+      <Text className="text-xs leading-4 text-muted-foreground">{view.footnote}</Text>
     </Modal>
   );
 }

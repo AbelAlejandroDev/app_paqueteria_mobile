@@ -1,7 +1,7 @@
 # TestFlight de My HDG Mail contra HDG Sandbox
 
-Estado a 2026-11-14 (rama `feat/mobile-fase-4`). Revisado en solo lectura: no se ha
-construido, enviado ni publicado nada.
+Estado a 2026-11-17 (rama `feat/mobile-hdg-push-ios`). No se ha construido, enviado ni
+publicado nada para iOS.
 
 ## Lo que ya esta
 
@@ -26,18 +26,23 @@ construido, enviado ni publicado nada.
 2. **`ascAppId`** de esa app → añadir en `eas.json`:
    `"submit": { "hdg-testflight-sandbox": { "ios": { "ascAppId": "<id>" } } }`.
    Hoy no existe a proposito (un test lo comprueba).
-3. **Credenciales iOS en EAS** para el proyecto `hdg-client`: no hay ninguna build de iOS
-   (ni de Android) de HDG en EAS, asi que no hay perfil de aprovisionamiento. El primer
-   `eas build` las crea si se inicia sesion con Apple (interactivo): certificado de
-   distribucion (se puede reutilizar el del equipo), perfil App Store del bundle id y
-   **clave APNs** (sin ella no llegan los push en iOS).
+3. **Credenciales iOS en EAS** para el proyecto `hdg-client`: hoy ninguna
+   (`iosAppCredentials: []`, comprobado 2026-11-17), y ninguna build iOS. La **clave APNs**
+   se puede configurar antes de la build con `eas credentials -p ios` (pasos exactos y la
+   cuestion de reutilizar la de The Worx: `docs/push-setup.md`, "APNs de HDG"). El primer
+   `eas build` (interactivo, con Apple ID) crea el certificado de distribucion (o reutiliza
+   el del equipo) y el perfil App Store del bundle id.
 4. **Usuarios de TestFlight**: testers internos (miembros del equipo en App Store
    Connect) o un grupo externo (exige revision beta de Apple: descripcion, correo de
    contacto y una cuenta de prueba de HDG Sandbox para el revisor).
 5. **Cuenta de prueba en HDG Sandbox** para los testers (y para la revision beta si es
    externa), activada (`set-password`) y sin datos reales.
-6. Android (no es TestFlight, pero va junto): `assets/brands/hdg/google-services.json`
-   (proyecto Firebase de HDG) para push; sin el, el registro push falla en Android.
+6. **Backend de push en HDG Sandbox**: desplegar `feat/push-receipts-hardening`, permitir
+   `exp.host` en la guardia de salida y el cron de `syncPushDelivery` (lo hace el VPS). Sin
+   eso no sale ningun push del Sandbox, ni a Android ni a iOS.
+7. Hecho: Firebase de HDG (`my-hdg-mail-f00be`, FCM v1 en EAS), Conference Room y
+   politica de privacidad de HDG (`https://www.hdgexecutivesuites.com/privacy-policy/`,
+   tambien para la ficha de App Store Connect).
 
 ## Como se construiria (cuando se autorice; NO ejecutado)
 

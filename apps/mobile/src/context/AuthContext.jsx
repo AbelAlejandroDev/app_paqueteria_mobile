@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AUTH_USER_UPDATED_EVENT,
@@ -18,7 +18,15 @@ import {
 } from "@paqueteria/core";
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
-import { dismissAllNotifications, registerForPush, retryPendingPushUnregister, unregisterFromPush } from "@/lib/push-notifications";
+import {
+  addPushTokenChangeListener,
+  dismissAllNotifications,
+  invalidatePushOnSessionLoss,
+  registerForPush,
+  retryPendingPushUnregister,
+  unregisterFromPush,
+} from "@/lib/push-notifications";
+import { pushSessionLossAction } from "@/lib/push-session";
 import { setPushSessionActive } from "@/lib/push-presentation";
 import { clearPrivateFilesOnDevice } from "@/lib/private-files-native";
 import { clearBiometricLock } from "@/lib/security-preferences";
@@ -36,6 +44,10 @@ export function AuthProvider({ children }) {
   // ni hay usuario guardado que enseñar. No es "sin sesion": no se va al login.
   const [sessionUnavailable, setSessionUnavailable] = useState(false);
   const queryClient = useQueryClient();
+  // Quien tiene la sesion ahora y si la cierra el boton (logout ya da de baja el
+  // push en el servidor) o se pierde por otra via (lib/push-session).
+  const userIdRef = useRef(null);
+  const loggingOutRef = useRef(false);
 
   /**
    * La cache es de quien entro. Se vacia ANTES de pintar al siguiente (no en un
@@ -59,6 +71,12 @@ export function AuthProvider({ children }) {
   /** Todo cambio de usuario pasa por aqui. */
   const applyUser = useCallback(
     (nextUser) => {
+      // Sesion perdida sin logout (revocada, otra organizacion): el token push
+      // se invalida en el dispositivo, porque ya no se puede dar de baja en el servidor.
+      if (pushSessionLossAction({ previousUserId: userIdRef.current, nextUser, loggingOut: loggingOutRef.current }) === "invalidate") {
+        invalidatePushOnSessionLoss().catch(() => {});
+      }
+      userIdRef.current = nextUser?.id ?? null;
       trackScope(nextUser);
       // Sin sesion no se enseñan avisos con la app delante (lib/push-presentation).
       setPushSessionActive(Boolean(nextUser));
@@ -209,21 +227,26 @@ export function AuthProvider({ children }) {
   );
 
   const logout = useCallback(async () => {
-    // Antes de cerrar sesion, mientras el token todavia vale: si no, el
-    // siguiente que entre en este telefono recibiria los avisos del anterior.
-    await unregisterFromPush();
-    // El bloqueo es del dispositivo: quien entre despues no lo ha activado.
-    await clearBiometricLock();
-    // Un push de esta cuenta no puede abrirse en la sesion de la siguiente.
-    clearPendingNavigation();
-
+    loggingOutRef.current = true;
     try {
-      await api.post("/auth/logout");
-    } catch (error) {
-      // Da igual si falla: la sesión local se limpia de todos modos.
+      // Antes de cerrar sesion, mientras el token todavia vale: si no, el
+      // siguiente que entre en este telefono recibiria los avisos del anterior.
+      await unregisterFromPush();
+      // El bloqueo es del dispositivo: quien entre despues no lo ha activado.
+      await clearBiometricLock();
+      // Un push de esta cuenta no puede abrirse en la sesion de la siguiente.
+      clearPendingNavigation();
+
+      try {
+        await api.post("/auth/logout");
+      } catch (error) {
+        // Da igual si falla: la sesión local se limpia de todos modos.
+      } finally {
+        // Tokens, usuario guardado y cache de React Query.
+        await endLocalSession();
+      }
     } finally {
-      // Tokens, usuario guardado y cache de React Query.
-      await endLocalSession();
+      loggingOutRef.current = false;
     }
   }, [endLocalSession]);
 
@@ -235,19 +258,30 @@ export function AuthProvider({ children }) {
    * pedido nada aqui, y un error tapando la pantalla de inicio seria peor que
    * quedarse sin notificaciones.
    */
+  const userId = user?.id ?? null;
+
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return undefined;
 
     // Se registra el resultado aunque no se muestre: sin esto, un fallo al
     // obtener o guardar el token es invisible y solo se nota porque las
     // notificaciones no llegan, que es un sintoma muy lejano de la causa.
-    registerForPush()
-      .then(({ token, reason }) => {
-        if (token) console.log("[push] dispositivo registrado");
-        else console.warn("[push] sin registrar:", reason);
-      })
-      .catch((error) => console.warn("[push] error inesperado:", error?.message || error));
-  }, [user?.id]);
+    // Nunca el token: solo el estado (lib/push-registration).
+    const register = (force) =>
+      registerForPush({ userId, force })
+        .then(({ registered, status, reason, skipped }) => {
+          if (skipped) return;
+          if (registered) console.log("[push] dispositivo registrado" + (status === "registered-legacy" ? " (backend sin projectId)" : ""));
+          else console.warn("[push] sin registrar:", reason);
+        })
+        .catch((error) => console.warn("[push] error inesperado:", error?.message || error));
+
+    // Al haber sesion: login o arranque con la sesion guardada (renueva lastSeenAt
+    // y reactiva un dispositivo que el backend hubiera desactivado).
+    register(false);
+    // Token nuevo de Expo/FCM/APNs con la app abierta: se registra el nuevo.
+    return addPushTokenChangeListener(() => register(true));
+  }, [userId]);
 
   useEffect(() => {
     // Lo emite tambien el cliente HTTP: tras un refresh (mismo usuario) y al
