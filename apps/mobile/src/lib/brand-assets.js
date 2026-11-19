@@ -1,4 +1,5 @@
 import { brand } from "@/lib/brand";
+import { isSessionForTenant } from "@/lib/session-tenant";
 
 /**
  * Metro resuelve los `require` de assets en tiempo de compilación, así que la
@@ -30,16 +31,25 @@ export const brandMonochromeMark = MONOCHROME_MARKS[brand.id] || null;
  * por centro: cada cliente ve su oficina. La clave es "marca:slug del centro"
  * (`user.center.slug` de /auth/me). El centro que no tenga foto se queda con el
  * degradado de la marca.
+ *
+ * Son las mismas fotos que el portal web (front-web `public/center-images/`, ver
+ * su `src/lib/centerImages.js`), copiadas byte a byte del JPG original: la app no
+ * depende de la web para pintarlas. HDG Hollywood lleva el rotulo de HDG a la
+ * derecha, que es la parte que el degradado deja ver (`contentPosition="right"`).
+ *
+ * Como en la web, la foto exige ademas que la sesion sea de la organizacion de
+ * esta app: una sesion de otra organizacion nunca pinta la foto de un centro.
  */
 const CENTER_HEROES = {
   "the_worx:hallandale": require("../../assets/brands/the_worx/hallandale-hero.jpg"),
   "the_worx:sandlake": require("../../assets/brands/the_worx/sandlake-hero.jpg"),
+  "hdg:hollywood": require("../../assets/brands/hdg/hollywood-hero.jpg"),
 };
 
 export function homeHeroFor(user) {
   const slug = user?.center?.slug;
-  if (!slug) return null;
-  return CENTER_HEROES[brand.id + ":" + String(slug).toLowerCase()] || null;
+  if (!slug || !isSessionForTenant(user, brand.tenantSlug)) return null;
+  return CENTER_HEROES[brand.id + ":" + String(slug).trim().toLowerCase()] || null;
 }
 
 /**
