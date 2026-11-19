@@ -7,7 +7,9 @@ import { Bell, CalendarX, ChevronRight, ExternalLink, FileText, GraduationCap, L
 import { useAuth } from "@/context/AuthContext";
 import { brand } from "@/lib/brand";
 import { overWhite } from "@/lib/colors";
+import * as Updates from "expo-updates";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
+import { describeRunningUpdate } from "@/lib/update-info";
 import { privacyPolicyFor } from "@/lib/legal-links";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
@@ -107,6 +109,16 @@ export default function SettingsScreen() {
     },
     { label: "App", value: brand.appName || brand.name },
     { label: "App Version", value: formatAppVersion() },
+    // Que actualizacion OTA esta corriendo (o "Built-in"): se compara con el
+    // Update ID de EAS para saber si el movil ya aplico una publicacion.
+    {
+      label: "App Update",
+      value: describeRunningUpdate({
+        updateId: Updates.updateId,
+        isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+        channel: Updates.channel,
+      }),
+    },
     { label: "Time Zone", value: timeZone },
   ];
 
