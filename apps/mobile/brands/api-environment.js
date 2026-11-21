@@ -131,6 +131,23 @@ function assertApiUrlForBrand(url, brandId, brands = BRANDS) {
 }
 
 /**
+ * Comprobacion en runtime: la URL es EXACTAMENTE la de la marca en su entorno.
+ * assertApiUrlForBrand admite cualquier URL de la marca; esto ademas impide que
+ * un binario de Sandbox hable con Production (o al reves) dentro de la misma
+ * marca. Lanza si no; devuelve la URL normalizada.
+ */
+function assertApiUrlForEnvironment({ brand, url, environment }) {
+  if (!brand?.id) throw fail("assertApiUrlForEnvironment necesita una marca.");
+  const expected = normalizeUrl(brand.api?.[environment]);
+  if (!expected) throw fail(`${brand.id} no tiene API de ${environment || "(sin entorno)"}.`);
+  const given = normalizeUrl(url);
+  if (given !== expected) {
+    throw fail(`${brand.id} ${environment}: la API es ${expected}, no ${given || "(sin URL)"}.`);
+  }
+  return expected;
+}
+
+/**
  * Cuanto espera la app una respuesta (ms). API_TIMEOUT_MS en el entorno del
  * build; por defecto 20 s. Fuera de 5-120 s se considera un error de
  * configuracion: demasiado corto da falsos "sin conexion", demasiado largo deja
@@ -154,6 +171,7 @@ module.exports = {
   DEFAULT_API_TIMEOUT_MS,
   ENVIRONMENTS,
   assertApiUrlForBrand,
+  assertApiUrlForEnvironment,
   brandForApiUrl,
   resolveApiConfig,
   resolveApiTimeout,

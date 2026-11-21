@@ -10,7 +10,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
 const { BRANDS, getBrand } = require("../brands/index.js");
-const { assertApiUrlForBrand, brandForApiUrl, resolveApiConfig } = require("../brands/api-environment.js");
+const { assertApiUrlForBrand, assertApiUrlForEnvironment, brandForApiUrl, resolveApiConfig } = require("../brands/api-environment.js");
 
 const WORX = "https://core.theworxoffices.com/api/v1";
 const HDG_SANDBOX = "https://sandbox-core.hdgexecutivesuites.com/api/v1";
@@ -237,8 +237,17 @@ test("en runtime la app comprueba la URL contra su marca", () => {
   assert.throws(() => assertApiUrlForBrand(HDG_SANDBOX, "the_worx"), /es de hdg/);
   assert.throws(() => assertApiUrlForBrand(undefined, "hdg"), /sin URL/);
 
+  // Dentro de la marca, la URL tiene que ser la de su entorno: Sandbox nunca va a core.
+  assert.equal(assertApiUrlForEnvironment({ brand: BRANDS.hdg, url: HDG_SANDBOX, environment: "sandbox" }), HDG_SANDBOX);
+  assert.equal(assertApiUrlForEnvironment({ brand: BRANDS.hdg, url: HDG_PRODUCTION + "/", environment: "production" }), HDG_PRODUCTION);
+  assert.throws(() => assertApiUrlForEnvironment({ brand: BRANDS.hdg, url: HDG_PRODUCTION, environment: "sandbox" }), /la API es https:\/\/sandbox-core/);
+  assert.throws(() => assertApiUrlForEnvironment({ brand: BRANDS.hdg, url: HDG_SANDBOX, environment: "production" }), /la API es https:\/\/core/);
+  assert.throws(() => assertApiUrlForEnvironment({ brand: BRANDS.the_worx, url: WORX, environment: "sandbox" }), /no tiene API de sandbox/);
+  assert.equal(assertApiUrlForEnvironment({ brand: BRANDS.the_worx, url: WORX, environment: "production" }), WORX);
+
   const api = read("src/lib/api.js");
   assert.match(api, /Constants\.expoConfig\?\.extra\?\.api/);
+  assert.match(api, /assertApiUrlForEnvironment\(\{ brand: BRANDS\[brand\.id\], url: API_BASE_URL, environment: apiConfig\.environment \}\)/);
   assert.match(api, /assertApiUrlForBrand\(apiConfig\.url, brand\.id\)/);
   assert.doesNotMatch(api, /process\.env\.EXPO_PUBLIC_API_URL/, "la URL suelta no decide");
 });
