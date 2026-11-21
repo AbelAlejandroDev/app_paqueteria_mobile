@@ -261,9 +261,12 @@ test("en runtime la app comprueba la URL contra su marca", () => {
 });
 
 test("el submit de HDG production va a My HDG Mail (equipo The Workbox), nunca a la app de The Worx", () => {
-  assert.deepEqual(eas.submit["hdg-production"], { ios: { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" } });
+  assert.deepEqual(eas.submit["hdg-production"].ios, { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" });
   assert.notEqual(eas.submit["hdg-production"].ios.ascAppId, eas.submit["worx-production"].ios.ascAppId);
-  assert.equal(eas.submit["hdg-production"].android, undefined, "solo iOS por ahora");
+  // Google Play: solo a la pista interna y en borrador; nadie fuera del equipo
+  // la recibe hasta promoverla a mano en Play Console. La clave de la cuenta de
+  // servicio va en EAS (proyecto hdg-client), nunca en el repo.
+  assert.deepEqual(eas.submit["hdg-production"].android, { track: "internal", releaseStatus: "draft" });
   assert.equal(eas.build["hdg-production"].autoSubmit, undefined, "sin auto-submit");
 });
 

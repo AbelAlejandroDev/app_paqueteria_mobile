@@ -13,9 +13,10 @@ lectura: nada del backend se copia aqui.
 
 Son APIs y bases distintas: un token o usuario de una no existe en la otra.
 
-**Hasta que el propietario promueva Production, `core` sirve HDG Sandbox.** Comprobado el
-2026-11-21: `GET /public/portal` con `Origin: https://members.hdgexecutivesuites.com`
-devuelve `deployment: "sandbox"`, igual que `sandbox-core`. En Production ese campo no existe.
+**`core` ya es HDG Production** (fase 1, lanzamiento comercial apagado). Comprobado el
+2026-11-21: `GET /public/portal` con `Origin: https://members.hdgexecutivesuites.com` ya no trae
+`deployment` en `core`; `sandbox-core` sigue devolviendo `deployment: "sandbox"`.
+`npm run check:hdg-production` responde `OK`.
 
 ## 2. Freno de la build de Production
 
@@ -60,18 +61,41 @@ npx eas-cli@27.10.0 submit --platform ios --profile hdg-production --id <id de l
   The Worx y EAS lo rechaza.
 - `hdg-production` no tiene auto-submit.
 
+### Android (Google Play)
+
+`submit.hdg-production.android` sube a la pista **interna** y en **borrador**: no llega a nadie
+hasta que se publica a mano en Play Console.
+
+Antes de la primera subida:
+1. Crear la app `com.hdgexecutivesuites.clientportal` en Play Console (cuenta de quien publica).
+2. **Subir la primera AAB a mano** en Play Console: la API de Google Play no acepta la primera
+   version de una app nueva.
+3. Cuenta de servicio de Google Cloud con permiso de "Release" sobre esa app, y su clave JSON
+   **subida a EAS** (`eas credentials`, proyecto `hdg-client`, Android → Google Service Account →
+   "for submissions"). Nunca en el repo.
+
+```powershell
+cd D:\app_paqueter_react_native\apps\mobile
+npm run check:hdg-production
+npx eas-cli@27.10.0 build --platform android --profile hdg-production --non-interactive --no-wait
+# primera vez: descargar la .aab y subirla a mano a la pista interna; despues:
+$env:APP_BRAND="hdg"; $env:APP_ENV="production"; $env:EXPO_PUBLIC_API_URL="https://core.hdgexecutivesuites.com/api/v1"
+npx eas-cli@27.10.0 submit --platform android --profile hdg-production --id <id de la build> --non-interactive
+```
+
+La keystore de subida ya esta en EAS (`hdg-client`, SHA-256 `45:5C:6C:C9:…`); al crear la app,
+dejar que Google gestione la clave de firma (Play App Signing).
+
 **No confundir builds.** TestFlight Sandbox y Production comparten la ficha de App Store Connect y
 la version 1.0.0. Al enviar a revision, elegir solo el numero de build de `hdg-production`. Nunca
 una de `hdg-testflight-sandbox`; la 1.0.0 (2) es Sandbox.
 
 ## 4. La build de TestFlight Sandbox ya instalada (1.0.0 (2))
 
-Lleva la API `core.hdgexecutivesuites.com` como si fuera Sandbox. Al promover, hablaria con
-Production. Se corrige sin build nueva:
-- publicar un OTA desde esta rama al canal `testflight-sandbox`;
-- su configuracion lleva `sandbox-core` y es solo JavaScript (runtime `native-3`).
-
-Hacerlo **antes** de promover. Requiere autorizacion.
+Su JS incrustado lleva la API `core.hdgexecutivesuites.com` como si fuera Sandbox. Corregido con
+la OTA `01a1ff06` (canal `testflight-sandbox`, `sandbox-core`), publicada el 2026-11-21. Un iPhone que no haya abierto la app desde entonces sigue con el JS incrustado y
+**hoy hablaria con Production**: abrirla dos veces (la OTA se aplica en el segundo arranque) y
+comprobar en Settings → App Update que dice `01a1ff06 · testflight-sandbox`.
 
 **Cada build lleva solo su entorno.** Desde `feat/mobile-hdg-production`, la app no carga el
 catalogo de marcas (`brands/`):
@@ -89,12 +113,14 @@ el valor de `EXPO_PUBLIC_API_URL` de la exportacion anterior; la app entonces no
 
 ### La APK interna de HDG Sandbox (Android, `hdg-preview`, build `307ee578`)
 
-Tiene el mismo problema que la 1.0.0 (2) de iOS:
+Tiene el mismo problema y **sigue sin corregir**:
 - canal `preview`, API `core.hdgexecutivesuites.com` como Sandbox;
-- al promover hablaria con Production.
+- `core` ya es Production: hoy esa APK habla con Production. Las cuentas de Sandbox no existen
+  alli (bases distintas), asi que el login falla, pero no debe usarse.
 
-Se corrige igual: un OTA **Android** al canal `preview` de `hdg-client` desde esta rama, antes de
-promover. Requiere autorizacion y comprobar la compatibilidad contra esa build.
+Se corrige igual: un OTA **Android** al canal `preview` de `hdg-client` desde esta rama.
+Requiere autorizacion y comprobar la compatibilidad contra esa build. Hasta entonces, no abrir
+esa APK ni repartirla.
 
 ## 4b. Politica de privacidad (backend 51ee69d)
 
@@ -138,8 +164,8 @@ La app se guia por `GET /client/capabilities`. Los `402`/`403`/`409` se muestran
 
 ## 7. Pendiente fuera de la app
 
-1. Promover HDG Production (fase 1), lo hace el propietario. Luego comprobar
-   `npm run check:hdg-production`.
+1. ~~Promover HDG Production (fase 1)~~: hecho; `npm run check:hdg-production` da `OK`
+   (2026-11-21).
 2. Crear la cuenta de demostracion y probar el login desde un dispositivo.
 3. Prueba de extremo a extremo de la baja de cuenta en una cuenta sin suscripcion de Zoho (handoff §8).
 4. App Store Connect:
