@@ -60,7 +60,7 @@ test("cada build lleva solo la politica de su marca (extra.brand)", () => {
 test("Settings tiene Legal con Privacy Policy, por la organizacion del usuario y la marca de la app", () => {
   const settings = read("src/app/(client)/settings/index.jsx");
   assert.match(settings, />Legal</);
-  assert.match(settings, /const privacyPolicy = privacyPolicyFor\(user\?\.tenant\?\.slug, brand\);/);
+  assert.match(settings, /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
   assert.match(settings, /\{privacyPolicy \? \(/, "sin politica no hay seccion");
   assert.match(settings, /label="Privacy Policy"/);
 });
@@ -76,4 +76,56 @@ test("se abre fuera de la app con el mismo patron que Conference Room, y nada se
 test("Terms & Conditions sigue donde estaba", () => {
   const settings = read("src/app/(client)/settings/index.jsx");
   assert.match(settings, /\{ label: "Terms & Conditions", href: "\/settings\/terms", icon: FileText \}/);
+});
+
+// ── Backend 51ee69d: el enlace lo decide el backend (capabilities.legal y GET /public/legal) ──
+
+test("el backend manda: su URL, o ninguna si dice null; sin respuesta, la de la marca", async () => {
+  const { parsePublicLegal, publicLegalPath } = await import("../src/lib/legal-links.js");
+  const hdg = appBrand("hdg");
+  const OTHER = "https://www.hdgexecutivesuites.com/legal/privacy";
+  // Respuesta con URL: esa, con el nombre de la marca.
+  assert.deepEqual(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: OTHER }), { name: "HDG Executive Suites Privacy Policy", url: OTHER });
+  // Respuesta null (no configurada): no hay enlace, ni siquiera el de la marca.
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: null }), null);
+  assert.equal(privacyPolicyFor("hdg", hdg, {}), null);
+  // Una URL que no es https limpia no se abre.
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "http://www.hdgexecutivesuites.com/privacy-policy/" }), null);
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "javascript:alert(1)" }), null);
+  // Sin respuesta (backend anterior o error de red): la de la marca de la build.
+  assert.equal(privacyPolicyFor("hdg", hdg, null)?.url, HDG_URL);
+  assert.equal(privacyPolicyFor("hdg", hdg)?.url, HDG_URL);
+  // Nunca la de otra organizacion, diga lo que diga la respuesta.
+  assert.equal(privacyPolicyFor("the_worx", hdg, { privacyPolicyUrl: WORX_URL }), null);
+
+  assert.equal(publicLegalPath("hdg"), "/public/legal?tenant=hdg");
+  assert.equal(publicLegalPath("The-Worx"), "/public/legal?tenant=the_worx");
+  // /public/legal solo vale si es de la organizacion pedida.
+  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: null }, "hdg"), { privacyPolicyUrl: null });
+  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: HDG_URL }, "hdg"), { privacyPolicyUrl: HDG_URL });
+  assert.equal(parsePublicLegal({ tenant: "the_worx", privacyPolicyUrl: WORX_URL }, "hdg"), null);
+  assert.equal(parsePublicLegal(null, "hdg"), null);
+  assert.equal(parsePublicLegal("<html>", "hdg"), null);
+});
+
+test("capabilities.legal: ausente = no se sabe (null); presente con null = no hay politica", async () => {
+  const { deriveCapabilities } = await import("../src/lib/capabilities.js");
+  const base = { contractVersion: 1, tenant: { slug: "hdg" }, billing: {}, forwarding: {} };
+  assert.equal(deriveCapabilities({ capabilities: base, expectedTenantSlug: "hdg" }).legal, null);
+  assert.deepEqual(deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: null } }, expectedTenantSlug: "hdg" }).legal, { privacyPolicyUrl: null });
+  assert.deepEqual(
+    deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: HDG_URL } }, expectedTenantSlug: "hdg" }).legal,
+    { privacyPolicyUrl: HDG_URL }
+  );
+  assert.equal(deriveCapabilities({ capabilities: null }).legal, null);
+});
+
+test("Settings usa capabilities.legal y Login enseña la politica antes de iniciar sesion", () => {
+  const settings = read("src/app/(client)/settings/index.jsx");
+  assert.match(settings, /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
+  const login = read("src/app/login.jsx");
+  assert.match(login, /queryFn: async \(\) => \(await api\.get\(publicLegalPath\(brand\.tenantSlug\)\)\)\.data/);
+  assert.match(login, /parsePublicLegal\(query\.data, brand\.tenantSlug\)/);
+  assert.match(login, /const privacyPolicy = usePublicPrivacyPolicy\(\);/);
+  assert.match(login, /onPress=\{\(\) => WebBrowser\.openBrowserAsync\(privacyPolicy\.url\)\}/);
 });

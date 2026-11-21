@@ -11,6 +11,7 @@ import * as Updates from "expo-updates";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { describeRunningUpdate } from "@/lib/update-info";
 import { privacyPolicyFor } from "@/lib/legal-links";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
@@ -76,7 +77,10 @@ export default function SettingsScreen() {
   const { replay } = useOnboarding();
   const timeZone = useMemo(() => formatTimeZone(), []);
   // De la organizacion del usuario: HDG no hereda la de The Worx.
-  const privacyPolicy = privacyPolicyFor(user?.tenant?.slug, brand);
+  // El enlace lo decide el backend (capabilities.legal); mientras carga no se
+  // enseña, y sin respuesta se usa el de la marca (lib/legal-links).
+  const capabilities = useCapabilities();
+  const privacyPolicy = capabilities.isLoading ? null : privacyPolicyFor(user?.tenant?.slug, brand, capabilities.legal);
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [

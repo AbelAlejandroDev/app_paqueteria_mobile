@@ -109,6 +109,16 @@ function pickRestrictions(restrictions) {
   };
 }
 
+/**
+ * `legal` (backend 51ee69d): `{ privacyPolicyUrl: string | null }`. Un backend
+ * anterior no lo manda: entonces null ("no se sabe"), que no es lo mismo que
+ * `{ privacyPolicyUrl: null }` ("no hay politica configurada": no se enseña).
+ */
+function pickLegal(legal) {
+  if (!legal || typeof legal !== "object") return null;
+  return { privacyPolicyUrl: typeof legal.privacyPolicyUrl === "string" ? legal.privacyPolicyUrl : null };
+}
+
 const UNKNOWN = Object.freeze({
   known: false,
   reason: "NOT_LOADED",
@@ -123,6 +133,7 @@ const UNKNOWN = Object.freeze({
   zoho: null,
   forwarding: pickForwarding(null),
   services: null,
+  legal: null,
   restrictions: null,
 });
 
@@ -163,6 +174,7 @@ export function deriveCapabilities({ capabilities = null, expectedTenantSlug } =
     zoho: pickZoho(billing.zoho),
     forwarding: pickForwarding(capabilities.forwarding),
     services: pickServices(capabilities.services),
+    legal: pickLegal(capabilities.legal),
     restrictions: pickRestrictions(capabilities.restrictions),
   };
 }

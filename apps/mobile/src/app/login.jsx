@@ -22,6 +22,27 @@ import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { loginErrorMessage, sessionEndedMessage } from "@/lib/auth-messages";
 import { INPUT_MIN_HEIGHT, inputTextStyle } from "@/components/ui/input";
+import { useQuery } from "@tanstack/react-query";
+import * as WebBrowser from "expo-web-browser";
+import { api } from "@/lib/api";
+import { parsePublicLegal, privacyPolicyFor, publicLegalPath } from "@/lib/legal-links";
+
+/**
+ * Politica de privacidad antes de iniciar sesion (Apple la pide sin cuenta):
+ * GET /public/legal?tenant=<la de esta app>. Mientras carga no hay enlace; si el
+ * backend dice null, tampoco; si no responde, la de la marca (lib/legal-links).
+ */
+function usePublicPrivacyPolicy() {
+  const query = useQuery({
+    queryKey: ["public-legal", brand.tenantSlug],
+    queryFn: async () => (await api.get(publicLegalPath(brand.tenantSlug))).data,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  if (query.isPending) return null;
+  const serverLegal = query.isSuccess ? parsePublicLegal(query.data, brand.tenantSlug) : null;
+  return privacyPolicyFor(brand.tenantSlug, brand, serverLegal);
+}
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email."),
@@ -72,6 +93,7 @@ function Field({ control, name, placeholder, icon: Icon, error, secure, ...input
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const privacyPolicy = usePublicPrivacyPolicy();
   // Si la sesion termino sola (p. ej. se cambio la contraseña en otro
   // dispositivo), se explica arriba del formulario.
   const { reason } = useLocalSearchParams();
@@ -215,6 +237,20 @@ export default function LoginScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
+
+              {privacyPolicy ? (
+                <View className="items-center pt-1">
+                  <TouchableOpacity
+                    hitSlop={8}
+                    accessibilityRole="link"
+                    onPress={() => WebBrowser.openBrowserAsync(privacyPolicy.url)}
+                  >
+                    <Text className="font-brand-semibold text-sm" style={{ color: brand.palette.glyph }}>
+                      Privacy Policy
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
           </View>
         </ScrollView>

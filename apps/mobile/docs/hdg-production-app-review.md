@@ -87,6 +87,29 @@ Al exportar a mano entre marcas o entornos, usar `npx expo export --clear`. Metr
 el valor de `EXPO_PUBLIC_API_URL` de la exportacion anterior; la app entonces no arranca la API.
 `eas update` ya exporta con `--clear`, y EAS Build empieza sin cache.
 
+### La APK interna de HDG Sandbox (Android, `hdg-preview`, build `307ee578`)
+
+Tiene el mismo problema que la 1.0.0 (2) de iOS:
+- canal `preview`, API `core.hdgexecutivesuites.com` como Sandbox;
+- al promover hablaria con Production.
+
+Se corrige igual: un OTA **Android** al canal `preview` de `hdg-client` desde esta rama, antes de
+promover. Requiere autorizacion y comprobar la compatibilidad contra esa build.
+
+## 4b. Politica de privacidad (backend 51ee69d)
+
+La app la lee del backend:
+- antes de iniciar sesion, enlace en Login desde `GET /public/legal?tenant=hdg`;
+- con sesion, en Settings → Legal desde `GET /client/capabilities` → `legal`.
+
+Si el backend dice `privacyPolicyUrl: null`, **no se enseña ningun enlace**. Solo si no responde
+(backend anterior o sin red) se usa la de la marca de la build, que es la de HDG.
+
+Comprobado el 2026-11-21: `sandbox-core` y `core` devuelven `null`. **Antes de la revision de
+Apple**, Production necesita
+`PRIVACY_POLICY_URL__HDG=https://www.hdgexecutivesuites.com/privacy-policy/` (la pagina responde
+200). Sin esa variable la app no enseñara la politica.
+
 ## 5. Cuenta de demostracion para Apple (la crea el backend, no la app)
 
 | | |
