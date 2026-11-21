@@ -73,6 +73,20 @@ Production. Se corrige sin build nueva:
 
 Hacerlo **antes** de promover. Requiere autorizacion.
 
+**Cada build lleva solo su entorno.** Desde `feat/mobile-hdg-production`, la app no carga el
+catalogo de marcas (`brands/`):
+- `app.config.js` deja en `extra` solo la API, los canales, el proyecto EAS y la politica de
+  privacidad de esa marca y ese entorno;
+- `src/lib/runtime-api.js` exige que la URL sea exactamente la empaquetada en el JS
+  (`EXPO_PUBLIC_API_URL`).
+
+Resultado: el bundle de HDG Sandbox solo contiene `sandbox-core` (ni `core` ni The Worx), y el de
+HDG Production solo `core`.
+
+Al exportar a mano entre marcas o entornos, usar `npx expo export --clear`. Metro puede reutilizar
+el valor de `EXPO_PUBLIC_API_URL` de la exportacion anterior; la app entonces no arranca la API.
+`eas update` ya exporta con `--clear`, y EAS Build empieza sin cache.
+
 ## 5. Cuenta de demostracion para Apple (la crea el backend, no la app)
 
 | | |

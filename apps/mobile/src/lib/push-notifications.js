@@ -23,7 +23,6 @@ import {
   REGISTERED_LEGACY,
   resolvePushProjectId,
 } from "@/lib/push-registration";
-import { BRANDS } from "../../brands";
 
 /**
  * En Expo Go sobre Android, expo-notifications lanza nada mas importarse:
@@ -69,14 +68,15 @@ function ensureHandler(Notifications) {
 
 /**
  * El proyecto EAS con el que pedir el token y registrarse: el de la config de
- * la build (y el que pone EAS Build), comprobados contra el catalogo de marcas
- * del propio bundle (lib/push-registration, resolvePushProjectId).
+ * la build (y el que pone EAS Build), comprobados contra el de la marca
+ * (extra.brand.easProjectId; lib/push-registration, resolvePushProjectId). El
+ * catalogo completo de marcas no entra en el bundle.
  */
 function getProjectResolution() {
   return resolvePushProjectId({
     expoConfigProjectId: Constants.expoConfig?.extra?.eas?.projectId,
     easConfigProjectId: Constants.easConfig?.projectId,
-    brandProjectId: BRANDS[brand.id]?.easProjectId,
+    brandProjectId: brand.easProjectId,
   });
 }
 

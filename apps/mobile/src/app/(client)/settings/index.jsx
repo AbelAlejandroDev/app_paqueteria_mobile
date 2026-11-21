@@ -76,7 +76,7 @@ export default function SettingsScreen() {
   const { replay } = useOnboarding();
   const timeZone = useMemo(() => formatTimeZone(), []);
   // De la organizacion del usuario: HDG no hereda la de The Worx.
-  const privacyPolicy = privacyPolicyFor(user?.tenant?.slug);
+  const privacyPolicy = privacyPolicyFor(user?.tenant?.slug, brand);
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [

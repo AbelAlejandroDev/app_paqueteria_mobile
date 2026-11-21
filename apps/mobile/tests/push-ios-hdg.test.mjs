@@ -109,9 +109,12 @@ test("cada marca tiene su proyecto EAS y app.config lo pone en extra.eas (fuente
   assert.notEqual(BRANDS.hdg.easProjectId, BRANDS.the_worx.easProjectId);
   assert.equal(appConfigWith(HDG_ENV).extra.eas.projectId, HDG);
   assert.equal(appConfigWith(WORX_ENV).extra.eas.projectId, WORX);
-  // La app compara con el catalogo del propio bundle, no con lo que diga la config.
+  // La app compara con el proyecto de la marca de la build (extra.brand), sin el catalogo completo.
+  assert.equal(appConfigWith(HDG_ENV).extra.brand.easProjectId, HDG);
+  assert.equal(appConfigWith(WORX_ENV).extra.brand.easProjectId, WORX);
   const push = read("src/lib/push-notifications.js");
-  assert.match(push, /brandProjectId: BRANDS\[brand\.id\]\?\.easProjectId/);
+  assert.match(push, /brandProjectId: brand\.easProjectId/);
+  assert.doesNotMatch(push, /(from\s+["']|require\(\s*["'])(\.\.\/)+brands/);
   assert.match(push, /easConfigProjectId: Constants\.easConfig\?\.projectId/);
   assert.match(push, /expoConfigProjectId: Constants\.expoConfig\?\.extra\?\.eas\?\.projectId/);
 });

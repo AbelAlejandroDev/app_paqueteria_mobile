@@ -203,8 +203,12 @@ module.exports = {
     },
     // Lo lee src/lib/brand.js en runtime a través de expo-constants.
     extra: {
-      // La lee src/lib/api.js: la URL ya validada, no la variable suelta.
-      api: apiConfig,
+      // La lee src/lib/api.js: la URL ya validada, no la variable suelta. Lleva
+      // solo lo de ESTA marca y ESTE entorno: el catalogo completo (brands/) se
+      // queda en Node y no entra en el bundle, asi una build de HDG Sandbox no
+      // contiene ni la API de Production ni nada de The Worx. `channels` es el
+      // mapa canal -> entorno de la marca, para que la app compruebe su canal.
+      api: { ...apiConfig, channels: { ...(brand.updateChannels || {}) } },
       // Push en Android: solo con el google-services.json de esta marca. Sin el
       // la app lo dice y no intenta registrarse (lib/push-presentation).
       push: { androidFcmConfigured: hasGoogleServices },
@@ -227,6 +231,10 @@ module.exports = {
         fonts: brand.fonts,
         // Solo el de esta marca; sin el, el panel no enseña la tarjeta.
         conferenceRoomUrl: brand.conferenceRoomUrl || null,
+        // El proyecto EAS de la marca, para comprobar el de push (lib/push-notifications).
+        easProjectId: brand.easProjectId || null,
+        // Settings → Legal; solo la de esta organizacion (lib/legal-links).
+        privacyPolicy: brand.privacyPolicy || null,
       },
     },
   },

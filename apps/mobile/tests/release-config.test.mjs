@@ -124,9 +124,10 @@ test("en la app: un bundle de otro entorno en un canal no arranca la API", () =>
   assert.throws(() => ok("hdg", "production", "sandbox"), /update de otro entorno/);
   assert.throws(() => ok("hdg", "testflight-sandbox", "production"), /update de otro entorno/);
   assert.throws(() => ok("the_worx", "testflight-sandbox", "production"), /no es de the_worx/);
+  // En la app la misma regla la aplica lib/runtime-api con el mapa de canales de extra.api.
   const api = read("src/lib/api.js");
-  assert.match(api, /assertChannelMatchesEnvironment\(\{ brand: BRANDS\[brand\.id\], channel: Updates\.channel, environment: apiConfig\.environment \}\)/);
-  assert.ok(api.indexOf("assertChannelMatchesEnvironment(") < api.indexOf("export const api = createApiClient("), "antes de crear el cliente");
+  assert.match(api, /channel: Updates\.channel,/);
+  assert.ok(api.indexOf("assertRuntimeApi(") < api.indexOf("export const api = createApiClient("), "antes de crear el cliente");
 });
 
 test("el script de update solo enseña el plan salvo con --run", () => {

@@ -80,6 +80,9 @@ const BRANDS = {
     firebaseProjectId: "the-worx-client",
     // Reserva de la sala de reuniones (tarjeta del panel; mismo enlace que el portal web).
     conferenceRoomUrl: "https://orlando.theworxoffices.com/conference-room/",
+    // Politica corporativa: vale igual para Sandlake, Hallandale y Hunters Creek
+    // (los mismos datos que el portal web, src/lib/legalLinks.js del front).
+    privacyPolicy: { name: "The Worx Offices Privacy Policy", url: "https://theworxoffices.com/privacy-policy" },
     // APIs de esta marca por entorno (brands/api-environment.js). The Worx solo
     // tiene produccion, operativa: todos sus perfiles van ahi.
     api: {
@@ -143,6 +146,8 @@ const BRANDS = {
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
     firebaseProjectId: "my-hdg-mail-f00be",
     conferenceRoomUrl: "https://www.hdgexecutivesuites.com/conference-room/",
+    // Publicada en www.hdgexecutivesuites.com (comprobada el 2026-11-17).
+    privacyPolicy: { name: "HDG Executive Suites Privacy Policy", url: "https://www.hdgexecutivesuites.com/privacy-policy/" },
     // Dominios de HDG (backend feat/hdg-production-supabase, 3078f4e,
     // docs/HDG_MOBILE_PRODUCTION_HANDOFF.md §2): Sandbox en `sandbox-core`,
     // Production en `core`. Son APIs y bases distintas. Hasta que se promueva

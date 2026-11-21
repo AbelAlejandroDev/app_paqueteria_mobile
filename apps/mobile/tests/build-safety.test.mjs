@@ -194,13 +194,21 @@ test("cada URL de API es de una sola marca y todas son HTTPS", () => {
 test("app.config.js publica la API ya validada en extra.api", () => {
   assert.deepEqual(appConfigWith(profileEnv("worx-production")).extra.api, {
     brandId: "the_worx", environment: "production", url: WORX, host: "core.theworxoffices.com",
+    channels: BRANDS.the_worx.updateChannels,
   });
   assert.deepEqual(appConfigWith(profileEnv("hdg-preview")).extra.api, {
     brandId: "hdg", environment: "sandbox", url: HDG_SANDBOX, host: "sandbox-core.hdgexecutivesuites.com",
+    channels: BRANDS.hdg.updateChannels,
   });
   assert.deepEqual(appConfigWith(profileEnv("hdg-production")).extra.api, {
     brandId: "hdg", environment: "production", url: HDG_PRODUCTION, host: "core.hdgexecutivesuites.com",
+    channels: BRANDS.hdg.updateChannels,
   });
+  // extra solo lleva la URL de ESTA build: ni la del otro entorno ni la de otra marca.
+  const sandboxExtra = JSON.stringify(appConfigWith(profileEnv("hdg-testflight-sandbox")).extra);
+  assert.doesNotMatch(sandboxExtra, /\/\/core\.hdgexecutivesuites|theworxoffices/);
+  const productionExtra = JSON.stringify(appConfigWith(profileEnv("hdg-production")).extra);
+  assert.doesNotMatch(productionExtra, /sandbox-core|theworxoffices/);
   // Sin APP_ENV (los tests de marca, expo start sin script): el de la marca.
   assert.equal(appConfigWith({ APP_BRAND: "hdg" }).extra.api.url, HDG_SANDBOX);
   assert.equal(appConfigWith({ APP_BRAND: "the_worx" }).extra.api.url, WORX);
@@ -245,11 +253,11 @@ test("en runtime la app comprueba la URL contra su marca", () => {
   assert.throws(() => assertApiUrlForEnvironment({ brand: BRANDS.the_worx, url: WORX, environment: "sandbox" }), /no tiene API de sandbox/);
   assert.equal(assertApiUrlForEnvironment({ brand: BRANDS.the_worx, url: WORX, environment: "production" }), WORX);
 
+  // En la app: la config de la build frente a la URL empaquetada en el JS (lib/runtime-api).
   const api = read("src/lib/api.js");
-  assert.match(api, /Constants\.expoConfig\?\.extra\?\.api/);
-  assert.match(api, /assertApiUrlForEnvironment\(\{ brand: BRANDS\[brand\.id\], url: API_BASE_URL, environment: apiConfig\.environment \}\)/);
-  assert.match(api, /assertApiUrlForBrand\(apiConfig\.url, brand\.id\)/);
-  assert.doesNotMatch(api, /process\.env\.EXPO_PUBLIC_API_URL/, "la URL suelta no decide");
+  assert.match(api, /const apiConfig = Constants\.expoConfig\?\.extra\?\.api;/);
+  assert.match(api, /assertRuntimeApi\(\{\s*apiConfig,\s*brandId: brand\.id,[\s\S]*?bundledUrl: process\.env\.EXPO_PUBLIC_API_URL,\s*channel: Updates\.channel,\s*\}\)/);
+  assert.doesNotMatch(api, /(from\s+["']|require\(\s*["'])(\.\.\/)+brands/, "el catalogo de marcas no entra en el bundle");
 });
 
 test("el submit de HDG production va a My HDG Mail (equipo The Workbox), nunca a la app de The Worx", () => {
