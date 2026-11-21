@@ -28,16 +28,18 @@ Revisado en solo lectura: no se ha ejecutado `eas build`, `eas submit` ni `eas u
 |---|---|---|
 | Proyecto EAS | `@ab-estrategia-360/worx-client` (`922f4b80-…`) | `@ab-estrategia-360/hdg-client` (`2e12104c-…`) |
 | iOS bundle id / Android package | `com.theworxoffices.clientportal` | `com.hdgexecutivesuites.clientportal` |
-| API | `https://core.theworxoffices.com/api/v1` (production) | `https://core.hdgexecutivesuites.com/api/v1` (Sandbox) |
-| Perfiles | development, preview (APK), simulator, production, production-apk | development, preview (APK), simulator, **testflight-sandbox**, production (**bloqueado**) |
-| Canales OTA | development, preview, production → production | development, preview, testflight-sandbox → sandbox; production → bloqueado |
+| API | `https://core.theworxoffices.com/api/v1` (production) | Sandbox `https://sandbox-core.hdgexecutivesuites.com/api/v1`; Production `https://core.hdgexecutivesuites.com/api/v1` |
+| Perfiles | development, preview (APK), simulator, production, production-apk | development, preview (APK), simulator, **testflight-sandbox**, production (**autorizado; la build se frena mientras `core` sea Sandbox**) |
+| Canales OTA | development, preview, production → production | development, preview, testflight-sandbox → sandbox; production → production |
 | Version / build | `1.0.0`; numeros de build remotos en EAS (`appVersionSource: remote`), `autoIncrement` en tienda | igual |
 | Runtime | `native-3` | `native-3` |
-| Submit | iOS `ascAppId 6822867406`; Android `internal`/`draft` | `hdg-testflight-sandbox`: iOS `ascAppId 6835613644` (equipo 3KX6P6C79Q); `hdg-production` sin destino |
+| Submit | iOS `ascAppId 6822867406`; Android `internal`/`draft` | `hdg-testflight-sandbox`: iOS `ascAppId 6835613644` (equipo 3KX6P6C79Q); `hdg-production`: iOS `ascAppId 6835613644` (equipo 3KX6P6C79Q) |
 | Identificacion de pruebas | — | franja "Sandbox" desde el arranque; canal propio |
 
 `eas config` resuelve los 18 perfiles validos (iOS y Android) con su marca, canal y API;
-`hdg-production` falla a proposito ("los builds de production estan bloqueados").
+`hdg-production` resuelve HDG Production; en EAS, `scripts/check-hdg-production.js` (hook
+`eas-build-pre-install`) para la build mientras `core` siga siendo Sandbox. Ver
+`docs/hdg-production-app-review.md`.
 
 **OTA:** cada marca publica en su proyecto (una no llega a la otra) y, dentro de una
 marca, `scripts/eas-update.js` arma el update con el entorno del canal o se niega; la
@@ -80,7 +82,7 @@ node scripts/eas-update.js <marca> <canal> --message "que cambia" --run  # publi
 ## 3. TestFlight HDG Sandbox
 
 1. [ ] Seccion 0 y Apple de la seccion 2.
-2. [ ] `APP_BRAND=hdg APP_ENV=sandbox EXPO_PUBLIC_API_URL=https://core.hdgexecutivesuites.com/api/v1 npx eas-cli build --profile hdg-testflight-sandbox --platform ios`
+2. [ ] `APP_BRAND=hdg APP_ENV=sandbox EXPO_PUBLIC_API_URL=https://sandbox-core.hdgexecutivesuites.com/api/v1 npx eas-cli build --profile hdg-testflight-sandbox --platform ios`
        (interactivo la primera vez: iniciar sesion en Apple, credenciales y APNs).
 3. [ ] `npx eas-cli submit --profile hdg-testflight-sandbox --platform ios` (con el `ascAppId`).
 4. [ ] App Store Connect → TestFlight: informacion de prueba, grupo interno; si es

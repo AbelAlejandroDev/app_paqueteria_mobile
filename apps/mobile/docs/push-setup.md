@@ -108,7 +108,7 @@ Developer y vale para todas sus apps; Apple permite como mucho 2 por equipo.
 
 ```powershell
 cd D:\app_paqueter_react_native\apps\mobile
-$env:APP_BRAND="hdg"; $env:APP_ENV="sandbox"; $env:EXPO_PUBLIC_API_URL="https://core.hdgexecutivesuites.com/api/v1"
+$env:APP_BRAND="hdg"; $env:APP_ENV="sandbox"; $env:EXPO_PUBLIC_API_URL="https://sandbox-core.hdgexecutivesuites.com/api/v1"
 npx eas-cli credentials -p ios
 ```
 
