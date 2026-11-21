@@ -287,7 +287,7 @@ test("un prepare-payment con la tarjeta guardada que agota el timeout se envia u
   await setTokens({ accessToken: "a", refreshToken: "r" });
   let posts = 0;
   const api = createApiClient({
-    baseURL: "https://core.hdgexecutivesuites.com/api/v1",
+    baseURL: "https://sandbox-core.hdgexecutivesuites.com/api/v1",
     adapter: (config) => {
       posts++;
       return Promise.reject(new AxiosError("timeout of 20000ms exceeded", "ECONNABORTED", config, {}));

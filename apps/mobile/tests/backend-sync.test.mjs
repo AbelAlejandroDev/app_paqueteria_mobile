@@ -23,8 +23,8 @@ test("cada perfil de EAS apunta a la API de su marca por HTTPS (detalle en build
   for (const name of Object.keys(eas.build).filter((n) => !n.startsWith("base-"))) {
     const env = resolve(name);
     if (name.startsWith("worx-")) assert.equal(env.EXPO_PUBLIC_API_URL, "https://core.theworxoffices.com/api/v1", name);
-    else if (name === "hdg-production") assert.equal(env.EXPO_PUBLIC_API_URL, undefined, name + ": bloqueado, sin API");
-    else if (name.startsWith("hdg-")) assert.equal(env.EXPO_PUBLIC_API_URL, "https://core.hdgexecutivesuites.com/api/v1", name);
+    else if (name === "hdg-production") assert.equal(env.EXPO_PUBLIC_API_URL, "https://core.hdgexecutivesuites.com/api/v1", name + ": HDG Production");
+    else if (name.startsWith("hdg-")) assert.equal(env.EXPO_PUBLIC_API_URL, "https://sandbox-core.hdgexecutivesuites.com/api/v1", name);
     else assert.fail("perfil sin marca conocida: " + name);
   }
 });

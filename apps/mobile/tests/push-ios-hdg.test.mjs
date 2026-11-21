@@ -51,7 +51,7 @@ function appConfigWith(env) {
   }
 }
 
-const HDG_ENV = { APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://core.hdgexecutivesuites.com/api/v1" };
+const HDG_ENV = { APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://sandbox-core.hdgexecutivesuites.com/api/v1" };
 const WORX_ENV = { APP_BRAND: "the_worx", APP_ENV: "production", EXPO_PUBLIC_API_URL: "https://core.theworxoffices.com/api/v1" };
 
 /** Cliente HTTP simulado: guarda las peticiones y responde lo que se le diga, en orden. */

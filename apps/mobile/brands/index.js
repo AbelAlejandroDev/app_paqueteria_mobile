@@ -143,27 +143,36 @@ const BRANDS = {
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
     firebaseProjectId: "my-hdg-mail-f00be",
     conferenceRoomUrl: "https://www.hdgexecutivesuites.com/conference-room/",
-    // HDG Sandbox es su entorno habitual (API y base distintas de produccion).
-    // La de produccion no existe todavia: hasta configurarla aqui Y autorizar
-    // el lanzamiento, los builds de production de HDG fallan a proposito.
+    // Dominios de HDG (backend feat/hdg-production-supabase, 3078f4e,
+    // docs/HDG_MOBILE_PRODUCTION_HANDOFF.md §2): Sandbox en `sandbox-core`,
+    // Production en `core`. Son APIs y bases distintas. Hasta que se promueva
+    // Production, `core` sigue sirviendo HDG Sandbox: por eso una build de
+    // production de HDG en EAS comprueba antes que `core` ya no dice
+    // `deployment: "sandbox"` (scripts/check-hdg-production.js).
     api: {
-      sandbox: "https://core.hdgexecutivesuites.com/api/v1",
-      production: null,
+      sandbox: "https://sandbox-core.hdgexecutivesuites.com/api/v1",
+      production: "https://core.hdgexecutivesuites.com/api/v1",
     },
     defaultEnvironment: "sandbox",
     // Canales de EAS Update -> entorno. "production" es de HDG produccion, que
     // sigue bloqueado: ningun build ni update de Sandbox puede ir alli.
     updateChannels: { development: "sandbox", preview: "sandbox", "testflight-sandbox": "sandbox", production: "production" },
-    // El portal de miembros de HDG Sandbox (PORTAL_MEMBER_HOST__HDG__HOLLYWOOD).
-    // El de produccion aun no existe. Apagado por lo mismo que The Worx.
+    // El portal de miembros de HDG Production (members.); el de Sandbox es
+    // sandbox-members. Apagado por lo mismo que The Worx.
     appLinks: {
       enabled: false,
       hosts: ["members.hdgexecutivesuites.com"],
       paths: ["/set-password"],
     },
+    // Autorizado por el propietario el 2026-11-21 para TestFlight y Apple App
+    // Review contra HDG Production. La build sigue frenada mientras `core` sea
+    // Sandbox (scripts/check-hdg-production.js, hook de EAS).
     productionRelease: {
-      authorized: false,
-      reason: "La API de produccion de HDG no esta configurada y el lanzamiento no esta autorizado.",
+      authorized: true,
+      productionCheck: {
+        portalUrl: "https://core.hdgexecutivesuites.com/api/v1/public/portal",
+        origin: "https://members.hdgexecutivesuites.com",
+      },
     },
     // Manual de marca de HDG: Primary #2F4157, Secondary #577C8E, Accent
     // #C7D9E5, Background #F4EFEB; complementarios Dark Navy #12203A, Muted

@@ -40,7 +40,7 @@ function memoryStore() {
 /**
  * Un servidor de login como el real: con tenantSlug lo resuelve; sin el (ni
  * portal) responde 400 "tenantId: expected string, received undefined", que es
- * lo que devuelve core.hdgexecutivesuites.com (comprobado con una cuenta ficticia).
+ * lo que devolvia HDG Sandbox (comprobado con una cuenta ficticia).
  */
 function loginServer({ resolvesTo = (slug) => slug } = {}) {
   const bodies = [];
@@ -87,7 +87,7 @@ for (const brandId of ["the_worx", "hdg"]) {
 }
 
 test("HDG apunta a su API (HDG Sandbox) y The Worx a la suya", () => {
-  assert.equal(resolveApiConfig({ brand: BRANDS.hdg, env: {} }).url, "https://core.hdgexecutivesuites.com/api/v1");
+  assert.equal(resolveApiConfig({ brand: BRANDS.hdg, env: {} }).url, "https://sandbox-core.hdgexecutivesuites.com/api/v1");
   assert.equal(resolveApiConfig({ brand: BRANDS.the_worx, env: {} }).url, "https://core.theworxoffices.com/api/v1");
   assert.equal(BRANDS.hdg.tenantSlug, "hdg");
   assert.equal(BRANDS.the_worx.tenantSlug, "the_worx");
@@ -180,7 +180,7 @@ test("tras el login, un refresh con 429 o 503 conserva la sesion de HDG", async 
     await setAuthUser(userOf("hdg"));
     let unauthorized = 0;
     const api = createApiClient({
-      baseURL: "https://core.hdgexecutivesuites.com/api/v1",
+      baseURL: "https://sandbox-core.hdgexecutivesuites.com/api/v1",
       onUnauthorized: () => (unauthorized += 1),
       adapter: (config) => {
         const response = (s, data) => Promise.reject(new AxiosError("x", "ERR", config, {}, { status: s, data, headers: {}, config }));
@@ -198,7 +198,7 @@ test("SESSION_REVOKED en el refresh cierra la sesion de HDG", async () => {
   await setTokens({ accessToken: "access-hdg", refreshToken: "refresh-hdg" });
   const reasons = [];
   const api = createApiClient({
-    baseURL: "https://core.hdgexecutivesuites.com/api/v1",
+    baseURL: "https://sandbox-core.hdgexecutivesuites.com/api/v1",
     onUnauthorized: (reason) => reasons.push(reason),
     adapter: (config) => {
       const data = String(config.url).endsWith("/auth/refresh") ? { error: "x", code: "SESSION_REVOKED" } : { error: "Invalid or expired token" };

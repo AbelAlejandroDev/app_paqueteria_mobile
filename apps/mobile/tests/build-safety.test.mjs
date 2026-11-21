@@ -13,7 +13,8 @@ const { BRANDS, getBrand } = require("../brands/index.js");
 const { assertApiUrlForBrand, brandForApiUrl, resolveApiConfig } = require("../brands/api-environment.js");
 
 const WORX = "https://core.theworxoffices.com/api/v1";
-const HDG_SANDBOX = "https://core.hdgexecutivesuites.com/api/v1";
+const HDG_SANDBOX = "https://sandbox-core.hdgexecutivesuites.com/api/v1";
+const HDG_PRODUCTION = "https://core.hdgexecutivesuites.com/api/v1";
 
 const eas = JSON.parse(read("eas.json"));
 
@@ -88,20 +89,36 @@ test("HDG: desarrollo, preview y simulador van a HDG Sandbox", () => {
       brandId: "hdg",
       environment: "sandbox",
       url: HDG_SANDBOX,
-      host: "core.hdgexecutivesuites.com",
+      host: "sandbox-core.hdgexecutivesuites.com",
     }, name);
   }
 });
 
-test("HDG production esta bloqueado hasta configurar su API y autorizar el lanzamiento", () => {
-  assert.throws(() => resolveProfile("hdg-production"), /production estan bloqueados/);
-  assert.throws(() => appConfigWith(profileEnv("hdg-production")), /production estan bloqueados/);
-  assert.equal(BRANDS.hdg.productionRelease.authorized, false);
-  assert.equal(BRANDS.hdg.api.production, null);
+test("HDG production: core.hdgexecutivesuites.com, autorizado y con su propia URL (nunca heredada)", () => {
+  assert.deepEqual(resolveProfile("hdg-production"), {
+    brandId: "hdg",
+    environment: "production",
+    url: HDG_PRODUCTION,
+    host: "core.hdgexecutivesuites.com",
+  });
+  // La URL va escrita en el propio perfil: no la hereda de base-production ni de The Worx.
+  assert.equal(eas.build["hdg-production"].env.EXPO_PUBLIC_API_URL, HDG_PRODUCTION);
+  assert.notEqual(profileEnv("hdg-production").EXPO_PUBLIC_API_URL, WORX);
+  assert.equal(BRANDS.hdg.productionRelease.authorized, true);
+  assert.equal(BRANDS.hdg.api.production, HDG_PRODUCTION);
+  assert.notEqual(BRANDS.hdg.api.production, BRANDS.hdg.api.sandbox);
+  const expo = appConfigWith(profileEnv("hdg-production"));
+  assert.equal(expo.ios.bundleIdentifier, "com.hdgexecutivesuites.clientportal");
+  assert.equal(expo.extra.api.environment, "production");
+  assert.equal(expo.extra.eas.projectId, "2e12104c-c190-48aa-b044-da110d34e8f1");
+  assert.equal(expo.version, "1.0.0");
+  // El freno de EAS mira la URL publica de la misma API de production.
+  assert.equal(new URL(BRANDS.hdg.productionRelease.productionCheck.portalUrl).host, "core.hdgexecutivesuites.com");
+  assert.equal(BRANDS.hdg.productionRelease.productionCheck.origin, "https://members.hdgexecutivesuites.com");
 });
 
 test("ninguna build de HDG usa la API de The Worx, ni al reves", () => {
-  for (const name of buildProfiles.filter((n) => n !== "hdg-production")) {
+  for (const name of buildProfiles) {
     const { brandId, url } = resolveProfile(name);
     assert.equal(brandForApiUrl(url), brandId, name);
     assert.equal(brandForApiUrl(profileEnv(name).EXPO_PUBLIC_API_URL), brandId, name);
@@ -133,11 +150,14 @@ test("ninguna build de production apunta a sandbox", () => {
   );
 });
 
-test("autorizar HDG production exige las dos cosas: API y autorizacion", () => {
-  const withApiOnly = { ...BRANDS.hdg, api: { ...BRANDS.hdg.api, production: "https://api.prod.hdg.example/api/v1" } };
-  assert.throws(() => resolveApiConfig({ brand: withApiOnly, env: { APP_ENV: "production" } }), /bloqueados/);
-  const authorizedNoApi = { ...BRANDS.hdg, productionRelease: { authorized: true } };
+test("production exige las dos cosas: API y autorizacion (quitar una vuelve a bloquear)", () => {
+  const notAuthorized = { ...BRANDS.hdg, productionRelease: { authorized: false, reason: "x" } };
+  assert.throws(() => resolveApiConfig({ brand: notAuthorized, env: { APP_ENV: "production" } }), /bloqueados/);
+  const authorizedNoApi = { ...BRANDS.hdg, api: { ...BRANDS.hdg.api, production: null } };
   assert.throws(() => resolveApiConfig({ brand: authorizedNoApi, env: { APP_ENV: "production" } }), /no tiene API de production/);
+  // HDG production no puede ser la de The Worx (dominio compartido): una URL, una marca.
+  const sharedWithWorx = { ...BRANDS.hdg, api: { ...BRANDS.hdg.api, production: WORX } };
+  assert.throws(() => resolveApiConfig({ brand: sharedWithWorx, env: { APP_ENV: "production" } }), /a la vez para hdg y the_worx/);
 });
 
 test("The Worx no tiene sandbox: pedirlo falla en vez de caer a otra API", () => {
@@ -176,7 +196,10 @@ test("app.config.js publica la API ya validada en extra.api", () => {
     brandId: "the_worx", environment: "production", url: WORX, host: "core.theworxoffices.com",
   });
   assert.deepEqual(appConfigWith(profileEnv("hdg-preview")).extra.api, {
-    brandId: "hdg", environment: "sandbox", url: HDG_SANDBOX, host: "core.hdgexecutivesuites.com",
+    brandId: "hdg", environment: "sandbox", url: HDG_SANDBOX, host: "sandbox-core.hdgexecutivesuites.com",
+  });
+  assert.deepEqual(appConfigWith(profileEnv("hdg-production")).extra.api, {
+    brandId: "hdg", environment: "production", url: HDG_PRODUCTION, host: "core.hdgexecutivesuites.com",
   });
   // Sin APP_ENV (los tests de marca, expo start sin script): el de la marca.
   assert.equal(appConfigWith({ APP_BRAND: "hdg" }).extra.api.url, HDG_SANDBOX);
@@ -198,11 +221,17 @@ test("los scripts locales fijan marca, entorno y URL coherentes", () => {
     assert.doesNotThrow(() => resolveApiConfig({ brand: getBrand(env.APP_BRAND), env }), name);
   }
   assert.match(scripts["start:hdg"], /APP_ENV=sandbox/);
-  assert.match(scripts["start:hdg"], /core\.hdgexecutivesuites\.com/);
+  assert.match(scripts["start:hdg"], /sandbox-core\.hdgexecutivesuites\.com/);
+  // Ningun script local arranca HDG contra Production.
+  for (const [name, command] of Object.entries(scripts)) {
+    if (/APP_BRAND=hdg/.test(command)) assert.doesNotMatch(command, /APP_ENV=production|\/\/core\.hdgexecutivesuites/, name);
+  }
 });
 
 test("en runtime la app comprueba la URL contra su marca", () => {
   assert.equal(assertApiUrlForBrand(HDG_SANDBOX, "hdg"), HDG_SANDBOX);
+  assert.equal(assertApiUrlForBrand(HDG_PRODUCTION, "hdg"), HDG_PRODUCTION);
+  assert.throws(() => assertApiUrlForBrand(HDG_PRODUCTION, "the_worx"), /es de hdg/);
   assert.equal(assertApiUrlForBrand(WORX, "the_worx"), WORX);
   assert.throws(() => assertApiUrlForBrand(WORX, "hdg"), /es de the_worx/);
   assert.throws(() => assertApiUrlForBrand(HDG_SANDBOX, "the_worx"), /es de hdg/);
@@ -214,8 +243,11 @@ test("en runtime la app comprueba la URL contra su marca", () => {
   assert.doesNotMatch(api, /process\.env\.EXPO_PUBLIC_API_URL/, "la URL suelta no decide");
 });
 
-test("el submit de HDG production no tiene destino configurado", () => {
-  assert.deepEqual(eas.submit["hdg-production"], {});
+test("el submit de HDG production va a My HDG Mail (equipo The Workbox), nunca a la app de The Worx", () => {
+  assert.deepEqual(eas.submit["hdg-production"], { ios: { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" } });
+  assert.notEqual(eas.submit["hdg-production"].ios.ascAppId, eas.submit["worx-production"].ios.ascAppId);
+  assert.equal(eas.submit["hdg-production"].android, undefined, "solo iOS por ahora");
+  assert.equal(eas.build["hdg-production"].autoSubmit, undefined, "sin auto-submit");
 });
 
 // ── TestFlight de HDG contra Sandbox ────────────────────────────────────────
@@ -230,7 +262,7 @@ test("hdg-testflight-sandbox: build de tienda contra HDG Sandbox, con canal OTA 
     brandId: "hdg",
     environment: "sandbox",
     url: HDG_SANDBOX,
-    host: "core.hdgexecutivesuites.com",
+    host: "sandbox-core.hdgexecutivesuites.com",
   });
   const expo = appConfigWith(profileEnv("hdg-testflight-sandbox"));
   assert.equal(expo.ios.bundleIdentifier, "com.hdgexecutivesuites.clientportal");
@@ -238,11 +270,11 @@ test("hdg-testflight-sandbox: build de tienda contra HDG Sandbox, con canal OTA 
   assert.equal(expo.extra.api.environment, "sandbox");
 });
 
-test("ningun otro perfil usa el canal de TestFlight Sandbox, y hdg-production sigue bloqueado", () => {
+test("ningun otro perfil usa el canal de TestFlight Sandbox; hdg-production usa production", () => {
   for (const name of buildProfiles.filter((n) => n !== "hdg-testflight-sandbox")) {
     assert.notEqual(profileEnv(name).channel ?? eas.build[name].channel, "testflight-sandbox", name);
   }
-  assert.throws(() => resolveProfile("hdg-production"), /production estan bloqueados/);
+  assert.equal(profileEnv("hdg-production").channel ?? eas.build["base-production"].channel, "production");
   // Submit: My HDG Mail en App Store Connect (equipo The Workbox, LLC), nunca la app de The Worx.
   assert.deepEqual(eas.submit["hdg-testflight-sandbox"], { ios: { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" } });
   assert.notEqual(eas.submit["hdg-testflight-sandbox"].ios.ascAppId, eas.submit["worx-production"].ios.ascAppId);

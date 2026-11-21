@@ -97,7 +97,7 @@ test("plan de eas update: marca, entorno, URL y entorno de EAS coherentes con el
   assert.deepEqual(worx.args.slice(0, 6), ["eas-cli", "update", "--channel", "production", "--environment", "production"]);
 
   const tf = updatePlan({ brandId: "hdg", channel: "testflight-sandbox", eas, message: "fix" });
-  assert.deepEqual(tf.env, { APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://core.hdgexecutivesuites.com/api/v1" });
+  assert.deepEqual(tf.env, { APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://sandbox-core.hdgexecutivesuites.com/api/v1" });
   assert.deepEqual(tf.args.slice(0, 6), ["eas-cli", "update", "--channel", "testflight-sandbox", "--environment", "preview"]);
 
   for (const channel of ["development", "preview"]) {
@@ -106,8 +106,10 @@ test("plan de eas update: marca, entorno, URL y entorno de EAS coherentes con el
   }
 });
 
-test("plan de eas update: HDG production bloqueado, canales ajenos y sin mensaje, rechazados", () => {
-  assert.throws(() => updatePlan({ brandId: "hdg", channel: "production", eas, message: "x" }), /bloqueados/);
+test("plan de eas update: HDG production va a core; canales ajenos y sin mensaje, rechazados", () => {
+  const hdgProd = updatePlan({ brandId: "hdg", channel: "production", eas, message: "x" });
+  assert.equal(hdgProd.env.APP_ENV, "production");
+  assert.equal(hdgProd.env.EXPO_PUBLIC_API_URL, "https://core.hdgexecutivesuites.com/api/v1");
   assert.throws(() => updatePlan({ brandId: "the_worx", channel: "testflight-sandbox", eas, message: "x" }), /no tiene el canal/);
   assert.throws(() => updatePlan({ brandId: "hdg", channel: "staging", eas, message: "x" }), /no tiene el canal/);
   assert.throws(() => updatePlan({ brandId: "the_worx", channel: "production", eas, message: "" }), /--message/);
@@ -157,22 +159,26 @@ test("version comercial, numeros de build remotos y autoIncrement solo en builds
 
 // ── Envio a tiendas ─────────────────────────────────────────────────────────
 
-test("submit: cada marca con su app de App Store Connect; HDG production sin destino", () => {
+test("submit: cada marca con su app de App Store Connect; HDG production a My HDG Mail", () => {
   assert.deepEqual(eas.submit["worx-production"].ios, { ascAppId: "6822867406" });
   assert.deepEqual(eas.submit["worx-production"].android, { track: "internal", releaseStatus: "draft" });
   assert.deepEqual(eas.submit["hdg-testflight-sandbox"].ios, { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" });
-  assert.deepEqual(eas.submit["hdg-production"], {});
+  assert.deepEqual(eas.submit["hdg-production"], { ios: { ascAppId: "6835613644", appleTeamId: "3KX6P6C79Q" } });
   // Ningun fichero de credenciales en el repo.
   assert.doesNotMatch(read("eas.json"), /serviceAccountKeyPath|\.p8|\.p12|\.jks|\.keystore/);
 });
 
-// ── HDG Production bloqueado; Sandbox se identifica como pruebas ───────────
+// ── HDG Production (core) frente a HDG Sandbox (sandbox-core) ──────────────
 
-test("HDG production sigue bloqueado: build, config y update", () => {
-  assert.equal(BRANDS.hdg.productionRelease.authorized, false);
-  assert.throws(() => resolveApiConfig({ brand: BRANDS.hdg, env: { APP_ENV: "production" } }), /bloqueados/);
-  assert.throws(() => appConfigWith({ APP_BRAND: "hdg", APP_ENV: "production" }), /bloqueados/);
-  assert.throws(() => updatePlan({ brandId: "hdg", channel: "production", eas, message: "x" }), /bloqueados/);
+test("HDG production: build, config y update van a core.hdgexecutivesuites.com; Sandbox a sandbox-core", () => {
+  assert.equal(BRANDS.hdg.productionRelease.authorized, true);
+  const prod = resolveApiConfig({ brand: BRANDS.hdg, env: { APP_ENV: "production" } });
+  assert.equal(prod.url, "https://core.hdgexecutivesuites.com/api/v1");
+  assert.equal(appConfigWith({ APP_BRAND: "hdg", APP_ENV: "production" }).extra.api.environment, "production");
+  assert.equal(resolveApiConfig({ brand: BRANDS.hdg, env: { APP_ENV: "sandbox" } }).url, "https://sandbox-core.hdgexecutivesuites.com/api/v1");
+  // Sin APP_ENV, HDG sigue siendo Sandbox: nunca se cae a Production por omision.
+  assert.equal(BRANDS.hdg.defaultEnvironment, "sandbox");
+  assert.equal(resolveApiConfig({ brand: BRANDS.hdg, env: {} }).environment, "sandbox");
 });
 
 test("toda build de HDG Sandbox enseña la franja de pruebas desde el arranque (antes del login)", () => {
@@ -303,13 +309,13 @@ test("google-services.json: el de cada marca es de su app y de su proyecto", () 
 });
 
 test("HDG: su google-services.json va en el build y Android registra push con el", () => {
-  const expo = appConfigWith({ APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://core.hdgexecutivesuites.com/api/v1" });
+  const expo = appConfigWith({ APP_BRAND: "hdg", APP_ENV: "sandbox", EXPO_PUBLIC_API_URL: "https://sandbox-core.hdgexecutivesuites.com/api/v1" });
   assert.equal(expo.extra.push.androidFcmConfigured, true);
   assert.equal(expo.android.googleServicesFile, "./assets/brands/hdg/google-services.json", "nunca el de otra marca");
   assert.equal(expo.android.package, "com.hdgexecutivesuites.clientportal");
   assert.equal(expo.extra.eas.projectId, "2e12104c-c190-48aa-b044-da110d34e8f1", "tokens Expo del proyecto de HDG");
-  // Tener Firebase no abre HDG Production: sigue bloqueado.
-  assert.throws(() => appConfigWith({ APP_BRAND: "hdg", APP_ENV: "production" }), /bloqueados/);
+  // Production usa el mismo google-services.json de HDG, nunca el de The Worx.
+  assert.equal(appConfigWith({ APP_BRAND: "hdg", APP_ENV: "production" }).android.googleServicesFile, "./assets/brands/hdg/google-services.json");
 });
 
 test("un google-services.json del proyecto viejo de HDG, o una clave privada con ese nombre, se rechaza", () => {

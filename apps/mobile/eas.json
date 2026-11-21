@@ -75,7 +75,7 @@
       "env": {
         "APP_BRAND": "hdg",
         "APP_ENV": "sandbox",
-        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://sandbox-core.hdgexecutivesuites.com/api/v1"
       }
     },
     "hdg-preview": {
@@ -83,7 +83,7 @@
       "env": {
         "APP_BRAND": "hdg",
         "APP_ENV": "sandbox",
-        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://sandbox-core.hdgexecutivesuites.com/api/v1"
       }
     },
     "hdg-simulator": {
@@ -91,7 +91,7 @@
       "env": {
         "APP_BRAND": "hdg",
         "APP_ENV": "sandbox",
-        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://sandbox-core.hdgexecutivesuites.com/api/v1"
       }
     },
     "hdg-testflight-sandbox": {
@@ -102,14 +102,15 @@
       "env": {
         "APP_BRAND": "hdg",
         "APP_ENV": "sandbox",
-        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://sandbox-core.hdgexecutivesuites.com/api/v1"
       }
     },
     "hdg-production": {
       "extends": "base-production",
       "env": {
         "APP_BRAND": "hdg",
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://core.hdgexecutivesuites.com/api/v1"
       }
     }
   },
@@ -129,6 +130,11 @@
         "appleTeamId": "3KX6P6C79Q"
       }
     },
-    "hdg-production": {}
+    "hdg-production": {
+      "ios": {
+        "ascAppId": "6835613644",
+        "appleTeamId": "3KX6P6C79Q"
+      }
+    }
   }
 }
