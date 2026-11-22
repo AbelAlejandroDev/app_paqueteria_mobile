@@ -151,6 +151,10 @@ module.exports = {
         ...(monochromeIcon ? { monochromeImage: monochromeIcon } : {}),
       },
       predictiveBackGestureEnabled: false,
+      // "Mostrar sobre otras apps": lo mete la plantilla nativa (aparecia en la
+      // APK b07a8dcf) y la app no lo usa. Un permiso sensible que no se usa es
+      // una pregunta mas en la revision de Google Play.
+      blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
       // Registra la app ante Firebase y sin el no hay notificaciones en
       // Android. Es por marca porque cada una tiene su propio paquete y por
       // tanto su propio proyecto de Firebase.
