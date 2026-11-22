@@ -73,6 +73,37 @@ export const QUOTE_OPTIONS_INVALID_CODES = [
   "FORWARD_INSURANCE_MISMATCH",
 ];
 
+export const QUOTE_INVALID_PAYMENT_MESSAGE =
+  "This rate no longer matches the tracking or insurance chosen, so it can't be paid. New rates are needed: pull down to refresh, and if nothing changes, contact your center.";
+
+/**
+ * La tarifa que tiene elegida una solicitud: lo que identifica la cotizacion
+ * que se pagaria. Tras un 409 de cotizacion invalida el pago queda bloqueado
+ * para ESTA tarifa; cuando la solicitud trae otra (cotizacion nueva), la
+ * clave cambia y se puede pagar con normalidad. No incluye paymentStatus ni
+ * updatedAt, que cambian sin que cambie la tarifa.
+ */
+export function paymentRateKey(request) {
+  const d = request?.forwardDetails || {};
+  return JSON.stringify([
+    request?.id ?? null,
+    d.quoteId ?? null,
+    d.selectedOptionId ?? d.optionId ?? null,
+    d.quotedCarrier ?? null,
+    d.quotedService ?? null,
+    d.quotedAmountCents ?? null,
+    d.quotedAt ?? null,
+    d.trackingRequested ?? null,
+    d.insuranceRequested ?? null,
+    d.insuredValueCents ?? null,
+  ]);
+}
+
+/** Si el pago esta bloqueado: hubo un 409 de cotizacion con esta misma tarifa. */
+export function isQuoteBlocked(blockedKey, request) {
+  return typeof blockedKey === "string" && blockedKey === paymentRateKey(request);
+}
+
 const UNAVAILABLE_CODES = [
   "ONLINE_PAYMENTS_UNAVAILABLE",
   "BILLING_PROVIDER_NOT_STRIPE",
@@ -153,7 +184,7 @@ export function forwardPaymentError(error) {
     return withCharged({
       kind: "quote-invalid",
       retryable: false,
-      message: "This shipment's rate no longer matches the tracking or insurance you chose, so it can't be paid. Please contact your center.",
+      message: QUOTE_INVALID_PAYMENT_MESSAGE,
     });
   }
   if (code === "FORWARDING_PAYMENT_AMOUNT_INVALID") {

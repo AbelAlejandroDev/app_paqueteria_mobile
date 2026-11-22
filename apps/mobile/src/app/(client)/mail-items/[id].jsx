@@ -31,7 +31,7 @@ import {
   insuranceAvailableFor,
   INSURED_VALUE_MAX_USD,
   INSURED_VALUE_MIN_USD,
-  PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE,
+  insuranceUnavailableMessage,
   QUOTE_INVALID_MESSAGE,
   rateExtras,
   rateMatchesOptions,
@@ -370,7 +370,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const [quotedOptions, setQuotedOptions] = useState(null);
 
   const isLetter = item?.type === "LETTER";
-  // Seguro adicional de paquetes: no se contrata todavia (lib/forwarding-options).
+  // Seguro adicional: ni paquetes ni sobres grandes lo admiten (lib/forwarding-options).
   const insuranceAllowed = insuranceAvailableFor(item?.type);
 
   // Cada cambio de destino deja atras la cotizacion en curso: su respuesta,
@@ -506,7 +506,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       setImmediateFeeCents(0);
       setRatesEnvironment("");
       setQuotedOptions(null);
-      const outcome = describeForwardingOptionsError(error);
+      const outcome = describeForwardingOptionsError(error, undefined, { itemType: item?.type });
       // Sin tarifas para estas opciones: estado vacio con la explicacion.
       if (outcome.kind === "no-compatible-rates" || outcome.kind === "insurance-unavailable") {
         setQuoteEmpty(outcome);
@@ -532,7 +532,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       await onRefresh?.();
     },
     onError: (error) => {
-      const outcome = describeForwardingOptionsError(error, "Unable to select forwarding rate");
+      const outcome = describeForwardingOptionsError(error, "Unable to select forwarding rate", { itemType: item?.type });
       // 409: la cotizacion ya no vale. Se borra para que no se pueda seguir con ella.
       if (outcome.kind === "quote-invalid" || outcome.kind === "no-compatible-rates" || outcome.kind === "insurance-unavailable") {
         clearRates();
@@ -858,11 +858,11 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                 ) : null}
               </>
             ) : (
-              // Paquetes: el seguro adicional aun no se contrata. Se ve, pero no
+              // Paquetes y sobres grandes: el seguro adicional no se contrata. Se ve, pero no
               // se puede pedir, y no se dice que el valor declarado asegure nada.
               <ToggleRow
                 label="Add insurance"
-                description={PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE}
+                description={insuranceUnavailableMessage(item?.type)}
                 value={false}
                 disabled
                 onValueChange={() => {}}

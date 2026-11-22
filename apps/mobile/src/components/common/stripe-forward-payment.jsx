@@ -7,7 +7,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { notifyCapabilitiesStale } from "@/lib/capabilities-events";
 import { paymentStatusMinPollMs } from "@/lib/capabilities";
-import { confirmRepricedRatePath, createSingleFlight, forwardPaymentError, paymentStatusPath } from "@/lib/forward-payment";
+import {
+  confirmRepricedRatePath,
+  createSingleFlight,
+  forwardPaymentError,
+  isQuoteBlocked,
+  paymentRateKey,
+  paymentStatusPath,
+  QUOTE_INVALID_PAYMENT_MESSAGE,
+} from "@/lib/forward-payment";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { stripeReturnBody } from "@/lib/stripe-return";
 import { ACTION_NONE, ACTION_RESUME, busyDeadline, isStillBusy, stripePaymentDecision } from "@/lib/stripe-payment-guard";
@@ -44,6 +52,10 @@ export default function StripeForwardPayment({ request, mailItemId, capabilities
   const [confirmedAmount, setConfirmedAmount] = useState(null);
   const [busyUntil, setBusyUntil] = useState(0);
   const [starting, setStarting] = useState(false);
+  // 409 de cotizacion invalida: la tarifa con la que paso queda descartada y no
+  // se ofrece pagar hasta que la solicitud traiga otra (lib/forward-payment).
+  const [invalidQuoteKey, setInvalidQuoteKey] = useState(null);
+  const quoteBlocked = isQuoteBlocked(invalidQuoteKey, request);
 
   const statusKey = [FORWARD_PAYMENT_STATUS_KEY, request.id];
   // Lectura del estado al abrir la pieza: solo lee (GET), no cobra nada.
@@ -75,6 +87,14 @@ export default function StripeForwardPayment({ request, mailItemId, capabilities
 
   const handleError = (error) => {
     const outcome = forwardPaymentError(error);
+    if (outcome.kind === "quote-invalid") {
+      // Sin reintento: se descarta la tarifa y se recarga la solicitud.
+      setInvalidQuoteKey(paymentRateKey(request));
+      setConfirmedAmount(null);
+      setNotice(null);
+      onRefresh?.();
+      return;
+    }
     if (outcome.kind === "paid") {
       setNotice({ tone: "emerald", text: "This shipment is already paid." });
       refreshAfterPayment();
@@ -177,6 +197,7 @@ export default function StripeForwardPayment({ request, mailItemId, capabilities
    */
   const startPayment = () =>
     lock.run(async () => {
+      if (quoteBlocked) return;
       if (isStillBusy(busyUntil)) {
         setNotice({ tone: "amber", text: "This payment is already being prepared. Try again in a few seconds." });
         return;
@@ -204,7 +225,7 @@ export default function StripeForwardPayment({ request, mailItemId, capabilities
   }
 
   const busy = starting || checkout.isPending || confirmReprice.isPending;
-  const canOffer = decision.action !== ACTION_NONE && !status.waiting;
+  const canOffer = decision.action !== ACTION_NONE && !status.waiting && !quoteBlocked;
   const label =
     decision.action === ACTION_RESUME
       ? "Continue payment"
@@ -214,6 +235,7 @@ export default function StripeForwardPayment({ request, mailItemId, capabilities
 
   return (
     <View className="mt-2 gap-2">
+      {quoteBlocked ? <Notice tone="amber">{QUOTE_INVALID_PAYMENT_MESSAGE}</Notice> : null}
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {!notice && reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
       {!notice && !reading && decision.action === ACTION_NONE && decision.message ? (

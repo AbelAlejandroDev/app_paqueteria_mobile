@@ -7,7 +7,15 @@ import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { notifyCapabilitiesStale } from "@/lib/capabilities-events";
 import { paymentStatusMinPollMs, savedCardAllowed, zohoBillingActions } from "@/lib/capabilities";
-import { confirmRepricedRatePath, createSingleFlight, forwardPaymentError, preparePaymentPath } from "@/lib/forward-payment";
+import {
+  confirmRepricedRatePath,
+  createSingleFlight,
+  forwardPaymentError,
+  isQuoteBlocked,
+  paymentRateKey,
+  preparePaymentPath,
+  QUOTE_INVALID_PAYMENT_MESSAGE,
+} from "@/lib/forward-payment";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { sessionScope } from "@/lib/session-scope";
 import { BILLING_PAYMENT_QUERY_KEY, billingPaymentQueryOptions } from "@/lib/use-capabilities";
@@ -54,6 +62,10 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
   const [noSavedCard, setNoSavedCard] = useState(false);
   const [declined, setDeclined] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // 409 de cotizacion invalida: se descarta la factura revisada y no se ofrece
+  // pagar hasta que la solicitud traiga otra tarifa (lib/forward-payment).
+  const [invalidQuoteKey, setInvalidQuoteKey] = useState(null);
+  const quoteBlocked = isQuoteBlocked(invalidQuoteKey, request);
 
   const zohoActions = zohoBillingActions(capabilities);
   const allowSavedCard = savedCardAllowed(capabilities) && !noSavedCard && nowMs >= savedCardBlockedUntil;
@@ -82,11 +94,19 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
     },
   });
 
-  const guarded = (mutation, variables) => lock.run(() => mutation.mutateAsync(variables).catch(() => {}));
+  const guarded = (mutation, variables) => lock.run(() => (quoteBlocked ? Promise.resolve() : mutation.mutateAsync(variables).catch(() => {})));
 
   // ── prepare-payment ──
   const handlePrepareError = (error) => {
     const outcome = forwardPaymentError(error);
+    if (outcome.kind === "quote-invalid") {
+      // Sin reintento: fuera la factura y la tarifa; se recarga la solicitud.
+      setInvalidQuoteKey(paymentRateKey(request));
+      setInvoice(null);
+      setNotice(null);
+      onRefresh?.();
+      return;
+    }
     if (outcome.kind === "paid") {
       setNotice({ tone: "emerald", text: "This shipment is already paid." });
       refreshAfterPayment();
@@ -241,10 +261,11 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
     );
   }
 
-  const blocked = ["review", "cancelled", "refunded"].includes(reading?.state);
+  const blocked = quoteBlocked || ["review", "cancelled", "refunded"].includes(reading?.state);
 
   return (
     <View className="mt-2 gap-2">
+      {quoteBlocked ? <Notice tone="amber">{QUOTE_INVALID_PAYMENT_MESSAGE}</Notice> : null}
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
 

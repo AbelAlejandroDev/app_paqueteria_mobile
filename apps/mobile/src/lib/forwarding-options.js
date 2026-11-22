@@ -10,8 +10,12 @@
  *   - Paquetes: todos los servicios disponibles llevan seguimiento, asi que con
  *     Tracking OFF el backend responde 422 sin tarifas; la app lo explica y
  *     ofrece encenderlo, sin encenderlo ella.
- *   - Paquetes: el seguro adicional todavia no se contrata de verdad, asi que la
- *     casilla esta deshabilitada y nunca se pide.
+ *   - Paquetes y sobres grandes (LARGE_ENVELOPE, parcelType FLAT): el seguro
+ *     adicional no se contrata, asi que la casilla esta deshabilitada y nunca se
+ *     pide (el backend responde 422 INSURANCE_NOT_AVAILABLE_FOR_PACKAGES).
+ *   - Sobres grandes: Tracking OFF puede tener tarifas (USPS First-Class Flat
+ *     sin seguimiento). Que haya o no tarifas lo dice el backend; la app solo
+ *     filtra por `trackingIncluded`.
  *   - "Tracking included" e "Insured" se enseñan solo si la tarifa lo trae:
  *     `trackingIncluded` y el servicio especial `Ins` con su valor. El valor
  *     declarado no es un seguro.
@@ -24,6 +28,8 @@ export const INSURED_VALUE_MIN_USD = 100;
 export const INSURED_VALUE_MAX_USD = 5000;
 
 export const PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE = "Additional insurance is not available for packages yet.";
+export const LARGE_ENVELOPE_INSURANCE_UNAVAILABLE_MESSAGE = "Additional insurance is not available for large envelopes yet.";
+const ITEM_INSURANCE_UNAVAILABLE_MESSAGE = "Additional insurance is not available for this item yet.";
 export const INSURANCE_REQUIRES_TRACKING_MESSAGE =
   "Insurance is only available with a tracked service. Turn on Add Tracking to add insurance.";
 export const QUOTE_INVALID_MESSAGE =
@@ -56,9 +62,23 @@ export const QUOTE_INVALID_CODES = Object.freeze([
   "FORWARD_INSURANCE_MISMATCH",
 ]);
 
-/** El seguro adicional de paquetes no esta implementado: solo cartas y sobres grandes. */
+const normalizedType = (itemType) => String(itemType || "").trim().toUpperCase();
+
+/**
+ * Si la pantalla de cotizacion puede pedir seguro adicional para este tipo.
+ * Solo cartas (que lo piden en su formulario, letterForward); ni paquetes ni
+ * sobres grandes.
+ */
 export function insuranceAvailableFor(itemType) {
-  return String(itemType || "").trim().toUpperCase() !== "PACKAGE";
+  return normalizedType(itemType) === "LETTER";
+}
+
+/** El texto de la casilla deshabilitada segun el tipo de pieza. */
+export function insuranceUnavailableMessage(itemType) {
+  const type = normalizedType(itemType);
+  if (type === "PACKAGE") return PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE;
+  if (type === "LARGE_ENVELOPE") return LARGE_ENVELOPE_INSURANCE_UNAVAILABLE_MESSAGE;
+  return ITEM_INSURANCE_UNAVAILABLE_MESSAGE;
 }
 
 /**
@@ -91,7 +111,7 @@ export function insuredValueProblem(text) {
 export function shippingOptionsProblem({ itemType, letterForward = false, trackingRequested = false, insuranceRequested = false, insuredValue = "" } = {}) {
   if (!insuranceRequested) return null;
   if (!letterForward && !insuranceAvailableFor(itemType)) {
-    return { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", message: PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE };
+    return { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", message: insuranceUnavailableMessage(itemType) };
   }
   if (letterForward && !trackingRequested) {
     return { code: "INSURANCE_REQUIRES_TRACKED_SERVICE", message: INSURANCE_REQUIRES_TRACKING_MESSAGE };
@@ -128,6 +148,8 @@ export function describeCompatibility(compatibility, message = null) {
     // Solo se ofrece si el backend lo dice y el cliente aun no lo pidio.
     canEnableTracking: compat.canEnableTracking === true && compat.trackingRequested !== true,
     excludedServices: Array.isArray(compat.excludedServices) ? compat.excludedServices : [],
+    // Solo en cotizaciones; al crear la solicitud de una carta puede no venir.
+    failedCarriers: Array.isArray(compat.failedCarriers) ? compat.failedCarriers : [],
     message: message || COMPATIBILITY_TEXT[reason] || COMPATIBILITY_TEXT.NO_SERVICE_MATCHES_OPTIONS,
   };
 }
@@ -139,17 +161,22 @@ export function describeCompatibility(compatibility, message = null) {
  *   quote-invalid        409: la tarifa ya no vale; se borran y se vuelve a cotizar.
  *   error                lo demas, con el mensaje del servidor si lo hay.
  */
-export function describeForwardingOptionsError(error, fallback = "Failed to load shipping rates") {
+export function describeForwardingOptionsError(error, fallback = "Failed to load shipping rates", { itemType } = {}) {
   const response = error?.response;
   if (!response) return { kind: "error", message: "We couldn't reach the server. Check your connection and try again." };
   const { status, data } = response;
   const code = data?.code;
 
   if (status === 422 && code === "FORWARDING_NO_COMPATIBLE_RATES") {
-    return describeCompatibility(data?.compatibility, serverMessage(data));
+    // compatibility va en la raiz del JSON; failedCarriers tambien, y puede faltar.
+    const compat = data?.compatibility && typeof data.compatibility === "object" ? data.compatibility : {};
+    return describeCompatibility({ ...compat, failedCarriers: data?.failedCarriers }, serverMessage(data));
   }
   if (status === 422 && code === "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES") {
-    return { kind: "insurance-unavailable", message: PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE };
+    return {
+      kind: "insurance-unavailable",
+      message: itemType ? insuranceUnavailableMessage(itemType) : serverMessage(data) || ITEM_INSURANCE_UNAVAILABLE_MESSAGE,
+    };
   }
   if (status === 422 && (code === "INSURANCE_REQUIRES_TRACKED_SERVICE" || data?.compatibility?.reason === "INSURANCE_REQUIRES_TRACKED_SERVICE")) {
     return { kind: "no-compatible-rates", reason: "INSURANCE_REQUIRES_TRACKED_SERVICE", canEnableTracking: false, excludedServices: [], message: serverMessage(data) || INSURANCE_REQUIRES_TRACKING_MESSAGE };
@@ -157,6 +184,7 @@ export function describeForwardingOptionsError(error, fallback = "Failed to load
   if (status === 409 && QUOTE_INVALID_CODES.includes(code)) {
     return { kind: "quote-invalid", code, message: QUOTE_INVALID_MESSAGE };
   }
+  // Tambien el 400 de un cuerpo invalido: { error, details }, sin code.
   return { kind: "error", code: code || null, message: serverMessage(data) || fallback };
 }
 
@@ -182,10 +210,13 @@ export function rateMatchesOptions(rate, shippingOptions) {
   const tracked = rate.trackingIncluded === true;
   if (Boolean(shippingOptions?.trackingRequested) !== tracked) return false;
   const insured = insuredServiceValueCents(rate);
+  // insuredValueCents de la tarifa: entero, 0 sin seguro (si faltara, manda `Ins`).
+  const declared = Number.isFinite(rate.insuredValueCents) ? rate.insuredValueCents : null;
   if (shippingOptions?.insuranceRequested) {
-    return insured !== null && insured === Number(shippingOptions.insuredValueCents || 0);
+    const wanted = Number(shippingOptions.insuredValueCents || 0);
+    return insured !== null && insured === wanted && (declared === null || declared === wanted);
   }
-  return insured === null;
+  return insured === null && (declared === null || declared === 0);
 }
 
 /**
