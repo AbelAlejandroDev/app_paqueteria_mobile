@@ -64,6 +64,15 @@ export const REPRICE_BLOCKING_CODES = [
   "FORWARDING_REPRICE_NOT_PAYABLE",
 ];
 
+/** 409 de opciones de envio y cotizacion (backend 7de1ae9); los mismos que lib/forwarding-options. */
+export const QUOTE_OPTIONS_INVALID_CODES = [
+  "FORWARDING_QUOTE_OUTDATED",
+  "FORWARDING_RATE_OPTIONS_MISMATCH",
+  "FORWARDING_QUOTE_OPTIONS_MISMATCH",
+  "FORWARD_TRACKING_MISMATCH",
+  "FORWARD_INSURANCE_MISMATCH",
+];
+
 const UNAVAILABLE_CODES = [
   "ONLINE_PAYMENTS_UNAVAILABLE",
   "BILLING_PROVIDER_NOT_STRIPE",
@@ -137,6 +146,15 @@ export function forwardPaymentError(error) {
   }
   if (code === "FORWARDING_REPRICE_EXPIRED") {
     return { kind: "reprice-expired", retryable: true, message: "The new price expired. Start the payment again to get the current amount." };
+  }
+  // Backend 7de1ae9: la tarifa del envio ya no corresponde con el seguimiento o
+  // el seguro pedidos (o la cotizacion caduco). No se paga sobre ella.
+  if (QUOTE_OPTIONS_INVALID_CODES.includes(code)) {
+    return withCharged({
+      kind: "quote-invalid",
+      retryable: false,
+      message: "This shipment's rate no longer matches the tracking or insurance you chose, so it can't be paid. Please contact your center.",
+    });
   }
   if (code === "FORWARDING_PAYMENT_AMOUNT_INVALID") {
     return { kind: "not-payable", retryable: false, message: "This shipment can't be paid as it is. Please contact your center." };

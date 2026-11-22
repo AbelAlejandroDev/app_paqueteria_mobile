@@ -8,6 +8,14 @@ import { formatErrorMessage } from "@/lib/utils";
 import { formatMoneyFromCents } from "@/lib/mail-item-detail";
 import { US_STATES } from "@/lib/us-states";
 import {
+  buildShippingOptions,
+  describeForwardingOptionsError,
+  INSURED_VALUE_MAX_USD,
+  INSURED_VALUE_MIN_USD,
+  insuredValueProblem,
+  shippingOptionsProblem,
+} from "@/lib/forwarding-options";
+import {
   addressErrorMessage,
   describeAddressVerification,
   forwardDestinationFields,
@@ -40,10 +48,6 @@ import { Skeleton } from "@/components/ui/skeleton";
  * `key` nueva cada vez: sin efectos que reseteen y sin arrastrar lo de la vez
  * anterior.
  */
-
-// Los mismos limites que el portal web.
-const MIN_INSURED_VALUE = 100;
-const MAX_INSURED_VALUE = 5000;
 
 const EMPTY_ADDRESS = {
   label: "",
@@ -293,8 +297,6 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         }
       }
 
-      const insuredValueCents = insuranceRequested ? Math.round(Number(insuredValue || 0) * 100) : null;
-
       // Las cartas elegidas viajan juntas en un sobre: una sola peticion, un
       // solo envio y una sola etiqueta.
       const response = await api.post("/client/service-requests", {
@@ -304,11 +306,8 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         // Una guardada viaja por su id: el servidor usa la que tiene verificada.
         ...forwardDestinationFields(destination),
         ...(selectedNeedsPhone ? { phone: destinationPhone.trim() } : {}),
-        shippingOptions: {
-          trackingRequested,
-          insuranceRequested,
-          ...(insuredValueCents ? { insuredValueCents } : {}),
-        },
+        // Exactamente lo elegido; sin seguro no viaja insuredValueCents.
+        shippingOptions: buildShippingOptions({ letterForward: true, trackingRequested, insuranceRequested, insuredValue }),
       });
       return response.data;
     },
@@ -321,19 +320,20 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
     onError: (error) => {
       // Si la direccion se guardo pero la peticion fallo, la lista ya la trae.
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
-      Alert.alert(
-        "Could not request forward",
-        addressErrorMessage(error, formatErrorMessage(error, "The forward could not be requested."))
-      );
+      // 422/409 de opciones (seguro sin seguimiento, sin servicio compatible...)
+      // con su explicacion; los de direccion, como hasta ahora.
+      const outcome = describeForwardingOptionsError(error, formatErrorMessage(error, "The forward could not be requested."));
+      Alert.alert("Could not request forward", addressErrorMessage(error, outcome.message));
     },
   });
 
   const pending = requestForward.isPending;
-  const insuredNumber = Number(insuredValue);
-  const insuranceIsValid =
-    !insuranceRequested || (insuredNumber >= MIN_INSURED_VALUE && insuredNumber <= MAX_INSURED_VALUE);
+  // Seguro sin seguimiento no existe para cartas, y el valor va de $100 a $5,000:
+  // la peticion no sale hasta que se corrija (lib/forwarding-options).
+  const optionsProblem = shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue });
+  const showValueProblem = insuranceRequested && trackingRequested && String(insuredValue).trim() !== "" && insuredValueProblem(insuredValue);
   const canSubmit =
-    (addingAddress ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && insuranceIsValid && !pending;
+    (addingAddress ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && !optionsProblem && !pending;
 
   const feeHeadline =
     feeCents === null
@@ -630,11 +630,13 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         </View>
       </View>
 
+      {/* Las dos empiezan apagadas y solo las cambia el cliente. */}
       <CheckCard
         checked={trackingRequested}
         onToggle={() => setTrackingRequested((value) => !value)}
         icon={Truck}
         label="Add tracking"
+        description="Your center will ship it with a service that includes tracking."
       />
 
       <CheckCard
@@ -642,19 +644,25 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         onToggle={() => setInsuranceRequested((value) => !value)}
         icon={ShieldCheck}
         label="Add insurance"
+        description="Adds insurance for the declared value. Requires Add Tracking."
       >
         {insuranceRequested ? (
-          <Field label={<RequiredLabel>Declared value (USD)</RequiredLabel>}>
-            <Input
-              value={insuredValue}
-              onChangeText={setInsuredValue}
-              keyboardType="decimal-pad"
-              placeholder="100.00"
-            />
-            <Text className="text-xs text-muted-foreground">
-              Between ${MIN_INSURED_VALUE} and ${MAX_INSURED_VALUE.toLocaleString("en-US")}.
-            </Text>
-          </Field>
+          <>
+            {!trackingRequested && optionsProblem ? (
+              <Notice tone="amber">{optionsProblem.message}</Notice>
+            ) : null}
+            <Field label={<RequiredLabel>Declared value (USD)</RequiredLabel>}>
+              <Input
+                value={insuredValue}
+                onChangeText={setInsuredValue}
+                keyboardType="decimal-pad"
+                placeholder="100.00"
+              />
+              <Text className={showValueProblem ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                Between ${INSURED_VALUE_MIN_USD} and ${INSURED_VALUE_MAX_USD.toLocaleString("en-US")}.
+              </Text>
+            </Field>
+          </>
         ) : null}
       </CheckCard>
 

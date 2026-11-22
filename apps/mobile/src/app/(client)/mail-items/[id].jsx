@@ -25,6 +25,19 @@ import {
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
 import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
+import {
+  buildShippingOptions,
+  describeForwardingOptionsError,
+  insuranceAvailableFor,
+  INSURED_VALUE_MAX_USD,
+  INSURED_VALUE_MIN_USD,
+  PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE,
+  QUOTE_INVALID_MESSAGE,
+  rateExtras,
+  rateMatchesOptions,
+  readQuoteResponse,
+  shippingOptionsProblem,
+} from "@/lib/forwarding-options";
 import { FORWARDING_ADDRESSES_ENDPOINT, FORWARDING_ADDRESSES_KEY, findDefaultAddress, forwardFieldsFromAddress } from "@/lib/forwarding-addresses";
 import {
   billingHold,
@@ -86,15 +99,6 @@ const EMPTY_FORWARD = {
   insuranceRequested: false,
   insuredValue: "",
 };
-
-/** Tope del backend: insuredValueCents como máximo 500000. */
-const MAX_INSURED_VALUE_USD = 5000;
-
-function toInsuredValueCents(form) {
-  const value = Number(form.insuredValue || 0);
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  return Math.round(value * 100);
-}
 
 function SummaryLine({ label, value }) {
   if (!hasDisplayValue(value)) return null;
@@ -167,15 +171,24 @@ function PickupRequestCard({ group }) {
   );
 }
 
-function ToggleRow({ label, description, value, onValueChange }) {
+function ToggleRow({ label, description, value, onValueChange, disabled = false }) {
   return (
-    <View className="flex-row items-start justify-between gap-3 rounded-lg border border-border bg-card p-3">
+    <View
+      className={
+        disabled
+          ? "flex-row items-start justify-between gap-3 rounded-lg border border-border bg-muted p-3"
+          : "flex-row items-start justify-between gap-3 rounded-lg border border-border bg-card p-3"
+      }
+    >
       <View className="min-w-0 flex-1">
-        <Text className="text-sm font-medium text-foreground">{label}</Text>
+        <Text className={disabled ? "text-sm font-medium text-muted-foreground" : "text-sm font-medium text-foreground"}>{label}</Text>
         <Text className="mt-1 text-xs leading-4 text-muted-foreground">{description}</Text>
       </View>
       <Switch
         value={value}
+        disabled={disabled}
+        accessibilityLabel={label}
+        accessibilityState={{ checked: value, disabled }}
         onValueChange={onValueChange}
         trackColor={{ true: brand.primaryColor, false: "#cbd5e1" }}
         thumbColor="#ffffff"
@@ -348,8 +361,17 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const [immediateFeeCents, setImmediateFeeCents] = useState(0);
   // El entorno que devolvio la cotizacion: sandbox se avisa, produccion no.
   const [ratesEnvironment, setRatesEnvironment] = useState("");
+  // Sin tarifas para estas opciones (422 FORWARDING_NO_COMPATIBLE_RATES o
+  // INSURANCE_NOT_AVAILABLE_FOR_PACKAGES): por que, y si se puede ofrecer
+  // "Turn on Add Tracking". Es un estado vacio, no un error.
+  const [quoteEmpty, setQuoteEmpty] = useState(null);
+  // Las opciones con las que se pidio la cotizacion en pantalla: la tarifa
+  // elegida tiene que corresponder con ellas para poder seguir.
+  const [quotedOptions, setQuotedOptions] = useState(null);
 
   const isLetter = item?.type === "LETTER";
+  // Seguro adicional de paquetes: no se contrata todavia (lib/forwarding-options).
+  const insuranceAllowed = insuranceAvailableFor(item?.type);
 
   // Cada cambio de destino deja atras la cotizacion en curso: su respuesta,
   // si llega despues, es de la direccion anterior.
@@ -359,19 +381,22 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
     quoteGeneration.current += 1;
 
     // Se llama en cada pulsación, así que conviene no re-renderizar de balde.
-    if (!forwardQuoteId && forwardRates.length === 0 && !selectedRateId) return;
+    if (!forwardQuoteId && forwardRates.length === 0 && !selectedRateId && !quoteEmpty && !quotedOptions) return;
 
     setForwardQuoteId("");
     setForwardRates([]);
     setSelectedRateId("");
     setImmediateFeeCents(0);
     setRatesEnvironment("");
+    setQuoteEmpty(null);
+    setQuotedOptions(null);
   };
 
   /**
-   * El precio del tracking y del seguro va incluido en cada tarifa, así que
-   * cambiar cualquiera de los dos invalida las que ya estén cargadas: dejarlas
-   * en pantalla mostraría un importe que el backend ya no cobraría.
+   * Cambiar la direccion, Add Tracking, Add Insurance o el valor declarado
+   * cambia que servicios valen y cuanto cuestan: la cotizacion en pantalla y la
+   * tarifa elegida dejan de valer (y una respuesta que llegue tarde se ignora).
+   * Las opciones que eligio el cliente se quedan como estan.
    */
   const onQuoteField = (field, value) => {
     clearRates();
@@ -444,16 +469,10 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   });
 
   const quoteRates = useMutation({
-    mutationFn: async () => {
-      const insuredValueCents = forwardForm.insuranceRequested ? toInsuredValueCents(forwardForm) : 0;
-
+    mutationFn: async ({ shippingOptions }) => {
       const response = await api.post("/client/forwarding/quotes", {
         mailItemId,
-        shippingOptions: {
-          trackingRequested: Boolean(forwardForm.trackingRequested),
-          insuranceRequested: Boolean(forwardForm.insuranceRequested),
-          insuredValueCents,
-        },
+        shippingOptions,
         destinationAddress: {
           name: forwardForm.recipient,
           addressLine1: forwardForm.address1,
@@ -467,13 +486,17 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       });
       return response.data;
     },
-    onSuccess: (data, { generation }) => {
+    onSuccess: (data, { generation, shippingOptions }) => {
       if (generation !== quoteGeneration.current) return;
-      setForwardQuoteId(data?.quoteId || "");
-      setForwardRates(data?.rates || []);
-      setSelectedRateId(data?.rates?.[0]?.optionId || "");
+      // Solo las tarifas que son lo que se pidio (el backend ya filtra).
+      const result = readQuoteResponse(data, shippingOptions);
+      setForwardQuoteId(result.rates.length ? data?.quoteId || "" : "");
+      setForwardRates(result.rates);
+      setSelectedRateId(result.rates[0]?.optionId || "");
       setImmediateFeeCents(Number(data?.immediateForwardFeeCents || 0));
       setRatesEnvironment(data?.environment || "");
+      setQuoteEmpty(result.empty);
+      setQuotedOptions(result.rates.length ? shippingOptions : null);
     },
     onError: (error, { generation }) => {
       if (generation !== quoteGeneration.current) return;
@@ -482,7 +505,15 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       setSelectedRateId("");
       setImmediateFeeCents(0);
       setRatesEnvironment("");
-      Alert.alert("No rates available", formatErrorMessage(error, "Failed to load shipping rates"));
+      setQuotedOptions(null);
+      const outcome = describeForwardingOptionsError(error);
+      // Sin tarifas para estas opciones: estado vacio con la explicacion.
+      if (outcome.kind === "no-compatible-rates" || outcome.kind === "insurance-unavailable") {
+        setQuoteEmpty(outcome);
+        return;
+      }
+      setQuoteEmpty(null);
+      Alert.alert("No rates available", outcome.message);
     },
   });
 
@@ -501,7 +532,14 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       await onRefresh?.();
     },
     onError: (error) => {
-      Alert.alert("Could not select rate", formatErrorMessage(error, "Unable to select forwarding rate"));
+      const outcome = describeForwardingOptionsError(error, "Unable to select forwarding rate");
+      // 409: la cotizacion ya no vale. Se borra para que no se pueda seguir con ella.
+      if (outcome.kind === "quote-invalid" || outcome.kind === "no-compatible-rates" || outcome.kind === "insurance-unavailable") {
+        clearRates();
+        Alert.alert("Get new rates", outcome.kind === "quote-invalid" ? QUOTE_INVALID_MESSAGE : outcome.message);
+        return;
+      }
+      Alert.alert("Could not select rate", outcome.message);
     },
   });
 
@@ -539,26 +577,21 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       return false;
     }
 
-    if (forwardForm.insuranceRequested) {
-      const value = Number(forwardForm.insuredValue || 0);
-
-      if (!Number.isFinite(value) || value <= 0) {
-        Alert.alert("Insured value missing", "Enter the amount you want to insure.");
-        return false;
-      }
-
-      if (value > MAX_INSURED_VALUE_USD) {
-        Alert.alert("Value too high", "Insurance covers up to $" + MAX_INSURED_VALUE_USD + ".");
-        return false;
-      }
+    const problem = shippingOptionsProblem({ itemType: item?.type, ...forwardForm });
+    if (problem) {
+      Alert.alert(problem.code === "INSURED_VALUE_INVALID" ? "Check the declared value" : "Insurance unavailable", problem.message);
+      return false;
     }
 
     return true;
   };
 
+  /** Exactamente lo elegido por el cliente (lib/forwarding-options). */
+  const currentShippingOptions = () => buildShippingOptions({ itemType: item?.type, ...forwardForm });
+
   const getRates = () => {
     if (!forwardFormIsValid()) return;
-    quoteRates.mutate({ generation: quoteGeneration.current });
+    quoteRates.mutate({ generation: quoteGeneration.current, shippingOptions: currentShippingOptions() });
   };
 
   const continueWithRate = () => {
@@ -566,8 +599,20 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       Alert.alert("Choose a rate", "Select a shipping rate first.");
       return;
     }
+    // La tarifa tiene que ser de la cotizacion de estas mismas opciones; si no,
+    // no se sigue (ni se llega a pagar) con ella.
+    const options = currentShippingOptions();
+    const rate = forwardRates.find((entry) => entry.optionId === selectedRateId);
+    if (!quotedOptions || JSON.stringify(quotedOptions) !== JSON.stringify(options) || !rateMatchesOptions(rate, options)) {
+      clearRates();
+      Alert.alert("Get new rates", QUOTE_INVALID_MESSAGE);
+      return;
+    }
     selectRate.mutate();
   };
+
+  /** "Turn on Add Tracking": solo cuando el cliente lo pulsa, y no cotiza solo. */
+  const enableTracking = () => onQuoteField("trackingRequested", true);
 
   // Los paquetes se reenvían o se recogen, pero su contenido no se escanea.
   const canScan = item?.type !== "PACKAGE" && actions.canRequestScan;
@@ -773,38 +818,63 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           </Field>
 
           <View className="gap-3">
+            {/* Las dos empiezan apagadas y solo las cambia el cliente: las
+                tarifas de abajo son las de lo que tenga elegido. */}
             <ToggleRow
               label="Add tracking"
-              description="First-Class adds Certified Mail; Priority Mail uses Delivery Confirmation."
+              description="Show only shipping services that include tracking."
               value={forwardForm.trackingRequested}
+              disabled={selectRate.isPending}
               onValueChange={(value) => onQuoteField("trackingRequested", value)}
             />
-            <ToggleRow
-              label="Add insurance"
-              description="Covers the declared value if the shipment is lost or damaged. Tracking included."
-              value={forwardForm.insuranceRequested}
-              onValueChange={(value) => onQuoteField("insuranceRequested", value)}
-            />
-            {forwardForm.insuranceRequested ? (
-              <Field label={"Insured value (USD, max $" + MAX_INSURED_VALUE_USD + ")"}>
-                <Input
-                  value={forwardForm.insuredValue}
-                  onChangeText={(value) => onQuoteField("insuredValue", value)}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
+            {insuranceAllowed ? (
+              <>
+                <ToggleRow
+                  label="Add insurance"
+                  description={
+                    "Adds insurance for the declared value ($" +
+                    INSURED_VALUE_MIN_USD +
+                    "–$" +
+                    INSURED_VALUE_MAX_USD.toLocaleString("en-US") +
+                    "). Only available with tracked services."
+                  }
+                  value={forwardForm.insuranceRequested}
+                  disabled={selectRate.isPending}
+                  onValueChange={(value) => onQuoteField("insuranceRequested", value)}
                 />
-              </Field>
-            ) : null}
-            <Text className="text-xs leading-4 text-muted-foreground">
-              The cost of these extras is already included in every rate below.
-            </Text>
+                {forwardForm.insuranceRequested ? (
+                  <Field
+                    label={
+                      "Declared value (USD, $" + INSURED_VALUE_MIN_USD + "–$" + INSURED_VALUE_MAX_USD.toLocaleString("en-US") + ")"
+                    }
+                  >
+                    <Input
+                      value={forwardForm.insuredValue}
+                      onChangeText={(value) => onQuoteField("insuredValue", value)}
+                      keyboardType="decimal-pad"
+                      placeholder="100.00"
+                    />
+                  </Field>
+                ) : null}
+              </>
+            ) : (
+              // Paquetes: el seguro adicional aun no se contrata. Se ve, pero no
+              // se puede pedir, y no se dice que el valor declarado asegure nada.
+              <ToggleRow
+                label="Add insurance"
+                description={PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE}
+                value={false}
+                disabled
+                onValueChange={() => {}}
+              />
+            )}
           </View>
 
           <View className="gap-3 rounded-lg border border-border bg-background p-3">
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-foreground">Shipping rates</Text>
-                <Text className="text-xs text-muted-foreground">Get rates for the address above. Changing it clears them.</Text>
+                <Text className="text-xs text-muted-foreground">Rates for the address and options above. Changing any of them clears the rates.</Text>
                 {ratesEnvironment === "sandbox" ? (
                   <Text className="mt-1 text-xs font-medium text-amber-900">
                     Test mode: these are sandbox rates. Any label created is a test label and will not ship.
@@ -840,16 +910,11 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                             ? "Delivery estimate unavailable"
                             : rate.estimatedDeliveryDays + " day(s)"}
                         </Text>
-                        {rate.trackingIncluded || rate.insuranceRequested ? (
+                        {/* Solo lo que la tarifa trae: trackingIncluded y el
+                            servicio Ins con su valor (lib/forwarding-options). */}
+                        {rateExtras(rate, formatMoneyFromCents).length ? (
                           <Text className="mt-1 text-xs text-muted-foreground">
-                            {[
-                              rate.trackingIncluded ? "Tracking included" : null,
-                              rate.insuranceRequested
-                                ? "Insured " + formatMoneyFromCents(rate.insuredValueCents)
-                                : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
+                            {rateExtras(rate, formatMoneyFromCents).join(" · ")}
                           </Text>
                         ) : null}
                       </View>
@@ -887,6 +952,19 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                 <Button loading={selectRate.isPending} disabled={!selectedRateId} onPress={continueWithRate}>
                   Continue with selected rate
                 </Button>
+              </View>
+            ) : quoteEmpty ? (
+              // Ninguna tarifa con estas opciones: lo explica el backend y, si
+              // es porque todas llevan seguimiento, se ofrece encenderlo. Solo
+              // cambia la casilla; el cliente vuelve a pedir las tarifas.
+              <View className="gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3" accessibilityRole="alert">
+                <Text className="text-sm font-medium text-amber-900">No rates for these options</Text>
+                <Text className="text-xs leading-4 text-amber-900">{quoteEmpty.message}</Text>
+                {quoteEmpty.canEnableTracking && !forwardForm.trackingRequested ? (
+                  <Button variant="outline" size="sm" disabled={anyPending} onPress={enableTracking}>
+                    Turn on Add Tracking
+                  </Button>
+                ) : null}
               </View>
             ) : (
               <Text className="text-xs text-muted-foreground">No rates loaded yet.</Text>
