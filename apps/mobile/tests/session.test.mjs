@@ -75,6 +75,8 @@ async function setup({ onRefresh, onData } = {}) {
     baseURL: "https://api.example.test/api/v1",
     onUnauthorized: (reason) => calls.unauthorized.push(reason),
     adapter,
+    // El reintento del refresh espera 1 s en la app; aqui no hace falta.
+    refreshRetryDelayMs: 0,
   });
 
   return { api, calls, off };
@@ -100,23 +102,26 @@ async function sessionEnded(calls, reason) {
 
 // ── Refresh que falla por algo pasajero: la sesion se conserva ─────────────
 
+// [motivo, respuesta, intentos de refresh]. Sin respuesta o 5xx: no se sabe si
+// el servidor roto, asi que se repite UNA vez (dentro del margen de 30 s del
+// backend). 429 y el 400 de un proxy: el servidor no proceso nada, no se repite.
 const TEMPORARY_REFRESH_FAILURES = [
-  ["sin red", (config) => networkError(config)],
-  ["timeout", (config) => timeoutError(config)],
-  ["429 Too Many Requests", (config) => reply(config, 429, { error: "Too many requests" })],
-  ["500", (config) => reply(config, 500, { error: "Internal Server Error" })],
-  ["502 del proxy (HTML)", (config) => reply(config, 502, "<html>Bad Gateway</html>")],
-  ["503 mantenimiento", (config) => reply(config, 503, "<html>Service Unavailable</html>")],
-  ["504", (config) => reply(config, 504, "")],
-  ["400 sin cuerpo del backend (proxy)", (config) => reply(config, 400, "<html>Bad Request</html>")],
+  ["sin red", (config) => networkError(config), 2],
+  ["timeout", (config) => timeoutError(config), 2],
+  ["429 Too Many Requests", (config) => reply(config, 429, { error: "Too many requests" }), 1],
+  ["500", (config) => reply(config, 500, { error: "Internal Server Error" }), 2],
+  ["502 del proxy (HTML)", (config) => reply(config, 502, "<html>Bad Gateway</html>"), 2],
+  ["503 mantenimiento", (config) => reply(config, 503, "<html>Service Unavailable</html>"), 2],
+  ["504", (config) => reply(config, 504, ""), 2],
+  ["400 sin cuerpo del backend (proxy)", (config) => reply(config, 400, "<html>Bad Request</html>"), 1],
 ];
 
-for (const [label, onRefresh] of TEMPORARY_REFRESH_FAILURES) {
+for (const [label, onRefresh, attempts] of TEMPORARY_REFRESH_FAILURES) {
   test(`refresh con ${label}: no se borran los tokens ni se aborta la sesion`, async () => {
     const { api, calls, off } = await setup({ onRefresh });
     try {
       await assert.rejects(api.get("/client/data"));
-      assert.equal(calls.refresh, 1);
+      assert.equal(calls.refresh, attempts);
       await sessionKept(calls);
     } finally {
       off();
@@ -127,7 +132,7 @@ for (const [label, onRefresh] of TEMPORARY_REFRESH_FAILURES) {
 test("tras un refresh fallido por la red, la siguiente peticion vuelve a intentarlo y recupera la sesion", async () => {
   const { api, calls, off } = await setup({
     onRefresh: (config, n) =>
-      n === 1 ? networkError(config) : reply(config, 200, { accessToken: "new-access", refreshToken: "new-refresh" }),
+      n <= 2 ? networkError(config) : reply(config, 200, { accessToken: "new-access", refreshToken: "new-refresh" }),
   });
   try {
     await assert.rejects(api.get("/client/data"));
@@ -135,7 +140,7 @@ test("tras un refresh fallido por la red, la siguiente peticion vuelve a intenta
 
     const response = await api.get("/client/data");
     assert.deepEqual(response.data, { ok: true });
-    assert.equal(calls.refresh, 2);
+    assert.equal(calls.refresh, 3);
     assert.deepEqual(await getTokens(), { accessToken: "new-access", refreshToken: "new-refresh" });
     assert.deepEqual(calls.unauthorized, []);
   } finally {
@@ -148,7 +153,7 @@ test("varias peticiones a la vez con el refresh caido: todas fallan, un solo ref
   try {
     const results = await Promise.allSettled([api.get("/client/data"), api.get("/client/data"), api.get("/client/data")]);
     assert.ok(results.every((r) => r.status === "rejected"));
-    assert.equal(calls.refresh, 1);
+    assert.equal(calls.refresh, 2, "un solo refresh (con su unico reintento) para las tres");
     await sessionKept(calls);
   } finally {
     off();
@@ -292,5 +297,123 @@ test("sin usuario guardado y sin poder comprobar la sesion, se ofrece reintentar
     const gate = source.indexOf("if (!user && sessionUnavailable)");
     assert.ok(gate > 0, file);
     assert.ok(gate < source.indexOf('<Redirect href="/login" />'), file + ": antes de mandar al login");
+  }
+});
+
+// ── Rotacion con estado (backend HDG 3a17a0e) ──────────────────────────────
+
+test("rotacion: un refresh perdido por la red se repite una vez con el MISMO token y la sesion sigue", async () => {
+  const presented = [];
+  const { api, calls, off } = await setup({
+    onRefresh: (config, n) => {
+      presented.push(JSON.parse(config.data).refreshToken);
+      // El servidor roto en el primer intento pero la respuesta no llego.
+      return n === 1 ? timeoutError(config) : reply(config, 200, { accessToken: "new-access", refreshToken: "rotated-2" });
+    },
+  });
+  try {
+    const response = await api.get("/client/data");
+    assert.deepEqual(response.data, { ok: true });
+    assert.deepEqual(presented, ["old-refresh", "old-refresh"], "el reintento va dentro del margen, con el mismo");
+    assert.deepEqual(await getTokens(), { accessToken: "new-access", refreshToken: "rotated-2" });
+    assert.deepEqual(calls.unauthorized, []);
+  } finally {
+    off();
+  }
+});
+
+test("rotacion: un 401 que llega tarde con el access anterior no rota otra vez", async () => {
+  let releaseLate;
+  const { api, calls, off } = await setup({
+    onRefresh: (config) => reply(config, 200, { accessToken: "new-access", refreshToken: "new-refresh" }),
+    onData: (config, n) => {
+      const auth = config.headers?.Authorization || config.headers?.get?.("Authorization");
+      if (auth === "Bearer new-access") return reply(config, 200, { ok: true, n });
+      // /client/late sale con el access viejo y su 401 llega despues del refresh.
+      if (String(config.url).endsWith("/client/late")) return new Promise((resolve) => (releaseLate = resolve)).then(() => reply(config, 401, { error: "Invalid or expired token" }));
+      return reply(config, 401, { error: "Invalid or expired token" });
+    },
+  });
+  try {
+    const late = api.get("/client/late");
+    while (!releaseLate) await new Promise((r) => setTimeout(r, 1));
+    const first = await api.get("/client/data");
+    assert.equal(first.data.ok, true);
+    releaseLate();
+    const lateResponse = await late;
+    assert.equal(lateResponse.data.ok, true);
+    assert.equal(calls.refresh, 1, "un solo refresh: el tardio usa el access vigente");
+    assert.deepEqual(await getTokens(), { accessToken: "new-access", refreshToken: "new-refresh" });
+  } finally {
+    off();
+  }
+});
+
+test("rotacion: REFRESH_TOKEN_REUSED cierra la sesion con su motivo", async () => {
+  const { api, calls, off } = await setup({
+    onRefresh: (config) => reply(config, 401, { error: "Your session has ended. Please sign in again.", code: "REFRESH_TOKEN_REUSED" }),
+  });
+  try {
+    await assert.rejects(api.get("/client/data"));
+    assert.equal(calls.refresh, 1, "un 401 no se repite");
+    await sessionEnded(calls, "REFRESH_TOKEN_REUSED");
+  } finally {
+    off();
+  }
+});
+
+test("rotacion: 401 SESSION_REVOKED de un recurso (sesion cerrada en el servidor) acaba en el login", async () => {
+  const { api, calls, off } = await setup({
+    onData: (config) => reply(config, 401, { error: "Session expired", code: "SESSION_REVOKED" }),
+    onRefresh: (config) => reply(config, 401, { error: "Your session has ended. Please sign in again.", code: "SESSION_REVOKED" }),
+  });
+  try {
+    await assert.rejects(api.get("/client/data"));
+    await sessionEnded(calls, "SESSION_REVOKED");
+  } finally {
+    off();
+  }
+});
+
+test("rotacion: varias peticiones con el access caducado comparten un unico refresh", async () => {
+  const { api, calls, off } = await setup({
+    onRefresh: (config) => new Promise((r) => setTimeout(r, 5)).then(() => reply(config, 200, { accessToken: "new-access", refreshToken: "new-refresh" })),
+  });
+  try {
+    const results = await Promise.all([api.get("/client/a"), api.get("/client/b"), api.get("/client/c")]);
+    assert.ok(results.every((r) => r.data.ok === true));
+    assert.equal(calls.refresh, 1);
+    assert.deepEqual(await getTokens(), { accessToken: "new-access", refreshToken: "new-refresh" });
+  } finally {
+    off();
+  }
+});
+
+test("rotacion: una respuesta de refresh sin accessToken no deja la sesion a medias", async () => {
+  const { api, calls, off } = await setup({ onRefresh: (config) => reply(config, 200, { refreshToken: "only-refresh" }) });
+  try {
+    await assert.rejects(api.get("/client/data"));
+    await sessionKept(calls);
+  } finally {
+    off();
+  }
+});
+
+test("logout: manda el refresh guardado para que el servidor revoque esa sesion, y limpia todo", () => {
+  const source = read("src/context/AuthContext.jsx");
+  assert.ok(source.includes('const { refreshToken } = await getTokens();\n        await api.post("/auth/logout", refreshToken ? { refreshToken } : {});'));
+  // Antes, la baja del push (con el token aun valido); despues, la sesion local siempre.
+  assert.ok(source.indexOf("await unregisterFromPush();") < source.indexOf('api.post("/auth/logout"'));
+  assert.ok(/\} finally \{\s*\/\/ Tokens, usuario guardado y cache de React Query\.\s*await endLocalSession\(\);/.test(source));
+  assert.ok(/const endLocalSession = useCallback\(async \(\) => \{\s*await clearTokens\(\);\s*await clearAuthUser\(\);/.test(source));
+});
+
+test("reapertura: con tokens y sin red se sigue con el usuario guardado; solo 401 o 'User not found' cierran", () => {
+  const source = read("src/context/AuthContext.jsx");
+  assert.ok(source.includes("if (classifySessionError(error) === SESSION_INVALID) {\n        await endLocalSession();"));
+  assert.ok(source.includes("const cachedUser = await getAuthUser();"));
+  for (const status of [429, 500, 502, 503, 504]) {
+    assert.equal(classifySessionError({ response: { status, data: {} } }), SESSION_TEMPORARY, String(status));
+    assert.equal(isRefreshRejection({ response: { status, data: {} } }), false, String(status));
   }
 });

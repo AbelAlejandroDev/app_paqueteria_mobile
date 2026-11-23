@@ -51,7 +51,8 @@ test("el 429 usa la espera que manda el backend, del cuerpo o de Retry-After", (
 });
 
 test("la sesion revocada por cambio de contraseña se explica en el login", () => {
-  assert.match(sessionEndedMessage("SESSION_REVOKED"), /password was changed/);
+  assert.match(sessionEndedMessage("SESSION_REVOKED"), /session has ended/);
+  assert.match(sessionEndedMessage("REFRESH_TOKEN_REUSED"), /For your security/);
   assert.equal(sessionEndedMessage(""), "");
   assert.equal(sessionEndedMessage("OTHER"), "");
 });

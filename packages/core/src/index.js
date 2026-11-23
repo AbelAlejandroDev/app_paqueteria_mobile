@@ -1,4 +1,4 @@
-export { createApiClient, createApiProbe, isPublicAuthRequest, PROBE_PATH } from "./api.js";
+export { createApiClient, createApiProbe, isPublicAuthRequest, isRetryableRefreshFailure, PROBE_PATH, REFRESH_RETRY_DELAY_MS } from "./api.js";
 
 export {
   AVAILABILITY_OFFLINE,

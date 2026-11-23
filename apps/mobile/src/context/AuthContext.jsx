@@ -238,7 +238,11 @@ export function AuthProvider({ children }) {
       clearPendingNavigation();
 
       try {
-        await api.post("/auth/logout");
+        // Con el refresh en el cuerpo el backend revoca tambien esa sesion
+        // (HDG 3a17a0e, controllers/auth/logout): su refresh deja de renovar
+        // aunque el access fuera anterior a las sesiones con estado.
+        const { refreshToken } = await getTokens();
+        await api.post("/auth/logout", refreshToken ? { refreshToken } : {});
       } catch (error) {
         // Da igual si falla: la sesión local se limpia de todos modos.
       } finally {

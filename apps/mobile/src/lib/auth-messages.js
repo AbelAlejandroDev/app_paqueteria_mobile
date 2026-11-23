@@ -84,12 +84,19 @@ export function retryAfterSeconds(response) {
 /**
  * Por que la sesion termino sola, para explicarlo en el login.
  *
- * SESSION_REVOKED llega del refresh cuando el cliente cambio su contraseña (en
- * este telefono o en otro): todas sus sesiones anteriores dejan de valer.
+ * SESSION_REVOKED: la sesion se cerro en el servidor. Puede ser un cambio de
+ * contraseña (en este telefono o en otro), pero desde las sesiones con estado
+ * (HDG 3a17a0e) tambien un cierre desde el centro o la caducidad de la sesion:
+ * no se afirma la causa.
+ * REFRESH_TOKEN_REUSED: el backend vio un refresh ya usado y corto la sesion
+ * entera por seguridad.
  */
 export function sessionEndedMessage(reason) {
   if (reason === "SESSION_REVOKED") {
-    return "Your password was changed, so you were signed out on this device. Please sign in with your new password.";
+    return "Your session has ended, so you were signed out on this device. Please sign in again. If you changed your password, use the new one.";
+  }
+  if (reason === "REFRESH_TOKEN_REUSED") {
+    return "For your security, you were signed out on this device. Please sign in again.";
   }
   return "";
 }

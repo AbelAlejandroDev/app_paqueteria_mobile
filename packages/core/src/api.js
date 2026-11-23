@@ -47,7 +47,29 @@ export function isPublicAuthRequest(url) {
   return PUBLIC_AUTH_PATHS.includes(normalized);
 }
 
-export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter, timeout = DEFAULT_TIMEOUT_MS }) {
+/**
+ * Un refresh sin respuesta (red, timeout) o con un 5xx no dice si el servidor
+ * llego a rotar el token. Con rotacion y deteccion de reutilizacion (backend
+ * HDG 3a17a0e, lib/authSessions), volver a presentar el refresh anterior pasados
+ * 30 s (REFRESH_REUSE_GRACE_MS) revoca la sesion entera: por eso se repite UNA
+ * vez enseguida, dentro de ese margen, donde el backend lo trata como "un
+ * reintento" y devuelve el par vigente. Un 401/400 no se repite: es definitivo.
+ */
+export function isRetryableRefreshFailure(error) {
+  const status = error?.response?.status;
+  if (!error?.response) return true;
+  return status >= 500 && status <= 599;
+}
+
+export const REFRESH_RETRY_DELAY_MS = 1000;
+
+/** "Bearer abc" -> "abc"; lo que mando de verdad una peticion. */
+function bearerOf(request) {
+  const raw = request?.headers?.Authorization ?? request?.headers?.authorization;
+  return typeof raw === "string" && raw.startsWith("Bearer ") ? raw.slice(7) : null;
+}
+
+export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter, timeout = DEFAULT_TIMEOUT_MS, refreshRetryDelayMs = REFRESH_RETRY_DELAY_MS }) {
   if (!baseURL) {
     throw new Error("createApiClient requiere baseURL.");
   }
@@ -101,10 +123,19 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter
         return Promise.reject(error);
       }
 
-      const { refreshToken } = await getTokens();
+      const { accessToken: currentAccess, refreshToken } = await getTokens();
       if (!refreshToken) {
         await abortSession();
         return Promise.reject(error);
+      }
+
+      // La peticion salio con un access anterior y otro refresh ya trajo uno
+      // nuevo mientras volaba: se repite con el vigente, sin rotar otra vez.
+      const sentAccess = bearerOf(originalRequest);
+      if (!isRefreshing && currentAccess && sentAccess && sentAccess !== currentAccess) {
+        originalRequest._retry = true;
+        originalRequest.headers.Authorization = `Bearer ${currentAccess}`;
+        return api(originalRequest);
       }
 
       if (isRefreshing) {
@@ -120,8 +151,20 @@ export function createApiClient({ baseURL, onUnauthorized, headers = {}, adapter
       isRefreshing = true;
 
       try {
-        const response = await refreshClient.post("/auth/refresh", { refreshToken });
+        let response;
+        try {
+          response = await refreshClient.post("/auth/refresh", { refreshToken });
+        } catch (firstError) {
+          if (!isRetryableRefreshFailure(firstError)) throw firstError;
+          // Una sola vez y con el MISMO refresh: dentro del margen del backend.
+          await new Promise((resolve) => setTimeout(resolve, refreshRetryDelayMs));
+          response = await refreshClient.post("/auth/refresh", { refreshToken });
+        }
         const data = response.data || {};
+        if (!data.accessToken) {
+          // Sin access no hay sesion que repetir; el refresh guardado sigue.
+          throw Object.assign(new Error("Refresh response without accessToken"), { response: null });
+        }
         const nextUser = normalizeAuthUser(data.user || null, data);
 
         await setTokens({
