@@ -76,7 +76,7 @@ Sandbox (que corre `backend-348c327`). La app vale para los dos:
 | Seguridad push reforzada de Expo (`pushSecurityEnabled`) | **Desactivada** en los dos proyectos: el backend puede enviar sin access token |
 | Keystore Android en EAS | **Generado** por EAS en la primera build (`hdg-preview`, 2026-11-17 UTC): "Build Credentials cBk4DE_2HW", JKS. Contraseñas y fichero solo en EAS; guardar una copia con `eas credentials` → Android → Keystore → Download, **fuera del repo** |
 | Huellas del certificado (publicas) | SHA-1 `00:23:74:2B:74:61:10:69:B3:B3:BF:7B:3B:16:18:63:CE:3F:30:A5`<br>SHA-256 `45:5C:6C:C9:38:65:AD:68:9F:01:BE:03:FE:B6:3B:6F:1E:8E:2D:3A:48:9C:CC:2A:BC:D9:32:49:38:6E:8A:25`<br>Son de la firma de EAS (APK internas). Una build de Google Play se firma con la clave de Play y tendra otra huella (App Links: `docs/deep-links.md`) |
-| iOS: clave APNs | **Falta**: `hdg-client` no tiene ninguna credencial iOS (`iosAppCredentials: []`) ni builds iOS. Procedimiento abajo (APNs de HDG) |
+| iOS: clave APNs | **Configurada** (comprobado el 2026-11-23 en EAS, solo lectura): `46PKSW3B6D`, del equipo `3KX6P6C79Q` (The Workbox, LLC). Es una clave **del equipo**: la misma que usa `worx-client`; revocarla deja sin push a las dos apps. El perfil App Store de HDG (`5NBCNMFWHZ`) lleva `aps-environment: production` (visto en el IPA de TestFlight `b8e47a41`) |
 | Runtime | Sin cambios (`native-3`): el fichero no añade modulos nativos. Hace falta **binario nuevo**: las builds anteriores no llevaban Firebase |
 
 ## APNs de HDG (iOS)

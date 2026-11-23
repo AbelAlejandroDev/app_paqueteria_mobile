@@ -25,6 +25,22 @@ test("sin el endpoint en el backend no se finge que se envio", () => {
   assert.equal(forgotPasswordOutcome({ response: { status: 404 } }).kind, "unavailable");
 });
 
+test("503 EMAIL_DELIVERY_UNAVAILABLE (HDG 3a17a0e, fase 1): no se finge el envio ni se invita a reintentar", () => {
+  const off = forgotPasswordOutcome({
+    response: {
+      status: 503,
+      data: { code: "EMAIL_DELIVERY_UNAVAILABLE", error: "Password reset by email is not available right now. Please contact your center to regain access." },
+    },
+  });
+  assert.equal(off.kind, "unavailable");
+  assert.match(off.message, /contact your center/);
+  assert.doesNotMatch(off.message, /try again/i);
+  // Sin reintento automatico ni espera: el boton no se ofrece en ese estado.
+  assert.equal(off.retryAfter, undefined);
+  // Un 503 de mantenimiento (sin ese codigo) sigue siendo temporal.
+  assert.equal(forgotPasswordOutcome({ response: { status: 503, headers: { "retry-after": "120" } } }).kind, "error");
+});
+
 test("limite de intentos, red y correo invalido tienen su mensaje", () => {
   assert.match(forgotPasswordOutcome({ response: { status: 429 } }).message, /Too many/);
   assert.match(forgotPasswordOutcome({}).message, /couldn't reach/);

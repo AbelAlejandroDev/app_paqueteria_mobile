@@ -66,6 +66,17 @@ export function forgotPasswordOutcome(error) {
     };
   }
 
+  // HDG 3a17a0e: la organizacion no puede mandar este correo ahora (HDG en la
+  // fase 1). No se emitio ningun enlace; reintentar no sirve. Depende de la
+  // organizacion, no de la cuenta: no revela si el correo existe. Un 503 sin
+  // este codigo (mantenimiento) sigue siendo "prueba en un momento".
+  if (status === 503 && error.response.data?.code === "EMAIL_DELIVERY_UNAVAILABLE") {
+    return {
+      kind: "unavailable",
+      message: "Password reset by email isn't available right now. Please contact your center and they'll help you regain access.",
+    };
+  }
+
   if (status === 400) return { kind: "error", message: "Enter a valid email address." };
 
   return { kind: "error", message: "Something went wrong. Please try again in a moment." };
