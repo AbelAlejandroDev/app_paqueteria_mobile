@@ -62,6 +62,20 @@ export const QUOTE_INVALID_CODES = Object.freeze([
   "FORWARD_INSURANCE_MISMATCH",
 ]);
 
+/**
+ * 409 al elegir tarifa con una cotizacion que ya no esta activa (backend
+ * forwardingQuotes.selectForwardingQuote): caducada, sustituida o invalidada
+ * porque cambio la pieza, el centro o el origen. Tambien hay que volver a
+ * cotizar, pero no es un problema de Tracking/Insurance: otro texto.
+ */
+export const QUOTE_STALE_CODES = Object.freeze([
+  "FORWARDING_QUOTE_EXPIRED",
+  "FORWARDING_QUOTE_UNAVAILABLE",
+  "FORWARDING_QUOTE_INVALIDATED",
+]);
+
+export const QUOTE_STALE_MESSAGE = "These rates are no longer valid. Get new rates before continuing.";
+
 const normalizedType = (itemType) => String(itemType || "").trim().toUpperCase();
 
 /**
@@ -183,6 +197,9 @@ export function describeForwardingOptionsError(error, fallback = "Failed to load
   }
   if (status === 409 && QUOTE_INVALID_CODES.includes(code)) {
     return { kind: "quote-invalid", code, message: QUOTE_INVALID_MESSAGE };
+  }
+  if (status === 409 && QUOTE_STALE_CODES.includes(code)) {
+    return { kind: "quote-invalid", code, message: QUOTE_STALE_MESSAGE };
   }
   // Tambien el 400 de un cuerpo invalido: { error, details }, sin code.
   return { kind: "error", code: code || null, message: serverMessage(data) || fallback };

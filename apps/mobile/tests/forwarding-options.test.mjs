@@ -15,6 +15,8 @@ import {
   PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE,
   parseInsuredValueCents,
   QUOTE_INVALID_CODES,
+  QUOTE_STALE_CODES,
+  QUOTE_STALE_MESSAGE,
   rateExtras,
   rateMatchesOptions,
   readQuoteResponse,
@@ -262,8 +264,37 @@ test("409: una cotizacion o tarifa obsoleta obliga a volver a cotizar", () => {
   assert.ok(source.includes("JSON.stringify(quotedOptions) !== JSON.stringify(options) || !rateMatchesOptions(rate, options)"));
 });
 
+test("409 al elegir con la cotizacion caducada o invalidada: se borran las tarifas y se vuelve a cotizar", () => {
+  assert.deepEqual(QUOTE_STALE_CODES, ["FORWARDING_QUOTE_EXPIRED", "FORWARDING_QUOTE_UNAVAILABLE", "FORWARDING_QUOTE_INVALIDATED"]);
+  for (const code of QUOTE_STALE_CODES) {
+    const outcome = describeForwardingOptionsError(axiosError(409, { code, error: "Forwarding quote was invalidated by related data changes." }));
+    assert.equal(outcome.kind, "quote-invalid", code);
+    assert.equal(outcome.message, QUOTE_STALE_MESSAGE, code);
+    // No habla de Tracking/Insurance: no es ese el problema.
+    assert.doesNotMatch(outcome.message, /options you chose|tracking|insurance/i, code);
+  }
+  // El mensaje del Alert sale del resultado, no de una constante fija.
+  assert.ok(detail().includes('Alert.alert("Get new rates", outcome.message);'));
+});
+
+test("pagos: la guarda de 3a17a0e (FORWARDING_QUOTE_INVALIDATED) bloquea el pago como los demas", () => {
+  // Los de las casillas, mas el de la guarda de antes de cobrar (backend forwardChargeGuard GUARD_CODES).
+  assert.deepEqual(QUOTE_OPTIONS_INVALID_CODES, [...QUOTE_INVALID_CODES, "FORWARDING_QUOTE_INVALIDATED"]);
+  const guard = forwardPaymentError(axiosError(409, {
+    code: "FORWARDING_QUOTE_INVALIDATED",
+    error: "No payment was started: the quote of the selected rate is no longer valid for this request. Review this forwarding request.",
+    charged: false,
+    retryable: false,
+  }));
+  assert.equal(guard.kind, "quote-invalid");
+  assert.equal(guard.retryable, false, "sin volver a ofrecer el boton");
+  assert.equal(guard.charged, false);
+  // El texto interno del backend ("Review this forwarding request") es para el centro, no para el cliente.
+  assert.equal(guard.message, QUOTE_INVALID_PAYMENT_MESSAGE);
+  assert.doesNotMatch(guard.message, /Review this forwarding request/);
+});
+
 test("pagos: con la tarifa desajustada no se paga", () => {
-  assert.deepEqual(QUOTE_OPTIONS_INVALID_CODES, QUOTE_INVALID_CODES);
   for (const code of QUOTE_OPTIONS_INVALID_CODES) {
     const outcome = forwardPaymentError(axiosError(409, { code, charged: false }));
     assert.equal(outcome.kind, "quote-invalid", code);

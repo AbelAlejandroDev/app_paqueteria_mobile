@@ -64,17 +64,24 @@ export const REPRICE_BLOCKING_CODES = [
   "FORWARDING_REPRICE_NOT_PAYABLE",
 ];
 
-/** 409 de opciones de envio y cotizacion (backend 7de1ae9); los mismos que lib/forwarding-options. */
+/**
+ * 409 de opciones de envio y cotizacion (backend 7de1ae9): los de
+ * lib/forwarding-options, mas FORWARDING_QUOTE_INVALIDATED, que desde HDG
+ * 3a17a0e la guarda de antes de cobrar (lib/forwardChargeGuard) devuelve
+ * cuando la cotizacion de la tarifa elegida se invalido. Ninguno se cobra
+ * (`charged: false`, `retryable: false`).
+ */
 export const QUOTE_OPTIONS_INVALID_CODES = [
   "FORWARDING_QUOTE_OUTDATED",
   "FORWARDING_RATE_OPTIONS_MISMATCH",
   "FORWARDING_QUOTE_OPTIONS_MISMATCH",
   "FORWARD_TRACKING_MISMATCH",
   "FORWARD_INSURANCE_MISMATCH",
+  "FORWARDING_QUOTE_INVALIDATED",
 ];
 
 export const QUOTE_INVALID_PAYMENT_MESSAGE =
-  "This rate no longer matches the tracking or insurance chosen, so it can't be paid. New rates are needed: pull down to refresh, and if nothing changes, contact your center.";
+  "This rate is no longer valid for this shipment or for the tracking and insurance chosen, so it can't be paid. New rates are needed: pull down to refresh, and if nothing changes, contact your center.";
 
 /**
  * La tarifa que tiene elegida una solicitud: lo que identifica la cotizacion

@@ -536,7 +536,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
       // 409: la cotizacion ya no vale. Se borra para que no se pueda seguir con ella.
       if (outcome.kind === "quote-invalid" || outcome.kind === "no-compatible-rates" || outcome.kind === "insurance-unavailable") {
         clearRates();
-        Alert.alert("Get new rates", outcome.kind === "quote-invalid" ? QUOTE_INVALID_MESSAGE : outcome.message);
+        // describeForwardingOptionsError ya trae el texto de cada caso (opciones o cotizacion caducada).
+        Alert.alert("Get new rates", outcome.message);
         return;
       }
       Alert.alert("Could not select rate", outcome.message);
