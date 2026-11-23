@@ -90,7 +90,41 @@ export function describeMembershipEffect(membership) {
       ? `Your membership is still active. We'll request its cancellation with the usual ${membership.plan.noticePeriodDays}-day notice: one more renewal on ${membership.plan.display?.nextChargeAt} will still be charged, and it ends on ${end}. Your deletion request continues after that.`
       : `Your membership is still active. We'll request its cancellation: it ends on ${end} with no further charges, and your deletion request continues after that.`;
   }
-  return "Your membership is still active. Your center will end it before continuing with your deletion request.";
+  return MEMBERSHIP_NOT_CANCELLED;
+}
+
+/**
+ * Lo que dice la app cuando pedir el borrado NO abre ninguna baja (HDG: el
+ * backend responde `membership.handledByCenter` y ningun `plan`). Igual que la
+ * Politica de Privacidad publicada (8.3) y el backend 3a17a0e.
+ */
+export const MEMBERSHIP_NOT_CANCELLED =
+  "Requesting deletion does not cancel your membership. If it is still active, it has to be cancelled separately under your membership terms before your account can be deleted. Your deletion request stays pending until then.";
+
+/**
+ * El aviso de la membresia antes de pedir el borrado, o null si ya no esta
+ * activa. Solo se dice que el borrado abre la baja cuando el backend la planea
+ * (`membership.plan`, The Worx); si no, se dice lo contrario, con el texto del
+ * propio backend (`retention.membership`) cuando lo manda.
+ * @returns {{ headline: string, body: string, startsCancellation: boolean } | null}
+ */
+export function membershipNotice(data) {
+  const membership = data?.membership;
+  if (!membership?.active) return null;
+  if (membership.cancellation) {
+    return { headline: "Your membership cancellation is already in progress.", body: describeMembershipEffect(membership), startsCancellation: false };
+  }
+  if (membership.plan) {
+    return { headline: "Deleting your account also starts the cancellation of your membership.", body: describeMembershipEffect(membership), startsCancellation: true };
+  }
+  const fromServer = typeof data?.retention?.membership === "string" && data.retention.membership.trim() ? data.retention.membership.trim() : null;
+  return { headline: "Requesting deletion does not cancel your membership.", body: fromServer || MEMBERSHIP_NOT_CANCELLED, startsCancellation: false };
+}
+
+/** Cuanto tarda y como se revisa, segun el backend (`retention.processing.message`). */
+export function processingNote(data) {
+  const message = data?.retention?.processing?.message;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
 }
 
 /**

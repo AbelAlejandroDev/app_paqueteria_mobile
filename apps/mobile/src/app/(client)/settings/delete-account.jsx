@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { formatErrorMessage } from "@/lib/utils";
-import { deletionRequestBody, deletionStatusCopy, describeMembershipEffect, describeNoticeRule } from "@/lib/account-deletion";
+import { accountDeletionLinkFor } from "@/lib/legal-links";
+import { useCapabilities } from "@/lib/use-capabilities";
+import { deletionRequestBody, deletionStatusCopy, describeNoticeRule, membershipNotice, processingNote } from "@/lib/account-deletion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -99,7 +103,12 @@ export default function DeleteAccountScreen() {
 
   const data = query.data;
   const request = data?.request || null;
-  const membershipNote = describeMembershipEffect(data?.membership);
+  const membership = membershipNotice(data);
+  const processing = processingNote(data);
+  // La misma solicitud por la web (Google Play): la del backend o la de la marca.
+  const { user } = useAuth();
+  const capabilities = useCapabilities();
+  const webDeletion = accountDeletionLinkFor(user?.tenant?.slug, brand, capabilities.legal);
   // Los dias del preaviso salen de la baja que ya hay o de la que se abriria.
   const noticeRule = describeNoticeRule(data?.membership?.cancellation?.noticePeriodDays ?? data?.membership?.plan?.noticePeriodDays);
 
@@ -150,15 +159,17 @@ export default function DeleteAccountScreen() {
             <View className="gap-4">
               <Bullets title="What we delete" lines={data.retention?.deleted} />
               <Bullets title="What we may have to keep" lines={data.retention?.retained} />
-              {membershipNote ? (
+              {membership ? (
                 <View className={`gap-2 rounded-xl border p-4 ${TONES.amber}`}>
-                  <Text className="font-brand-semibold text-sm leading-5 text-ink">
-                    Deleting your account also starts the cancellation of your membership.
-                  </Text>
-                  <Text className="font-brand text-sm leading-5 text-ink">{membershipNote}</Text>
-                  {noticeRule ? <Text className="font-brand text-sm leading-5 text-ink/80">{noticeRule}</Text> : null}
+                  <Text className="font-brand-semibold text-sm leading-5 text-ink">{membership.headline}</Text>
+                  <Text className="font-brand text-sm leading-5 text-ink">{membership.body}</Text>
+                  {/* La regla del preaviso solo cuando el borrado abre la baja (The Worx). */}
+                  {membership.startsCancellation && noticeRule ? (
+                    <Text className="font-brand text-sm leading-5 text-ink/80">{noticeRule}</Text>
+                  ) : null}
                 </View>
               ) : null}
+              {processing ? <Text className="font-brand text-sm leading-5 text-muted-foreground">{processing}</Text> : null}
 
               <View className="gap-2">
                 <Label>Reason (optional)</Label>
@@ -179,6 +190,17 @@ export default function DeleteAccountScreen() {
                 Request Account Deletion
               </Button>
             </View>
+          ) : null}
+
+          {webDeletion ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => WebBrowser.openBrowserAsync(webDeletion.url).catch(() => {})}
+              className="gap-0.5 rounded-xl border border-border bg-muted p-4"
+            >
+              <Text className="font-brand-semibold text-sm text-ink">You can also request deletion on the web</Text>
+              <Text className="font-brand text-sm leading-5 text-muted-foreground">{webDeletion.url}</Text>
+            </Pressable>
           ) : null}
         </CardContent>
       </Card>

@@ -20,15 +20,16 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 const { BRANDS } = require("../brands/index.js");
 
 const WORX_URL = "https://theworxoffices.com/privacy-policy";
-const HDG_URL = "https://www.hdgexecutivesuites.com/privacy-policy/";
+const HDG_URL = "https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/";
+const HDG_DELETION_URL = "https://members.hdgexecutivesuites.com/account-deletion";
 
 /** La marca tal como la ve la app (extra.brand): solo lo suyo. */
-const appBrand = (id) => ({ id, tenantSlug: BRANDS[id].tenantSlug, privacyPolicy: BRANDS[id].privacyPolicy });
+const appBrand = (id) => ({ id, tenantSlug: BRANDS[id].tenantSlug, privacyPolicy: BRANDS[id].privacyPolicy, accountDeletion: BRANDS[id].accountDeletion });
 
 test("cada organizacion tiene la suya en su app; los desconocidos no heredan nada", () => {
   assert.deepEqual(privacyPolicyFor("the_worx", appBrand("the_worx")), { name: "The Worx Offices Privacy Policy", url: WORX_URL });
   assert.equal(privacyPolicyFor("The-Worx", appBrand("the_worx"))?.url, WORX_URL);
-  assert.deepEqual(privacyPolicyFor("hdg", appBrand("hdg")), { name: "HDG Executive Suites Privacy Policy", url: HDG_URL });
+  assert.deepEqual(privacyPolicyFor("hdg", appBrand("hdg")), { name: "My HDG Mail Privacy Policy", url: HDG_URL });
   assert.equal(privacyPolicyFor("HDG", appBrand("hdg"))?.url, HDG_URL);
   // Aislamiento: la app de una organizacion nunca enlaza la politica de otra.
   assert.equal(privacyPolicyFor("the_worx", appBrand("hdg")), null);
@@ -80,18 +81,21 @@ test("Terms & Conditions sigue donde estaba", () => {
 
 // ── Backend 51ee69d: el enlace lo decide el backend (capabilities.legal y GET /public/legal) ──
 
-test("el backend manda: su URL, o ninguna si dice null; sin respuesta, la de la marca", async () => {
+test("el backend manda si da una URL valida; si dice null o no responde, la publicada por la marca", async () => {
   const { parsePublicLegal, publicLegalPath } = await import("../src/lib/legal-links.js");
   const hdg = appBrand("hdg");
   const OTHER = "https://www.hdgexecutivesuites.com/legal/privacy";
   // Respuesta con URL: esa, con el nombre de la marca.
-  assert.deepEqual(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: OTHER }), { name: "HDG Executive Suites Privacy Policy", url: OTHER });
-  // Respuesta null (no configurada): no hay enlace, ni siquiera el de la marca.
-  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: null }), null);
-  assert.equal(privacyPolicyFor("hdg", hdg, {}), null);
-  // Una URL que no es https limpia no se abre.
-  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "http://www.hdgexecutivesuites.com/privacy-policy/" }), null);
-  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "javascript:alert(1)" }), null);
+  assert.deepEqual(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: OTHER }), { name: "My HDG Mail Privacy Policy", url: OTHER });
+  // Respuesta null (variable sin configurar, como Production hoy): la publicada por la
+  // marca. Las tiendas exigen el enlace y es la de la misma organizacion.
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: null })?.url, HDG_URL);
+  assert.equal(privacyPolicyFor("hdg", hdg, {})?.url, HDG_URL);
+  // Una URL que no es https limpia no se abre: se usa la de la marca.
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "http://www.hdgexecutivesuites.com/privacy-policy/" })?.url, HDG_URL);
+  assert.equal(privacyPolicyFor("hdg", hdg, { privacyPolicyUrl: "javascript:alert(1)" })?.url, HDG_URL);
+  // Sin politica en la marca y null en el backend: ninguna.
+  assert.equal(privacyPolicyFor("hdg", { tenantSlug: "hdg" }, { privacyPolicyUrl: null }), null);
   // Sin respuesta (backend anterior o error de red): la de la marca de la build.
   assert.equal(privacyPolicyFor("hdg", hdg, null)?.url, HDG_URL);
   assert.equal(privacyPolicyFor("hdg", hdg)?.url, HDG_URL);
@@ -101,8 +105,8 @@ test("el backend manda: su URL, o ninguna si dice null; sin respuesta, la de la 
   assert.equal(publicLegalPath("hdg"), "/public/legal?tenant=hdg");
   assert.equal(publicLegalPath("The-Worx"), "/public/legal?tenant=the_worx");
   // /public/legal solo vale si es de la organizacion pedida.
-  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: null }, "hdg"), { privacyPolicyUrl: null });
-  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: HDG_URL }, "hdg"), { privacyPolicyUrl: HDG_URL });
+  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: null }, "hdg"), { privacyPolicyUrl: null, accountDeletionUrl: null });
+  assert.deepEqual(parsePublicLegal({ tenant: "hdg", privacyPolicyUrl: HDG_URL, accountDeletionUrl: HDG_DELETION_URL, termsUrl: null, accountDeletion: { mode: "ASSISTED" } }, "hdg"), { privacyPolicyUrl: HDG_URL, accountDeletionUrl: HDG_DELETION_URL });
   assert.equal(parsePublicLegal({ tenant: "the_worx", privacyPolicyUrl: WORX_URL }, "hdg"), null);
   assert.equal(parsePublicLegal(null, "hdg"), null);
   assert.equal(parsePublicLegal("<html>", "hdg"), null);
@@ -112,10 +116,10 @@ test("capabilities.legal: ausente = no se sabe (null); presente con null = no ha
   const { deriveCapabilities } = await import("../src/lib/capabilities.js");
   const base = { contractVersion: 1, tenant: { slug: "hdg" }, billing: {}, forwarding: {} };
   assert.equal(deriveCapabilities({ capabilities: base, expectedTenantSlug: "hdg" }).legal, null);
-  assert.deepEqual(deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: null } }, expectedTenantSlug: "hdg" }).legal, { privacyPolicyUrl: null });
+  assert.deepEqual(deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: null } }, expectedTenantSlug: "hdg" }).legal, { privacyPolicyUrl: null, accountDeletionUrl: null });
   assert.deepEqual(
-    deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: HDG_URL } }, expectedTenantSlug: "hdg" }).legal,
-    { privacyPolicyUrl: HDG_URL }
+    deriveCapabilities({ capabilities: { ...base, legal: { privacyPolicyUrl: HDG_URL, accountDeletionUrl: HDG_DELETION_URL } }, expectedTenantSlug: "hdg" }).legal,
+    { privacyPolicyUrl: HDG_URL, accountDeletionUrl: HDG_DELETION_URL }
   );
   assert.equal(deriveCapabilities({ capabilities: null }).legal, null);
 });

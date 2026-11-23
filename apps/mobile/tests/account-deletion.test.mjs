@@ -80,7 +80,7 @@ test("lo que se dice de la membresia y de cada estado", () => {
   assert.equal(describeMembershipEffect({ active: false }), null);
   assert.match(describeMembershipEffect({ active: true, plan: { willBeChargedAgain: true, noticePeriodDays: 15, display: { nextChargeAt: "Dec 20", effectiveAt: "Jan 20" } } }), /15-day notice: one more renewal on Dec 20 will still be charged, and it ends on Jan 20/);
   assert.match(describeMembershipEffect({ active: true, cancellation: { display: { effectiveAt: "Jan 20" } } }), /already in progress and ends on Jan 20/);
-  assert.match(describeMembershipEffect({ active: true }), /Your center will end it/);
+  assert.match(describeMembershipEffect({ active: true }), /Requesting deletion does not cancel your membership/);
   assert.match(deletionStatusCopy("WAITING_MEMBERSHIP_CANCELLATION").body, /don't need to send it again/);
   assert.match(deletionStatusCopy("APPROVED").body, /except the records the law requires/);
   assert.equal(deletionStatusCopy("DESCONOCIDO"), deletionStatusCopy("PENDING"));
@@ -94,8 +94,9 @@ test("la pantalla explica la regla de los 15 dias con los dias que manda el serv
   assert.match(rule, /With less than 15 days, one last renewal is charged/);
   assert.equal(describeNoticeRule(null), null, "sin dato (HDG) no se promete ninguna regla");
   const screen = read("src/app/(client)/settings/delete-account.jsx");
-  assert.match(screen, /Deleting your account also starts the cancellation of your membership/);
   assert.match(screen, /describeNoticeRule\(data\?\.membership\?\.cancellation\?\.noticePeriodDays \?\? data\?\.membership\?\.plan\?\.noticePeriodDays\)/);
+  // La regla solo se enseña cuando el borrado abre la baja (The Worx).
+  assert.match(screen, /membership\.startsCancellation && noticeRule/);
 });
 
 test("los estados del procesamiento tienen texto para el cliente", () => {
@@ -106,4 +107,75 @@ test("los estados del procesamiento tienen texto para el cliente", () => {
   const screen = read("src/app/(client)/settings/delete-account.jsx");
   assert.match(screen, /request\?\.canWithdraw/);
   assert.match(screen, /data\?\.canRequest/);
+});
+
+// ── HDG 3a17a0e: pedir el borrado NO cancela la membresia ─────────────────────
+
+const HDG_MEMBERSHIP_TEXT =
+  "Requesting deletion does not cancel your membership. If it is still active, HDG Executive Suites has to cancel it separately under your membership terms before your account can be deleted. Your deletion request stays pending until then; staff will contact you if anything is needed.";
+
+test("HDG: con la membresia activa se dice que el borrado NO la cancela, con el texto del backend", async () => {
+  const { membershipNotice, MEMBERSHIP_NOT_CANCELLED } = await import("../src/lib/account-deletion.js");
+  const hdg = {
+    canRequest: true,
+    membership: { active: true, cancellation: null, plan: null, handledByCenter: true },
+    retention: { membership: HDG_MEMBERSHIP_TEXT },
+  };
+  const notice = membershipNotice(hdg);
+  assert.equal(notice.headline, "Requesting deletion does not cancel your membership.");
+  assert.equal(notice.body, HDG_MEMBERSHIP_TEXT);
+  assert.equal(notice.startsCancellation, false);
+  // Sin texto del backend, el propio: tampoco promete cancelar nada.
+  const fallback = membershipNotice({ ...hdg, retention: {} });
+  assert.equal(fallback.body, MEMBERSHIP_NOT_CANCELLED);
+  assert.doesNotMatch(fallback.body + fallback.headline, /We'll request its cancellation|also starts the cancellation|will end it/);
+  // Membresia ya terminada: nada que avisar.
+  assert.equal(membershipNotice({ membership: { active: false } }), null);
+});
+
+test("The Worx no cambia: con plan, el borrado abre la baja con su preaviso", async () => {
+  const { membershipNotice } = await import("../src/lib/account-deletion.js");
+  const worx = membershipNotice({
+    membership: { active: true, plan: { willBeChargedAgain: false, noticePeriodDays: 15, display: { effectiveAt: "Jan 20" } } },
+    retention: { membership: "If your membership is still active, it has to end first. We open the cancellation for you..." },
+  });
+  assert.equal(worx.headline, "Deleting your account also starts the cancellation of your membership.");
+  assert.match(worx.body, /We'll request its cancellation: it ends on Jan 20/);
+  assert.equal(worx.startsCancellation, true);
+  const inProgress = membershipNotice({ membership: { active: true, cancellation: { display: { effectiveAt: "Jan 20" } } } });
+  assert.match(inProgress.body, /already in progress and ends on Jan 20/);
+  assert.equal(inProgress.startsCancellation, false);
+});
+
+test("el plazo de revision lo dice el backend y la pantalla lo enseña", async () => {
+  const { processingNote } = await import("../src/lib/account-deletion.js");
+  assert.equal(processingNote({ retention: { processing: { days: null, message: "HDG Executive Suites reviews each request manually." } } }), "HDG Executive Suites reviews each request manually.");
+  assert.equal(processingNote({ retention: {} }), null);
+  assert.equal(processingNote(null), null);
+  const screen = read("src/app/(client)/settings/delete-account.jsx");
+  assert.ok(screen.includes("const membership = membershipNotice(data);"));
+  assert.ok(screen.includes("{membership.headline}"));
+  assert.ok(screen.includes("const processing = processingNote(data);"));
+  assert.ok(!screen.includes("describeMembershipEffect"), "el texto de la membresia pasa por membershipNotice");
+});
+
+test("Delete Account ofrece tambien la pagina web de borrado (Google Play)", async () => {
+  const { accountDeletionLinkFor } = await import("../src/lib/legal-links.js");
+  const hdg = { tenantSlug: "hdg", accountDeletion: { name: "Request account deletion on the web", url: "https://members.hdgexecutivesuites.com/account-deletion" } };
+  assert.equal(accountDeletionLinkFor("hdg", hdg, null).url, "https://members.hdgexecutivesuites.com/account-deletion");
+  assert.equal(accountDeletionLinkFor("hdg", hdg, { accountDeletionUrl: null }).url, "https://members.hdgexecutivesuites.com/account-deletion");
+  assert.equal(accountDeletionLinkFor("hdg", hdg, { accountDeletionUrl: "https://members.hdgexecutivesuites.com/delete" }).url, "https://members.hdgexecutivesuites.com/delete");
+  assert.equal(accountDeletionLinkFor("the_worx", hdg, null), null, "nunca la de otra organizacion");
+  assert.equal(accountDeletionLinkFor("the_worx", { tenantSlug: "the_worx" }, null), null, "The Worx no tiene una configurada");
+  const screen = read("src/app/(client)/settings/delete-account.jsx");
+  assert.ok(screen.includes("accountDeletionLinkFor(user?.tenant?.slug, brand, capabilities.legal)"));
+  assert.ok(screen.includes("You can also request deletion on the web"));
+});
+
+test("los errores del backend se explican y nada se borra al pulsar", () => {
+  const screen = read("src/app/(client)/settings/delete-account.jsx");
+  assert.ok(screen.includes('formatErrorMessage(error, "Try again later.")'));
+  assert.ok(screen.includes('error?.response?.data?.code === "ACCOUNT_DELETION_ALREADY_REQUESTED"'));
+  assert.ok(screen.includes("Nothing is deleted right now."));
+  assert.ok(screen.includes("except the records the law requires to keep"));
 });

@@ -116,7 +116,11 @@ function pickRestrictions(restrictions) {
  */
 function pickLegal(legal) {
   if (!legal || typeof legal !== "object") return null;
-  return { privacyPolicyUrl: typeof legal.privacyPolicyUrl === "string" ? legal.privacyPolicyUrl : null };
+  return {
+    privacyPolicyUrl: typeof legal.privacyPolicyUrl === "string" ? legal.privacyPolicyUrl : null,
+    // Desde HDG 3a17a0e: la pagina web para pedir el borrado (Google Play).
+    accountDeletionUrl: typeof legal.accountDeletionUrl === "string" ? legal.accountDeletionUrl : null,
+  };
 }
 
 const UNKNOWN = Object.freeze({

@@ -40,7 +40,7 @@ publicado nada para iOS.
    `exp.host` en la guardia de salida y el cron de `syncPushDelivery` (lo hace el VPS). Sin
    eso no sale ningun push del Sandbox, ni a Android ni a iOS.
 7. Hecho: Firebase de HDG (`my-hdg-mail-f00be`, FCM v1 en EAS), Conference Room y
-   politica de privacidad de HDG (`https://www.hdgexecutivesuites.com/privacy-policy/`,
+   politica de privacidad de la app (`https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/`,
    tambien para la ficha de App Store Connect).
 
 ## Primera build (interactiva: Apple ID y 2FA)

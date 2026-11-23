@@ -146,8 +146,12 @@ const BRANDS = {
     easProjectId: "2e12104c-c190-48aa-b044-da110d34e8f1",
     firebaseProjectId: "my-hdg-mail-f00be",
     conferenceRoomUrl: "https://www.hdgexecutivesuites.com/conference-room/",
-    // Publicada en www.hdgexecutivesuites.com (comprobada el 2026-11-17).
-    privacyPolicy: { name: "HDG Executive Suites Privacy Policy", url: "https://www.hdgexecutivesuites.com/privacy-policy/" },
+    // La politica propia de la app, publicada por HDG (comprobada el 2026-11-23,
+    // 200). La general del sitio (/privacy-policy/) no es la de My HDG Mail.
+    privacyPolicy: { name: "My HDG Mail Privacy Policy", url: "https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/" },
+    // Pagina web para pedir el borrado sin la app (Google Play). Comprobada el
+    // 2026-11-23 (200). Si el backend da `accountDeletionUrl`, manda esa.
+    accountDeletion: { name: "Request account deletion on the web", url: "https://members.hdgexecutivesuites.com/account-deletion" },
     // Dominios de HDG (backend feat/hdg-production-supabase, 3078f4e,
     // docs/HDG_MOBILE_PRODUCTION_HANDOFF.md §2): Sandbox en `sandbox-core`,
     // Production en `core`. Son APIs y bases distintas. Hasta que se promueva

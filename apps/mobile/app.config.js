@@ -239,6 +239,8 @@ module.exports = {
         easProjectId: brand.easProjectId || null,
         // Settings → Legal; solo la de esta organizacion (lib/legal-links).
         privacyPolicy: brand.privacyPolicy || null,
+        // Delete Account; solo la de esta organizacion (lib/legal-links).
+        accountDeletion: brand.accountDeletion || null,
       },
     },
   },

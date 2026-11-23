@@ -122,19 +122,25 @@ Se corrige igual: un OTA **Android** al canal `preview` de `hdg-client` desde es
 Requiere autorizacion y comprobar la compatibilidad contra esa build. Hasta entonces, no abrir
 esa APK ni repartirla.
 
-## 4b. Politica de privacidad (backend 51ee69d)
+## 4b. Politica de privacidad y borrado por la web (backend 3a17a0e)
 
-La app la lee del backend:
-- antes de iniciar sesion, enlace en Login desde `GET /public/legal?tenant=hdg`;
-- con sesion, en Settings → Legal desde `GET /client/capabilities` → `legal`.
+Donde aparece:
+- antes de iniciar sesion, en Login, desde `GET /public/legal?tenant=hdg`;
+- con sesion, en Settings → Legal, desde `GET /client/capabilities` → `legal`.
 
-Si el backend dice `privacyPolicyUrl: null`, **no se enseña ningun enlace**. Solo si no responde
-(backend anterior o sin red) se usa la de la marca de la build, que es la de HDG.
+Si el backend da una URL https valida, se usa esa. Si dice `null`, o no responde, se usa la
+publicada por HDG y empaquetada en la build:
 
-Comprobado el 2026-11-21: `sandbox-core` y `core` devuelven `null`. **Antes de la revision de
-Apple**, Production necesita
-`PRIVACY_POLICY_URL__HDG=https://www.hdgexecutivesuites.com/privacy-policy/` (la pagina responde
-200). Sin esa variable la app no enseñara la politica.
+| Enlace | URL de la marca (comprobada el 2026-11-23, 200) |
+|---|---|
+| Politica de privacidad de la app | `https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/` |
+| Borrado de cuenta por la web | `https://members.hdgexecutivesuites.com/account-deletion` (en Settings → Delete Account) |
+
+El 2026-11-23 `core` y `sandbox-core` todavia devuelven `privacyPolicyUrl: null`. La app
+enseña igualmente la de la marca. Para que el backend sea la fuente, configurar en
+Production:
+- `PRIVACY_POLICY_URL__HDG=https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/`
+- `ACCOUNT_DELETION_URL__HDG=https://members.hdgexecutivesuites.com/account-deletion`
 
 ## 5. Cuenta de demostracion para Apple (la crea el backend, no la app)
 
@@ -170,7 +176,7 @@ La app se guia por `GET /client/capabilities`. Los `402`/`403`/`409` se muestran
 3. Prueba de extremo a extremo de la baja de cuenta en una cuenta sin suscripcion de Zoho (handoff §8).
 4. App Store Connect:
    - capturas de iPhone 6,9" hechas con la build de Production (sin franja Sandbox);
-   - descripcion, URL de soporte y politica de privacidad (`https://www.hdgexecutivesuites.com/privacy-policy/`);
+   - descripcion, URL de soporte y politica de privacidad (`https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/`);
    - cuestionario de privacidad;
    - clasificacion por edad;
    - declaracion de comerciante de la UE.

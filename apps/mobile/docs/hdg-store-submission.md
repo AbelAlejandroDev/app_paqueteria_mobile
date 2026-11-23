@@ -23,7 +23,9 @@ Nada de esto se ha enviado a ninguna tienda.
 | Borrado de cuenta en la app | Settings → Delete Account: solicitud que revisa el centro; lo que se borra y lo que se conserva lo manda el backend (`retention`) | `settings/delete-account.jsx` |
 | Cerrar sesion | Settings → Sign out (con confirmacion) | `settings/index.jsx` |
 | Soporte | Help: email y telefono del centro, si el backend los da | `help/index.jsx` |
-| Politica de privacidad | Login (`/public/legal`) y Settings → Legal (`capabilities.legal`). **Hoy el backend responde `null`: no se ve en ningun sitio** | `lib/legal-links.js` |
+| Politica de privacidad | Login y Settings → Legal: la del backend si la da; si no, `https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/` (rama `hdg/store-release-preparation`) | `lib/legal-links.js` |
+| Borrado por la web | Settings → Delete Account enlaza `https://members.hdgexecutivesuites.com/account-deletion` | `lib/legal-links.js` |
+| Membresia y borrado | La app dice que pedir el borrado **no** cancela la membresia (HDG, backend 3a17a0e) | `lib/account-deletion.js` |
 | Pagos | Paginas alojadas de Stripe/Zoho en el navegador; nada de In-App Purchase. En fase 1 (`forwarding.payments: false`) no se ofrece pagar | `components/common/*payment*` |
 | Push | APNs `46PKSW3B6D` y FCM v1 (`my-hdg-mail-f00be`) en EAS | `docs/push-setup.md` |
 | Firma Android | Keystore de subida en EAS (`hdg-client`); Play App Signing al crear la app | `docs/hdg-production-app-review.md` §3 |
@@ -86,17 +88,10 @@ Sin acceso de staff ni administrador.
 
 ## 5. Borrado de cuenta por la web (Google Play)
 
-Google pide una URL que funcione sin la app. Lo que existe en el codigo:
-- el portal tiene la funcion (`feat/account-deletion-requests`);
-- `members.` es una SPA y no se pudo comprobar una pagina publica.
-
-Opciones (decide HDG):
-1. **Recomendado.** Pagina publica en `www.hdgexecutivesuites.com`:
-   - como pedir el borrado (portal → menu de cuenta, o email al centro);
-   - que se borra y que se conserva, con el mismo texto que el backend en `retention`.
-2. La ruta del portal con sesion, si los clientes tienen acceso web.
-
-No escribir el texto de retencion sin que lo apruebe HDG: tiene que coincidir con el backend.
+Resuelto (2026-11-23): `https://members.hdgexecutivesuites.com/account-deletion` (200).
+Va en Google Play → Data Safety → borrado de cuenta y en Settings → Delete Account. El backend
+puede servirla como `accountDeletionUrl` (`ACCOUNT_DELETION_URL__HDG`); hasta entonces la app
+usa la de la marca.
 
 ## 6. Material para las tiendas (ingles, borrador)
 
@@ -169,7 +164,8 @@ Payments: the app does not sell digital content. Mailbox membership, mail forwar
 
 During review, push notifications, emails and SMS are not sent from this environment. "Forgot password" accepts the request but no email is delivered.
 
-Account deletion: Settings > Delete Account. It sends a deletion request that the center reviews; the screen explains what is deleted and what must be kept by law.
+Account deletion: Settings > Delete Account. It sends a deletion request that the center reviews; the screen explains what is deleted and what must be kept by law. Requesting deletion does not cancel the mailbox membership, which is cancelled separately under its terms. Deletion can also be requested on the web: https://members.hdgexecutivesuites.com/account-deletion
+Privacy policy: https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/ (also in the app: Login and Settings > Legal).
 ```
 
 **Capturas recomendadas** (build de Production, cuenta demo, sin franja Sandbox):
@@ -194,18 +190,18 @@ Categoria: Apple **Business** (secundaria Productivity); Google **Business**.
 | # | Riesgo | Tienda | Que lo evita |
 |---|---|---|---|
 | R1 | La app se publica desde **The Workbox, LLC** (`3KX6P6C79Q`), el mismo equipo que My Worx Mail, con el mismo codigo: guia **4.2.6** (apps de plantilla las envia el dueño del contenido) y **4.3** (spam) | Apple | Publicar desde una cuenta de desarrollador de HDG, o documentar que The Workbox opera el servicio de HDG. **Decision de negocio** |
-| R2 | Politica de privacidad: `/public/legal` y `capabilities.legal` devuelven `null` en Production; la app no enseña ningun enlace (5.1.1(i)) | Ambas | Backend: `PRIVACY_POLICY_URL__HDG=https://www.hdgexecutivesuites.com/privacy-policy/` en Production |
+| R2 | ~~Politica de privacidad invisible~~ Resuelto en la app: si el backend dice `null`, la de la marca. Recomendado igualmente en Production: `PRIVACY_POLICY_URL__HDG=https://www.hdgexecutivesuites.com/my-hdg-mail-privacy-policy/` | Ambas | Nueva build (la URL va en el binario y en el JS) |
 | R3 | No existe la cuenta demo en Production (2.1) | Ambas | Seed `appreview` y probar el login |
 | R4 | "Forgot password" sin correo en fase 1: el revisor lo ve como fallo (2.1) | Apple | Explicarlo en las notas (ya en el borrador) o activar el correo |
 | R5 | Escaneo pagado dentro de la app (3.1.1) cuando se activen los pagos | Apple | Hoy apagado; antes de activarlo, decidir si el escaneo se factura como servicio del centro (fuera de la app) |
-| R6 | Sin URL web de borrado de cuenta | Google | §5 |
+| R6 | ~~Sin URL web de borrado de cuenta~~ Resuelto: §5 | Google | — |
 | R7 | Cuenta de Play Console personal creada despues de nov. 2023: 12 testers durante 14 dias en prueba cerrada antes de Production | Google | Cuenta de organizacion (D-U-N-S), o planificar la prueba cerrada |
 | R8 | Distribucion en la UE sin declaracion de comerciante (DSA) | Apple | Limitar la disponibilidad a Estados Unidos o declarar |
 | R9 | Elegir una build de Sandbox (1.0.0 (1)/(2)) al enviar | Apple | Elegir solo la build `hdg-production` |
 
 ## 8. Orden de las builds de Production (cuando se autorice)
 
-1. Backend Production: `PRIVACY_POLICY_URL__HDG` y la cuenta demo (R2, R3).
+1. Backend Production: la cuenta demo (R3); recomendado tambien `PRIVACY_POLICY_URL__HDG` y `ACCOUNT_DELETION_URL__HDG`.
 2. Decidir R1 (cuenta que publica) **antes** de nada en App Store Connect.
 3. `npm run check:hdg-production` → `OK`.
 4. iOS: `eas build -p ios --profile hdg-production`.
