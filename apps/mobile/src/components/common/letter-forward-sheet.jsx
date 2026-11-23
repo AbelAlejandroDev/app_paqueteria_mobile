@@ -328,10 +328,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   });
 
   const pending = requestForward.isPending;
-  // Seguro sin seguimiento no existe para cartas, y el valor va de $100 a $5,000:
-  // la peticion no sale hasta que se corrija (lib/forwarding-options).
+  // Con seguro, el valor va de $100 a $5,000: la peticion no sale hasta que se
+  // corrija (lib/forwarding-options). Seguro sin Tracking es valido (V2).
   const optionsProblem = shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue });
-  const showValueProblem = insuranceRequested && trackingRequested && String(insuredValue).trim() !== "" && insuredValueProblem(insuredValue);
+  const showValueProblem = insuranceRequested && String(insuredValue).trim() !== "" && insuredValueProblem(insuredValue);
   const canSubmit =
     (addingAddress ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && !optionsProblem && !pending;
 
@@ -644,13 +644,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         onToggle={() => setInsuranceRequested((value) => !value)}
         icon={ShieldCheck}
         label="Add insurance"
-        description="Adds insurance for the declared value. Requires Add Tracking."
+        description="Adds insurance for the declared value. Your center ships it with a service that accepts insurance."
       >
         {insuranceRequested ? (
           <>
-            {!trackingRequested && optionsProblem ? (
-              <Notice tone="amber">{optionsProblem.message}</Notice>
-            ) : null}
             <Field label={<RequiredLabel>Declared value (USD)</RequiredLabel>}>
               <Input
                 value={insuredValue}

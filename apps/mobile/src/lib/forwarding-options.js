@@ -1,21 +1,23 @@
 /**
  * Add Tracking y Add Insurance en el reenvio: lo que el cliente elige es lo que
- * se cotiza, se compra y se cobra (backend 7de1ae9, filtrado estricto).
+ * se cotiza, se compra y se cobra. Regla TRACKING_INSURANCE_V2 del backend
+ * (fix/tracking-insurance-unificado, ba3b11b), la misma en HDG y The Worx: las
+ * casillas son REQUISITOS MINIMOS, no exclusiones.
  *
  * Reglas que la app NO decide, solo respeta y explica:
  *   - Las dos casillas empiezan apagadas y solo las cambia el cliente. Ningun
  *     boton ni respuesta del servidor las enciende solo.
- *   - Cartas: Insurance ON con Tracking OFF no existe (el seguro solo va en un
- *     servicio rastreado), asi que la peticion no se manda.
- *   - Paquetes: todos los servicios disponibles llevan seguimiento, asi que con
- *     Tracking OFF el backend responde 422 sin tarifas; la app lo explica y
- *     ofrece encenderlo, sin encenderlo ella.
+ *   - Tracking ON: solo tarifas con `trackingIncluded`. Tracking OFF no excluye
+ *     nada: que tarifas hay lo decide el backend (una carta sin extras va por
+ *     First-Class, su regla de siempre).
+ *   - Cartas: Insurance ON con Tracking OFF es valido; el backend ofrece los
+ *     servicios que admiten el seguro. Un backend anterior (V1) lo rechaza con
+ *     422 INSURANCE_REQUIRES_TRACKED_SERVICE, que se explica.
  *   - Paquetes y sobres grandes (LARGE_ENVELOPE, parcelType FLAT): el seguro
  *     adicional no se contrata, asi que la casilla esta deshabilitada y nunca se
- *     pide (el backend responde 422 INSURANCE_NOT_AVAILABLE_FOR_PACKAGES).
- *   - Sobres grandes: Tracking OFF puede tener tarifas (USPS First-Class Flat
- *     sin seguimiento). Que haya o no tarifas lo dice el backend; la app solo
- *     filtra por `trackingIncluded`.
+ *     pide; si llega el 422 INSURANCE_NOT_AVAILABLE_FOR_PACKAGES, su texto.
+ *   - Seguro: una tarifa se elige y se paga solo si trae `Ins` exactamente
+ *     cuando se pidio y por el valor declarado (nada de pagar un extra que no va).
  *   - "Tracking included" e "Insured" se enseñan solo si la tarifa lo trae:
  *     `trackingIncluded` y el servicio especial `Ins` con su valor. El valor
  *     declarado no es un seguro.
@@ -122,14 +124,12 @@ export function insuredValueProblem(text) {
  * tocar la red; el backend lo vuelve a comprobar.
  * @param {{ itemType?: string, letterForward?: boolean, trackingRequested?: boolean, insuranceRequested?: boolean, insuredValue?: string }} options
  */
-export function shippingOptionsProblem({ itemType, letterForward = false, trackingRequested = false, insuranceRequested = false, insuredValue = "" } = {}) {
+export function shippingOptionsProblem({ itemType, letterForward = false, insuranceRequested = false, insuredValue = "" } = {}) {
   if (!insuranceRequested) return null;
   if (!letterForward && !insuranceAvailableFor(itemType)) {
     return { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", message: insuranceUnavailableMessage(itemType) };
   }
-  if (letterForward && !trackingRequested) {
-    return { code: "INSURANCE_REQUIRES_TRACKED_SERVICE", message: INSURANCE_REQUIRES_TRACKING_MESSAGE };
-  }
+  // V2: una carta con seguro y sin Tracking se pide; lo que se puede ofrecer lo decide el backend.
   const valueProblem = insuredValueProblem(insuredValue);
   return valueProblem ? { code: "INSURED_VALUE_INVALID", message: valueProblem } : null;
 }
@@ -187,19 +187,21 @@ export function describeForwardingOptionsError(error, fallback = "Failed to load
     return describeCompatibility({ ...compat, failedCarriers: data?.failedCarriers }, serverMessage(data));
   }
   if (status === 422 && code === "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES") {
+    // El texto del backend (dice si es paquete o sobre grande); sin el, el de la pieza.
     return {
       kind: "insurance-unavailable",
-      message: itemType ? insuranceUnavailableMessage(itemType) : serverMessage(data) || ITEM_INSURANCE_UNAVAILABLE_MESSAGE,
+      message: serverMessage(data) || (itemType ? insuranceUnavailableMessage(itemType) : ITEM_INSURANCE_UNAVAILABLE_MESSAGE),
     };
   }
   if (status === 422 && (code === "INSURANCE_REQUIRES_TRACKED_SERVICE" || data?.compatibility?.reason === "INSURANCE_REQUIRES_TRACKED_SERVICE")) {
     return { kind: "no-compatible-rates", reason: "INSURANCE_REQUIRES_TRACKED_SERVICE", canEnableTracking: false, excludedServices: [], message: serverMessage(data) || INSURANCE_REQUIRES_TRACKING_MESSAGE };
   }
+  // Al elegir tarifa los textos del backend son para el cliente ("Get new rates"): mandan.
   if (status === 409 && QUOTE_INVALID_CODES.includes(code)) {
-    return { kind: "quote-invalid", code, message: QUOTE_INVALID_MESSAGE };
+    return { kind: "quote-invalid", code, message: serverMessage(data) || QUOTE_INVALID_MESSAGE };
   }
   if (status === 409 && QUOTE_STALE_CODES.includes(code)) {
-    return { kind: "quote-invalid", code, message: QUOTE_STALE_MESSAGE };
+    return { kind: "quote-invalid", code, message: serverMessage(data) || QUOTE_STALE_MESSAGE };
   }
   // Tambien el 400 de un cuerpo invalido: { error, details }, sin code.
   return { kind: "error", code: code || null, message: serverMessage(data) || fallback };
@@ -217,15 +219,15 @@ export function insuredServiceValueCents(rate) {
 }
 
 /**
- * Si una tarifa es lo que se pidio. El backend ya filtra; esto impide que una
- * respuesta distinta (backend anterior, cache) se elija y se pague:
- *   - tracking pedido <-> la tarifa lo incluye;
+ * Si una tarifa es lo que se pidio. El backend ya filtra; esto solo impide que
+ * se elija y se pague un extra pedido que la tarifa no trae (o uno no pedido):
+ *   - tracking pedido -> la tarifa lo incluye (V2: sin tracking pedido no se
+ *     descarta nada; una tarifa con el seguimiento incluido es valida);
  *   - seguro pedido <-> la tarifa trae `Ins` por el mismo valor; sin seguro, no lo trae.
  */
 export function rateMatchesOptions(rate, shippingOptions) {
   if (!rate || typeof rate !== "object" || !rate.optionId) return false;
-  const tracked = rate.trackingIncluded === true;
-  if (Boolean(shippingOptions?.trackingRequested) !== tracked) return false;
+  if (shippingOptions?.trackingRequested && rate.trackingIncluded !== true) return false;
   const insured = insuredServiceValueCents(rate);
   // insuredValueCents de la tarifa: entero, 0 sin seguro (si faltara, manda `Ins`).
   const declared = Number.isFinite(rate.insuredValueCents) ? rate.insuredValueCents : null;

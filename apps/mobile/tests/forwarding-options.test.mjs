@@ -6,7 +6,6 @@ import {
   buildShippingOptions,
   describeCompatibility,
   describeForwardingOptionsError,
-  INSURANCE_REQUIRES_TRACKING_MESSAGE,
   insuranceAvailableFor,
   insuredServiceValueCents,
   insuranceUnavailableMessage,
@@ -25,7 +24,7 @@ import {
 import { forwardPaymentError, isQuoteBlocked, paymentRateKey, QUOTE_INVALID_PAYMENT_MESSAGE, QUOTE_OPTIONS_INVALID_CODES } from "../src/lib/forward-payment.js";
 
 /**
- * Add Tracking / Add Insurance con el filtrado estricto del backend 7de1ae9.
+ * Add Tracking / Add Insurance con la regla TRACKING_INSURANCE_V2 del backend (ba3b11b).
  * Solo mocks: respuestas de POST /client/forwarding/quotes y errores 422/409
  * con la forma que describe el contrato (error, code, compatibility).
  */
@@ -72,7 +71,7 @@ test("valor declarado: de $100 a $5,000, en dolares con dos decimales como mucho
 
 // ── Cartas: las cuatro combinaciones ─────────────────────────────────────────
 
-test("cartas: OFF/OFF, ON/OFF y ON/ON salen tal cual; OFF/ON no se puede pedir", () => {
+test("V2 cartas: las cuatro combinaciones se piden tal cual (seguro sin tracking incluido)", () => {
   const letter = (trackingRequested, insuranceRequested, insuredValue = "") => ({
     letterForward: true,
     trackingRequested,
@@ -86,22 +85,27 @@ test("cartas: OFF/OFF, ON/OFF y ON/ON salen tal cual; OFF/ON no se puede pedir",
   assert.equal(shippingOptionsProblem(letter(true, false)), null);
   assert.deepEqual(buildShippingOptions(letter(true, false)), { trackingRequested: true, insuranceRequested: false });
 
-  // Seguro sin seguimiento: bloqueado con el motivo, antes de tocar la red.
-  const blocked = shippingOptionsProblem(letter(false, true, "250"));
-  assert.equal(blocked.code, "INSURANCE_REQUIRES_TRACKED_SERVICE");
-  assert.equal(blocked.message, INSURANCE_REQUIRES_TRACKING_MESSAGE);
+  // V2: seguro sin seguimiento es valido; sale con lo elegido, sin encender Tracking.
+  assert.equal(shippingOptionsProblem(letter(false, true, "250")), null);
+  assert.deepEqual(buildShippingOptions(letter(false, true, "250")), { trackingRequested: false, insuranceRequested: true, insuredValueCents: 25000 });
 
   assert.equal(shippingOptionsProblem(letter(true, true, "250")), null);
   assert.deepEqual(buildShippingOptions(letter(true, true, "250")), { trackingRequested: true, insuranceRequested: true, insuredValueCents: 25000 });
+  // El valor declarado se sigue exigiendo, con o sin Tracking.
   assert.equal(shippingOptionsProblem(letter(true, true, "50")).code, "INSURED_VALUE_INVALID");
-  assert.equal(shippingOptionsProblem(letter(true, true, "")).code, "INSURED_VALUE_INVALID");
+  assert.equal(shippingOptionsProblem(letter(false, true, "50")).code, "INSURED_VALUE_INVALID");
+  assert.equal(shippingOptionsProblem(letter(false, true, "")).code, "INSURED_VALUE_INVALID");
 });
 
-test("cartas: la hoja bloquea Insurance ON + Tracking OFF y manda exactamente lo elegido", () => {
+test("V2 cartas: la hoja deja pedir Insurance ON + Tracking OFF y manda exactamente lo elegido", () => {
   const source = sheet();
   assert.ok(source.includes("shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue })"));
   assert.ok(/destinationVerified && !optionsProblem && !pending/.test(source), "sin opciones validas no se puede pedir");
-  assert.ok(source.includes("{!trackingRequested && optionsProblem ? ("), "explica por que");
+  // Ni el aviso ni el texto de "Requires Add Tracking" de V1.
+  assert.ok(!source.includes("{!trackingRequested && optionsProblem ? ("));
+  assert.ok(!source.includes("Requires Add Tracking"));
+  // El error del valor declarado se ve tambien sin Tracking.
+  assert.ok(source.includes("const showValueProblem = insuranceRequested && String(insuredValue).trim() !== \"\" && insuredValueProblem(insuredValue);"));
   assert.ok(source.includes("shippingOptions: buildShippingOptions({ letterForward: true, trackingRequested, insuranceRequested, insuredValue })"));
   // Empiezan apagadas y solo cambian al pulsarlas.
   assert.ok(source.includes("const [trackingRequested, setTrackingRequested] = useState(false);"));
@@ -169,7 +173,7 @@ test("paquetes: el boton solo enciende la casilla al pulsarlo, y no cotiza solo"
   assert.ok(/outcome\.kind === "no-compatible-rates" \|\| outcome\.kind === "insurance-unavailable"\) \{\s*setQuoteEmpty\(outcome\);\s*return;/.test(source));
 });
 
-test("paquetes y sobres: las cuatro combinaciones solo dejan elegir lo que se pidio", () => {
+test("V2: las cuatro combinaciones dejan elegir lo que el backend ofrece y cumple lo pedido", () => {
   const response = {
     quoteId: "q1",
     environment: "production",
@@ -182,18 +186,45 @@ test("paquetes y sobres: las cuatro combinaciones solo dejan elegir lo que se pi
   };
   const ids = (options) => readQuoteResponse(response, options).rates.map((r) => r.optionId);
 
-  assert.deepEqual(ids({ trackingRequested: false, insuranceRequested: false }), ["FCM"]); // A
-  assert.deepEqual(ids({ trackingRequested: true, insuranceRequested: false }), ["PM"]); // B
-  // C: seguro sin seguimiento -> ninguna, y se explica.
-  const c = readQuoteResponse({ quoteId: "q1", rates: [rate("FCM")] }, { trackingRequested: false, insuranceRequested: true, insuredValueCents: 25000 });
-  assert.deepEqual(c.rates, []);
-  assert.equal(c.empty.kind, "no-compatible-rates");
-  assert.deepEqual(ids({ trackingRequested: true, insuranceRequested: true, insuredValueCents: 25000 }), ["PM-INS"]); // D, mismo valor
+  // A: Tracking OFF no descarta las que traen seguimiento incluido; las aseguradas no (seguro no pedido).
+  assert.deepEqual(ids({ trackingRequested: false, insuranceRequested: false }), ["FCM", "PM"]);
+  // B: Tracking ON, solo las que lo traen.
+  assert.deepEqual(ids({ trackingRequested: true, insuranceRequested: false }), ["PM"]);
+  // C: carta con seguro y sin Tracking: los servicios asegurados (con seguimiento) por ese valor.
+  assert.deepEqual(ids({ trackingRequested: false, insuranceRequested: true, insuredValueCents: 25000 }), ["PM-INS"]);
+  // D: seguro y Tracking: lo mismo.
+  assert.deepEqual(ids({ trackingRequested: true, insuranceRequested: true, insuredValueCents: 25000 }), ["PM-INS"]);
+});
+
+test("V2 carta con seguro y sin tracking: la cotizacion del backend se ensena y se puede elegir", () => {
+  // Respuesta V2: los servicios que admiten el seguro (traen seguimiento incluido).
+  const options = buildShippingOptions({ itemType: "LETTER", trackingRequested: false, insuranceRequested: true, insuredValue: "300" });
+  assert.deepEqual(options, { trackingRequested: false, insuranceRequested: true, insuredValueCents: 30000 });
+  const result = readQuoteResponse(
+    { quoteId: "q-ins", rates: [rate("GA-INS", { tracked: true, insured: "300.00" }), rate("PM-INS", { tracked: true, insured: "300.00" })] },
+    options
+  );
+  assert.deepEqual(result.rates.map((r) => r.optionId), ["GA-INS", "PM-INS"]);
+  assert.equal(result.empty, null);
+  assert.deepEqual(rateExtras(result.rates[0], money), ["Tracking included", "Insured for $300.00 (additional insurance)"]);
+  // Pero nunca una tarifa sin el seguro pedido, ni por otro valor (no se paga un extra que no va).
+  assert.equal(rateMatchesOptions(rate("GA", { tracked: true }), options), false);
+  assert.equal(rateMatchesOptions(rate("GA-INS", { tracked: true, insured: "100.00" }), options), false);
+});
+
+test("V2 carta con seguro y tracking: solo los servicios asegurados con seguimiento", () => {
+  const options = buildShippingOptions({ itemType: "LETTER", trackingRequested: true, insuranceRequested: true, insuredValue: "300" });
+  const result = readQuoteResponse(
+    { quoteId: "q-ins", rates: [rate("PM-INS", { tracked: true, insured: "300.00" }), rate("X-INS", { tracked: false, insured: "300.00" })] },
+    options
+  );
+  assert.deepEqual(result.rates.map((r) => r.optionId), ["PM-INS"], "Tracking ON exige trackingIncluded");
 });
 
 test("una tarifa que no es lo pedido no se puede elegir (ni pagar)", () => {
-  assert.equal(rateMatchesOptions(rate("PM", { tracked: true }), { trackingRequested: false }), false, "no cuela tracking no pedido");
-  assert.equal(rateMatchesOptions(rate("FCM"), { trackingRequested: true }), false);
+  // V2: Tracking OFF no es una exclusion; una tarifa con seguimiento incluido vale.
+  assert.equal(rateMatchesOptions(rate("PM", { tracked: true }), { trackingRequested: false }), true, "tracking incluido sin pedirlo, valido en V2");
+  assert.equal(rateMatchesOptions(rate("FCM"), { trackingRequested: true }), false, "tracking pedido y no incluido");
   assert.equal(rateMatchesOptions(rate("PM", { tracked: true, insured: "250.00" }), { trackingRequested: true }), false, "no cuela seguro no pedido");
   assert.equal(rateMatchesOptions(rate("PM", { tracked: true }), { trackingRequested: true, insuranceRequested: true, insuredValueCents: 25000 }), false);
   assert.equal(rateMatchesOptions(rate("PM", { tracked: true, insured: "250.00" }), { trackingRequested: true, insuranceRequested: true, insuredValueCents: 25000 }), true);
@@ -210,7 +241,8 @@ test("200 sin tarifas (o todas descartadas) tambien es un estado vacio", () => {
   assert.equal(empty.empty.reason, "INSURANCE_NOT_AVAILABLE_FOR_SERVICES");
   assert.match(empty.empty.message, /Turn off Add Insurance/);
 
-  const discarded = readQuoteResponse({ rates: [rate("PM", { tracked: true })] }, { trackingRequested: false, insuranceRequested: false });
+  // Descartada: tracking pedido y la tarifa no lo trae.
+  const discarded = readQuoteResponse({ rates: [rate("FCM")] }, { trackingRequested: true, insuranceRequested: false });
   assert.equal(discarded.discarded, 1);
   assert.equal(discarded.empty.reason, "NO_SERVICE_MATCHES_OPTIONS");
 });
@@ -228,16 +260,48 @@ test("422: cada motivo con su texto si el backend no manda mensaje", () => {
     assert.equal(outcome.kind, "no-compatible-rates", reason);
     assert.match(outcome.message, pattern, reason);
   }
+  // INSURANCE_NOT_AVAILABLE_FOR_PACKAGES: sin mensaje del backend, el de la pieza.
   assert.deepEqual(
-    describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", error: "x" }), undefined, { itemType: "PACKAGE" }),
+    describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES" }), undefined, { itemType: "PACKAGE" }),
     { kind: "insurance-unavailable", message: PACKAGE_INSURANCE_UNAVAILABLE_MESSAGE }
   );
   assert.equal(
-    describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", error: "x" }), undefined, { itemType: "LARGE_ENVELOPE" }).message,
+    describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES" }), undefined, { itemType: "LARGE_ENVELOPE" }).message,
     LARGE_ENVELOPE_INSURANCE_UNAVAILABLE_MESSAGE
   );
-  // Sin tipo, el texto del backend.
-  assert.equal(describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", error: "x" })).message, "x");
+});
+
+test("V2 paquete y sobre grande con seguro: el 422 ensena el texto del backend", () => {
+  // Textos reales de ba3b11b (forwardingQuotes INSURANCE_UNAVAILABLE_MESSAGES).
+  const pkg = "Additional insurance is not available for packages yet. Remove insurance to see the rates for this item.";
+  const flat = "Additional insurance is not available for large envelopes yet. Remove insurance to see the rates for this item.";
+  for (const [itemType, error] of [["PACKAGE", pkg], ["LARGE_ENVELOPE", flat], [undefined, pkg]]) {
+    const outcome = describeForwardingOptionsError(axiosError(422, { code: "INSURANCE_NOT_AVAILABLE_FOR_PACKAGES", error }), undefined, { itemType });
+    assert.deepEqual(outcome, { kind: "insurance-unavailable", message: error }, String(itemType));
+  }
+  // Es un estado vacio que se corrige quitando el seguro (no un Alert): el mismo camino que los 422 de compatibilidad.
+  assert.ok(/outcome\.kind === "no-compatible-rates" \|\| outcome\.kind === "insurance-unavailable"\) \{\s*setQuoteEmpty\(outcome\);\s*return;/.test(detail()));
+});
+
+test("V2 paquete con Tracking OFF: sin exclusion por seguimiento", () => {
+  const options = buildShippingOptions({ itemType: "PACKAGE", trackingRequested: false });
+  assert.deepEqual(options, { trackingRequested: false, insuranceRequested: false });
+  const result = readQuoteResponse({ quoteId: "q-pkg", rates: [rate("PM", { tracked: true }), rate("GA", { tracked: true }), rate("UPS-GND", { tracked: true })] }, options);
+  assert.deepEqual(result.rates.map((r) => r.optionId), ["PM", "GA", "UPS-GND"]);
+  assert.equal(result.empty, null, "no es un estado vacio");
+});
+
+test("V2: la tarifa elegida se conserva hasta que cambian las opciones", () => {
+  const source = detail();
+  // Elegir no borra: la seleccion solo se limpia en clearRates (que llama onQuoteField al cambiar una opcion).
+  assert.ok(source.includes("setSelectedRateId(result.rates[0]?.optionId || \"\");"), "tras cotizar, la primera valida");
+  const outsideClear = source.replace(/const clearRates = \(\) => \{[\s\S]*?\n  \};/, "");
+  assert.equal((outsideClear.match(/setSelectedRateId\(""\)/g) || []).length, 1, "solo el onError de la cotizacion vacia la seleccion fuera de clearRates");
+  // Lo que se elige es exactamente lo cotizado con estas opciones.
+  assert.ok(source.includes("setQuotedOptions(result.rates.length ? shippingOptions : null);"));
+  // Con tarifas V2 (seguimiento incluido sin pedirlo) la comprobacion de antes de elegir deja seguir.
+  const options = { trackingRequested: false, insuranceRequested: false };
+  assert.equal(rateMatchesOptions(rate("PM", { tracked: true }), options), true);
 });
 
 test("409: una cotizacion o tarifa obsoleta obliga a volver a cotizar", () => {
@@ -249,9 +313,11 @@ test("409: una cotizacion o tarifa obsoleta obliga a volver a cotizar", () => {
     "FORWARD_INSURANCE_MISMATCH",
   ]);
   for (const code of QUOTE_INVALID_CODES) {
-    const outcome = describeForwardingOptionsError(axiosError(409, { code, error: "stale" }));
-    assert.equal(outcome.kind, "quote-invalid", code);
-    assert.match(outcome.message, /Get new rates/);
+    // Con el texto del backend (al elegir son para el cliente), ese; sin el, el de la app.
+    const withText = describeForwardingOptionsError(axiosError(409, { code, error: "This quote is out of date. Get new rates." }));
+    assert.equal(withText.kind, "quote-invalid", code);
+    assert.equal(withText.message, "This quote is out of date. Get new rates.", code);
+    assert.match(describeForwardingOptionsError(axiosError(409, { code })).message, /Get new rates/, code);
   }
   // Otros 409 no se confunden con estos.
   assert.equal(describeForwardingOptionsError(axiosError(409, { code: "FORWARD_ALREADY_REQUESTED", error: "Already" })).kind, "error");
@@ -267,11 +333,13 @@ test("409: una cotizacion o tarifa obsoleta obliga a volver a cotizar", () => {
 test("409 al elegir con la cotizacion caducada o invalidada: se borran las tarifas y se vuelve a cotizar", () => {
   assert.deepEqual(QUOTE_STALE_CODES, ["FORWARDING_QUOTE_EXPIRED", "FORWARDING_QUOTE_UNAVAILABLE", "FORWARDING_QUOTE_INVALIDATED"]);
   for (const code of QUOTE_STALE_CODES) {
-    const outcome = describeForwardingOptionsError(axiosError(409, { code, error: "Forwarding quote was invalidated by related data changes." }));
+    const outcome = describeForwardingOptionsError(axiosError(409, { code, error: "Forwarding quote expired." }));
     assert.equal(outcome.kind, "quote-invalid", code);
-    assert.equal(outcome.message, QUOTE_STALE_MESSAGE, code);
-    // No habla de Tracking/Insurance: no es ese el problema.
-    assert.doesNotMatch(outcome.message, /options you chose|tracking|insurance/i, code);
+    assert.equal(outcome.message, "Forwarding quote expired.", "el texto del backend");
+    // Sin texto, el de la app, que no habla de Tracking/Insurance: no es ese el problema.
+    const fallback = describeForwardingOptionsError(axiosError(409, { code }));
+    assert.equal(fallback.message, QUOTE_STALE_MESSAGE, code);
+    assert.doesNotMatch(fallback.message, /options you chose|tracking|insurance/i, code);
   }
   // El mensaje del Alert sale del resultado, no de una constante fija.
   assert.ok(detail().includes('Alert.alert("Get new rates", outcome.message);'));
@@ -361,9 +429,21 @@ test("la logica de opciones no lleva ni APIs ni marcas: vale igual en Sandbox y 
   assert.doesNotMatch(lib, /(from\s+["']|require\(\s*["'])(\.\.\/)+brands/);
 });
 
+test("V2 es la misma regla en HDG y The Worx: ninguna marca la configura ni la cambia", () => {
+  // La regla vive en el backend (igual en todos los centros); la app no tiene un ajuste por marca.
+  const brands = read("../brands/index.js");
+  assert.doesNotMatch(brands, /tracking|insurance|filterPolicy/i);
+  const config = read("../app.config.js");
+  assert.doesNotMatch(config, /tracking|insurance|filterPolicy/i);
+  // Las pantallas que cotizan no preguntan por la marca.
+  for (const source of [detail(), sheet()]) {
+    assert.doesNotMatch(source, /brand\.(id|tenantSlug)\s*===|APP_BRAND/);
+  }
+});
+
 // ── Contrato real 7de1ae9: LARGE_ENVELOPE, campos opcionales, pago tras 409 ──
 
-test("LARGE_ENVELOPE OFF/OFF: First-Class Flat sin seguimiento se puede elegir", () => {
+test("LARGE_ENVELOPE OFF/OFF (V2): First-Class Flat y los servicios con seguimiento incluido se pueden elegir", () => {
   const response = {
     quoteId: "q-flat",
     rates: [
@@ -374,7 +454,7 @@ test("LARGE_ENVELOPE OFF/OFF: First-Class Flat sin seguimiento se puede elegir",
   const options = buildShippingOptions({ itemType: "LARGE_ENVELOPE", trackingRequested: false, insuranceRequested: false });
   assert.deepEqual(options, { trackingRequested: false, insuranceRequested: false });
   const result = readQuoteResponse(response, options);
-  assert.deepEqual(result.rates.map((r) => r.optionId), ["FCM-FLAT"]);
+  assert.deepEqual(result.rates.map((r) => r.optionId), ["FCM-FLAT", "PM-FLAT"], "Tracking OFF no excluye");
   assert.equal(result.empty, null, "no es un estado vacio");
   assert.deepEqual(rateExtras(result.rates[0], money), [], "ni 'Tracking included' ni 'Insured'");
 });
@@ -405,11 +485,11 @@ test("LARGE_ENVELOPE Insurance ON: la interfaz no deja pedirlo y nunca viaja", (
   assert.equal(buildShippingOptions({ letterForward: true, trackingRequested: true, insuranceRequested: true, insuredValue: "150" }).insuredValueCents, 15000);
 });
 
-test("paquete: Tracking OFF sin servicios sin seguimiento -> cero tarifas; Tracking ON -> las compatibles", () => {
+test("paquete (V2): Tracking OFF y ON ensenan los servicios con seguimiento incluido", () => {
   const all = { quoteId: "q-pkg", rates: [rate("PM", { tracked: true }), rate("GA", { tracked: true })] };
   const off = readQuoteResponse(all, buildShippingOptions({ itemType: "PACKAGE", trackingRequested: false }));
-  assert.deepEqual(off.rates, []);
-  assert.equal(off.empty.kind, "no-compatible-rates");
+  assert.deepEqual(off.rates.map((r) => r.optionId), ["PM", "GA"]);
+  assert.equal(off.empty, null);
   const on = readQuoteResponse(all, buildShippingOptions({ itemType: "PACKAGE", trackingRequested: true }));
   assert.deepEqual(on.rates.map((r) => r.optionId), ["PM", "GA"]);
 });
