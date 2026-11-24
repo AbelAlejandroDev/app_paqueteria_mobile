@@ -203,6 +203,14 @@ export function forwardPaymentError(error) {
   if (code === "ZOHO_PAYMENT_IN_PROGRESS") {
     return { kind: "in-progress", retryable: true, checkStatus: true, message: "A payment is already in progress. Wait a moment and check the status." };
   }
+  // Cobro del centro (HDG): otro collect en curso o sin confirmar en la misma
+  // factura. Se concilia solo; el cliente solo consulta el estado.
+  if (code === "COLLECT_IN_PROGRESS") {
+    return { kind: "in-progress", retryable: false, checkStatus: true, message: "Your center's charge is still being processed. Nothing new was charged; check the status in a moment." };
+  }
+  if (code === "COLLECT_UNCONFIRMED") {
+    return { kind: "unknown-outcome", retryable: false, checkStatus: true, message: "We're still confirming your center's charge. Nothing new was charged; check the status in a moment." };
+  }
   if (code === "ZOHO_OUTCOME_UNCERTAIN" || code === "ZOHO_VOID_UNCONFIRMED") {
     return { kind: "unknown-outcome", retryable: false, checkStatus: true, message: "Nothing new was charged. We're still confirming an earlier attempt: check the status in a moment." };
   }

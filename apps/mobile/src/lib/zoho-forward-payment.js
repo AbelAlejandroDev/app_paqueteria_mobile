@@ -23,6 +23,7 @@
 import { isSecurePageUrl } from "./zoho-billing.js";
 import { forwardPaymentError } from "./forward-payment.js";
 import { chargeFromZohoPayment } from "./price-display.js";
+import { collectPendingReason } from "./auto-charge-consent.js";
 
 // Lo comun a Stripe y Zoho (rutas, recotizacion, estado y sondeo) esta en
 // lib/forward-payment; se reexporta para quien importa desde aqui.
@@ -75,10 +76,15 @@ export function isPaymentLinkExpired(expiresAt, now = Date.now(), marginMs = 60 
  * Que hacer con la respuesta 200 de prepare-payment.
  *   { kind: "paid" }                              -> listo, refrescar.
  *   { kind: "invoice", paymentUrl, expiresAt, breakdown, autoCharge } -> revisar / pagar.
+ *   { kind: "collect-pending", reason }           -> sin pagina porque el centro
+ *        tiene un cobro en curso o sin confirmar (COLLECT_IN_PROGRESS /
+ *        COLLECT_UNCONFIRMED): consultar el estado, NUNCA otro intento.
  *   { kind: "invalid" }                           -> la URL no es https valida.
  */
 export function interpretPrepareResponse(data) {
   if (isPaidPrepareResponse(data)) return { kind: "paid" };
+  const collectReason = collectPendingReason(data);
+  if (collectReason) return { kind: "collect-pending", reason: collectReason };
   const paymentUrl = isSecurePageUrl(data?.paymentUrl) ? data.paymentUrl.trim() : null;
   if (!paymentUrl) return { kind: "invalid" };
   return {

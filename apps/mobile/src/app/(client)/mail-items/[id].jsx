@@ -65,6 +65,7 @@ import {
   itemActions,
 } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/use-capabilities";
+import { useStaffChargeDecision } from "@/lib/use-auto-charge-consent";
 import ZohoForwardPaymentCard from "@/components/common/zoho-forward-payment-card";
 import StripeForwardPayment from "@/components/common/stripe-forward-payment";
 import ScanApprovalCard from "@/components/common/scan-approval-card";
@@ -139,8 +140,8 @@ function paidAmountLabel(details) {
  * cargo de reenvio y la fecha de despacho no viajan en forwardDetails
  * (f7c677a), asi que no se pintan. La gestion interna nunca va en una linea.
  */
-function ForwardSummaryCard({ request }) {
-  const stage = describeForwardStage(request);
+function ForwardSummaryCard({ request, stageOptions }) {
+  const stage = describeForwardStage(request, stageOptions);
   if (!stage) return null;
   const details = request.forwardDetails || {};
   const charge = chargeFromForwardDetails(details);
@@ -265,7 +266,7 @@ function ToggleRow({ label, description, value, onValueChange, disabled = false 
  * cobros) esta en lib/forward-payment. Ninguno da un pago por bueno sin
  * payment-status del backend.
  */
-function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
+function ForwardPaymentCard({ request, mailItemId, onRefresh, staffCharge = null }) {
   const details = request.forwardDetails || {};
   const needsAuthentication = details.paymentStatus === "AUTHENTICATION_REQUIRED";
 
@@ -273,14 +274,37 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
   const mode = forwardPaymentMode(capabilities);
   const waitingForCapabilities = !capabilities.known && capabilities.isLoading;
 
+  // Cobro iniciado por el centro (cartas y sobres grandes de HDG con Zoho;
+  // lib/auto-charge-consent). PACKAGE y The Worx no traen nada aqui: igual que antes.
+  const staffPrepared = Boolean(staffCharge?.staffPrepared) && mode === FORWARD_PAYMENT_ZOHO_HOSTED;
+  const [payNowInstead, setPayNowInstead] = useState(false);
+  const deciding = staffPrepared && staffCharge?.loading;
+  const centerCharges = staffPrepared && staffCharge?.decision?.mode === "staff-charge" && !payNowInstead;
+  const decision = staffCharge?.decision;
+
+  const confirmPayNow = () => {
+    Alert.alert(
+      "Pay now instead?",
+      "Your center is set to charge your saved card for this shipment. If you pay now, review the total and pay it yourself.",
+      [
+        { text: "Keep automatic charge", style: "cancel" },
+        { text: "Pay now", onPress: () => setPayNowInstead(true) },
+      ]
+    );
+  };
+
+  const description = needsAuthentication
+    ? "Your bank asked to verify this payment."
+    : centerCharges
+      ? "Your center will charge your saved card (up to " + decision.maxLabel + "). You will be notified."
+      : staffPrepared && details.paymentStatus === "FAILED"
+        ? "Card declined: update your card or pay in the app."
+        : staffPrepared && details.paymentStatus === "PAYMENT_PENDING"
+          ? "Payment processing."
+          : "Forwarding rate selected, payment pending.";
+
   return (
-    <NoticeCard
-      tone="amber"
-      title="Forward Payment"
-      description={
-        needsAuthentication ? "Your bank asked to verify this payment." : "Forwarding rate selected, payment pending."
-      }
-    >
+    <NoticeCard tone={centerCharges ? "sky" : "amber"} title="Forward Payment" description={description}>
       <SummaryLine label="Carrier" value={details.quotedCarrier} />
       <SummaryLine label="Service" value={details.quotedService} />
       <SummaryLine label={SHIPPING_AND_HANDLING_LABEL} value={formatMoneyFromCents(details.quotedAmountCents)} />
@@ -292,14 +316,38 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
         </Notice>
       ) : null}
 
-      {waitingForCapabilities ? (
+      {waitingForCapabilities || deciding ? (
         <Button className="mt-3" loading disabled>
           Pay now
         </Button>
+      ) : centerCharges ? (
+        // Autorizacion valida y total estimado dentro del maximo: sin Review &
+        // Pay. Lo cobra el centro; pagar uno mismo queda como alternativa.
+        <View className="mt-2 gap-2">
+          <View className="gap-1 rounded-lg border border-border bg-background p-3">
+            {chargeRows(decision.charge).map((row) => (
+              <SummaryLine key={row.label} label={row.label} value={row.cents != null ? formatMoneyFromCents(row.cents) : null} />
+            ))}
+          </View>
+          <Text className="font-brand text-[12px] leading-4 text-ink/60">
+            Nothing is charged until your center confirms the total. You can withdraw the authorization in Settings.
+          </Text>
+          <Button variant="outline" onPress={confirmPayNow}>
+            Pay now instead
+          </Button>
+        </View>
       ) : mode === FORWARD_PAYMENT_STRIPE_CHECKOUT ? (
         <StripeForwardPayment request={request} mailItemId={mailItemId} capabilities={capabilities} onRefresh={onRefresh} />
       ) : mode === FORWARD_PAYMENT_ZOHO_HOSTED ? (
-        <ZohoForwardPaymentCard request={request} capabilities={capabilities} onRefresh={onRefresh} />
+        <ZohoForwardPaymentCard
+          // Otra clave si cambia el estado: processing/declined son el estado inicial.
+          key={staffPrepared ? String(details.paymentStatus) : "zoho"}
+          request={request}
+          capabilities={capabilities}
+          onRefresh={onRefresh}
+          processing={staffPrepared && details.paymentStatus === "PAYMENT_PENDING"}
+          declinedByCenter={staffPrepared && details.paymentStatus === "FAILED"}
+        />
       ) : mode === FORWARD_PAYMENT_UNKNOWN ? (
         // Sin capacidades no se adivina el proveedor: ni Stripe ni Zoho.
         <View className="mt-2 gap-2">
@@ -1372,6 +1420,19 @@ export default function MailItemDetailScreen() {
     [serviceRequests]
   );
 
+  // Cobro iniciado por el centro (cartas y sobres grandes de HDG): si el pago
+  // pendiente lo cobra el centro o sigue el manual. PACKAGE y The Worx: manual.
+  const screenCapabilities = useCapabilities();
+  const staffCharge = useStaffChargeDecision({
+    request: payableForwardRequest,
+    itemType: item?.type,
+    paymentMode: forwardPaymentMode(screenCapabilities),
+  });
+  const forwardStageOptions = {
+    staffPrepared: isStaffPreparedForward(item?.type),
+    staffCharge: latestForward && latestForward.id === payableForwardRequest?.id ? staffCharge.decision : null,
+  };
+
   const lastAction = timeline.length > 0 ? timeline[timeline.length - 1] : null;
 
   // Al abrir el item, marca como leídas sus notificaciones pendientes.
@@ -1576,6 +1637,7 @@ export default function MailItemDetailScreen() {
             request={payableForwardRequest}
             mailItemId={item.id}
             onRefresh={() => query.refetch()}
+            staffCharge={staffCharge}
           />
         ) : null}
 
@@ -1653,7 +1715,7 @@ export default function MailItemDetailScreen() {
           </DetailCard>
         ) : null}
 
-        {latestForward ? <ForwardSummaryCard request={latestForward} /> : null}
+        {latestForward ? <ForwardSummaryCard request={latestForward} stageOptions={forwardStageOptions} /> : null}
 
         <DetailCard className="p-5">
           <CardHeading className="mb-4">History</CardHeading>

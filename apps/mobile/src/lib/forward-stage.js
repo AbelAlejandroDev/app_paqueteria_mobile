@@ -27,7 +27,15 @@ const OPEN = ["OPEN", "PROCESSING", "IN_PROGRESS"];
 const LABEL_DONE = ["LABEL_PURCHASED", "CREATED"];
 const LABEL_IN_PROGRESS = ["PENDING_FULFILLMENT", "CREATING"];
 
-export function describeForwardStage(request) {
+/**
+ * `options` (cartas y sobres grandes de HDG; sin ellas, todo como antes):
+ *   staffPrepared  la pieza la prepara el centro: el rechazo ofrece las dos
+ *                  salidas (actualizar la tarjeta o pagar en la app).
+ *   staffCharge    staffChargeDecision (lib/auto-charge-consent): con
+ *                  mode "staff-charge", READY_FOR_PAYMENT no pide pagar: el
+ *                  centro cobra la tarjeta guardada hasta el maximo autorizado.
+ */
+export function describeForwardStage(request, { staffPrepared = false, staffCharge = null } = {}) {
   if (!request || request.type !== "FORWARD") return null;
   const status = String(request.status || "");
   const d = request.forwardDetails || {};
@@ -70,8 +78,10 @@ export function describeForwardStage(request) {
   if (payment === "FAILED") {
     return {
       key: "payment-declined",
-      title: "Payment declined",
-      description: "The payment did not go through. Review your payment method, then try again.",
+      title: staffPrepared ? "Card declined" : "Payment declined",
+      description: staffPrepared
+        ? "Update your card so your center can charge it again, or pay in the app."
+        : "The payment did not go through. Review your payment method, then try again.",
       tone: "rose",
       action: "update-payment",
     };
@@ -96,6 +106,15 @@ export function describeForwardStage(request) {
       key: "staff-preparation",
       title: "Waiting for staff preparation",
       description: "Your center will weigh and prepare it. You'll see the total before anything is charged.",
+      tone: "sky",
+      action: null,
+    };
+  }
+  if (OPEN.includes(status) && quoted && payment === "READY_FOR_PAYMENT" && staffCharge?.mode === "staff-charge") {
+    return {
+      key: "staff-charge",
+      title: "Your center will charge your saved card",
+      description: (staffCharge.maxLabel ? "Up to " + staffCharge.maxLabel + ". " : "") + "You will be notified.",
       tone: "sky",
       action: null,
     };

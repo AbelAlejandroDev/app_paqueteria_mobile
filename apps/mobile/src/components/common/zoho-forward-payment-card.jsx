@@ -23,6 +23,7 @@ import { usePaymentStatus } from "@/lib/use-payment-status";
 import { ZOHO_ADD_PAYMENT_METHOD_PATH, ZOHO_UPDATE_CARD_PATH, zohoBillingErrorMessage, zohoPageUrl } from "@/lib/zoho-billing";
 import { interpretPrepareResponse, isPaymentLinkExpired, REVIEW_BODY, SAVED_CARD_BODY } from "@/lib/zoho-forward-payment";
 import { chargeRows } from "@/lib/price-display";
+import { COLLECT_PENDING_REASONS } from "@/lib/auto-charge-consent";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/modal";
 
@@ -50,8 +51,18 @@ function Line({ label, value, strong }) {
  *      "Check again". Solo PAID del backend da el pago por hecho.
  *
  * Un candado (createSingleFlight) impide que una doble pulsacion mande dos POST.
+ *
+ * Cobro iniciado por el centro (cartas y sobres grandes de HDG; quien la monta
+ * decide, para PACKAGE no se pasa nada y todo sigue igual):
+ *   - `processing`: PAYMENT_PENDING. Se ensena "Payment processing" y solo
+ *     "Check status": ningun boton de pago hasta que payment-status diga que
+ *     fallo o caduco. Asi no se presenta otro intento sobre un collect vivo.
+ *   - `declinedByCenter`: FAILED. Se ofrecen las dos salidas: actualizar la
+ *     tarjeta (el centro vuelve a cobrar la misma factura) o pagar en la app.
+ *   - prepare-payment con `paymentUrl: null` y COLLECT_IN_PROGRESS /
+ *     COLLECT_UNCONFIRMED (kind "collect-pending"): igual que `processing`.
  */
-export default function ZohoForwardPaymentCard({ request, capabilities, onRefresh }) {
+export default function ZohoForwardPaymentCard({ request, capabilities, onRefresh, processing = false, declinedByCenter = false }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const scope = sessionScope(user);
@@ -61,7 +72,9 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
   const [notice, setNotice] = useState(null);
   const [savedCardBlockedUntil, setSavedCardBlockedUntil] = useState(0);
   const [noSavedCard, setNoSavedCard] = useState(false);
-  const [declined, setDeclined] = useState(false);
+  const [declined, setDeclined] = useState(Boolean(declinedByCenter));
+  // Un collect del centro en curso o sin confirmar: solo se consulta el estado.
+  const [collectPending, setCollectPending] = useState(Boolean(processing));
   const [nowMs, setNowMs] = useState(() => Date.now());
   // 409 de cotizacion invalida: se descarta la factura revisada y no se ofrece
   // pagar hasta que la solicitud traiga otra tarifa (lib/forward-payment).
@@ -91,7 +104,12 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       if (!reading) return;
       if (reading.state === "paid") refreshAfterPayment();
       // La pagina caduco o el pago fallo: la proxima vez, factura/URL nuevas.
-      if (reading.state === "link-expired" || reading.state === "failed") setInvoice(null);
+      if (reading.state === "link-expired" || reading.state === "failed") {
+        setInvoice(null);
+        // El collect del centro termino sin pago: ya se puede pagar en la app.
+        setCollectPending(false);
+        if (reading.state === "failed") setDeclined(true);
+      }
     },
   });
 
@@ -131,8 +149,21 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       return;
     }
     if (outcome.checkStatus) status.start();
+    // Cobro del centro en curso o sin confirmar: fuera los botones de pago
+    // hasta saber el resultado. Solo estos dos codigos: el resto (PACKAGE
+    // incluido) sigue como estaba.
+    if (COLLECT_PENDING_REASONS.includes(error?.response?.data?.code)) setCollectPending(true);
     if (outcome.kind === "unavailable") notifyCapabilitiesStale("payment-unavailable");
     setNotice({ tone: "amber", text: outcome.message });
+  };
+
+  // prepare-payment sin pagina porque el centro tiene un collect vivo: no se
+  // ofrece otro intento, solo consultar el estado.
+  const enterCollectPending = () => {
+    setInvoice(null);
+    setCollectPending(true);
+    setNotice({ tone: "amber", text: "Your center's charge is still being confirmed. Nothing new was charged. Check the status in a moment." });
+    status.start();
   };
 
   const review = useMutation({
@@ -142,6 +173,10 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       if (result.kind === "paid") {
         setNotice({ tone: "emerald", text: "This shipment is already paid." });
         refreshAfterPayment();
+        return;
+      }
+      if (result.kind === "collect-pending") {
+        enterCollectPending();
         return;
       }
       if (result.kind !== "invoice") {
@@ -176,6 +211,10 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
         refreshAfterPayment();
         return;
       }
+      if (result.kind === "collect-pending") {
+        enterCollectPending();
+        return;
+      }
       if (result.kind === "invoice") setInvoice(result);
       const outcome = result.autoCharge;
       if (outcome?.reason === "NO_SAVED_CARD") setNoSavedCard(true);
@@ -199,6 +238,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       if (!current || isPaymentLinkExpired(current.expiresAt)) {
         const result = interpretPrepareResponse((await api.post(preparePaymentPath(request.id), REVIEW_BODY)).data);
         if (result.kind === "paid") return { paid: true };
+        if (result.kind === "collect-pending") return { collectPending: true };
         if (result.kind !== "invoice") throw new Error("INVALID_PAYMENT_URL");
         current = result;
         setInvoice(result);
@@ -206,7 +246,11 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       await WebBrowser.openBrowserAsync(current.paymentUrl);
       return { paid: false };
     },
-    onSuccess: ({ paid }) => {
+    onSuccess: ({ paid, collectPending: centerCollecting }) => {
+      if (centerCollecting) {
+        enterCollectPending();
+        return;
+      }
       if (paid) {
         setNotice({ tone: "emerald", text: "This shipment is already paid." });
         refreshAfterPayment();
@@ -262,7 +306,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
     );
   }
 
-  const blocked = quoteBlocked || ["review", "cancelled", "refunded"].includes(reading?.state);
+  const blocked = quoteBlocked || collectPending || ["review", "cancelled", "refunded"].includes(reading?.state);
 
   return (
     <View className="mt-2 gap-2">
@@ -270,12 +314,30 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
 
+      {/* Cobro del centro en curso: solo consultar. Nada de otro intento. */}
+      {collectPending && !status.waiting && reading?.state !== "pending" ? (
+        <View className="gap-2">
+          {notice ? null : (
+            <Notice tone="amber">{"Payment processing. Your center's charge is being confirmed. Nothing new will be charged."}</Notice>
+          )}
+          <Button variant="outline" disabled={busy} onPress={checkAgain}>
+            Check payment status
+          </Button>
+        </View>
+      ) : null}
+
       {blocked ? null : !invoice ? (
         <>
           <Button loading={review.isPending || confirmReprice.isPending} disabled={busy || status.waiting} onPress={() => guarded(review)}>
-            Review payment
+            {declinedByCenter ? "Pay in the app" : "Review payment"}
           </Button>
           <Text className="font-brand text-[12px] leading-4 text-ink/60">You will see the total before anything is charged.</Text>
+          {/* Rechazada en el cobro del centro: la otra salida es cambiar la tarjeta. */}
+          {declinedByCenter && declined && zohoActions.updateCard ? (
+            <Button variant="outline" disabled={busy} onPress={() => guarded(openZohoPage, ZOHO_UPDATE_CARD_PATH)}>
+              Update your card
+            </Button>
+          ) : null}
         </>
       ) : (
         <View className="gap-2 rounded-lg border border-border bg-background p-3">

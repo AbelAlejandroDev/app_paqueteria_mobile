@@ -578,7 +578,8 @@ test("409 al pagar: tarifa descartada y sin boton de pago hasta que llegue otra"
   assert.ok(stripe.includes("const canOffer = decision.action !== ACTION_NONE && !status.waiting && !quoteBlocked;"));
   assert.ok(/lock\.run\(async \(\) => \{\s*if \(quoteBlocked\) return;/.test(stripe), "ni una pulsacion pendiente paga");
   const zoho = read("../src/components/common/zoho-forward-payment-card.jsx");
-  assert.ok(zoho.includes('const blocked = quoteBlocked || ["review", "cancelled", "refunded"].includes(reading?.state);'));
+  // collectPending (cobro del centro en curso, HDG) tambien bloquea; quoteBlocked sigue primero.
+  assert.ok(zoho.includes('const blocked = quoteBlocked || collectPending || ["review", "cancelled", "refunded"].includes(reading?.state);'));
   assert.ok(zoho.includes("lock.run(() => (quoteBlocked ? Promise.resolve() : mutation.mutateAsync(variables).catch(() => {})));"));
   assert.ok(/setInvalidQuoteKey\(paymentRateKey\(request\)\);\s*setInvoice\(null\);/.test(zoho), "la factura revisada se descarta");
 });
