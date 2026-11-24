@@ -36,6 +36,7 @@ import {
   applySuggestedToForwardForm,
   hasForwardFormChanges,
   invalidatesAddressCheck,
+  isStaffPreparedForward,
   verifyDraftFromForwardForm,
 } from "@/lib/forward-form";
 import { chargeFromForwardDetails, chargeFromRate, chargeRows, SHIPPING_AND_HANDLING_LABEL } from "@/lib/price-display";
@@ -428,6 +429,8 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const [quotedOptions, setQuotedOptions] = useState(null);
 
   const isLetter = item?.type === "LETTER";
+  // Cartas y sobres grandes los prepara el centro (lib/forward-form); los paquetes cotiza el cliente.
+  const staffPrepared = isStaffPreparedForward(item?.type);
   // Seguro adicional: ni paquetes ni sobres grandes lo admiten (lib/forwarding-options).
   const insuranceAllowed = insuranceAvailableFor(item?.type);
 
@@ -735,7 +738,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   const selectedRate = forwardRates.find((rate) => rate.optionId === selectedRateId) || null;
 
   const openForward = () => {
-    if (isLetter) {
+    if (staffPrepared) {
       setLetterForwardKey((value) => value + 1);
       setLetterForwardOpen(true);
     } else {
@@ -750,7 +753,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
    */
   const forwardAction = actions.canRequestForward ? (
     <ActionButton variant="primary" icon={Truck} disabled={anyPending} onPress={openForward}>
-      {isLetter ? "Forward Letter" : "Forward Item"}
+      {isLetter ? "Forward Letter" : staffPrepared ? "Request Forwarding" : "Forward Item"}
     </ActionButton>
   ) : null;
 
@@ -1155,15 +1158,23 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           </Notice>
         </Modal>
 
-        {/* Cartas: el mismo flujo que el portal web. El cliente no cotiza, pide
-            el reenvio y el centro confirma el franqueo al pesar el sobre. */}
-        {isLetter ? (
+        {/* Cartas y sobres grandes: el cliente no cotiza ni paga; pide el
+            reenvio y el centro pesa, cotiza y confirma el precio. Si el backend
+            todavia exige cotizacion para el sobre (FORWARDING_QUOTE_REQUIRED),
+            se pasa a las tarifas con la direccion y Tracking ya puestos. */}
+        {staffPrepared ? (
           <LetterForwardSheet
             key={letterForwardKey}
             visible={letterForwardOpen}
             onClose={() => setLetterForwardOpen(false)}
             mailItems={[item]}
             onCompleted={onRefresh}
+            onQuoteRequired={(prefill) => {
+              setLetterForwardOpen(false);
+              clearRates();
+              setForwardForm((current) => ({ ...current, ...prefill }));
+              setForwardOpen(true);
+            }}
           />
         ) : null}
 

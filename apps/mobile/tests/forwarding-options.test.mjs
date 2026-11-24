@@ -99,14 +99,16 @@ test("V2 cartas: las cuatro combinaciones se piden tal cual (seguro sin tracking
 
 test("V2 cartas: la hoja deja pedir Insurance ON + Tracking OFF y manda exactamente lo elegido", () => {
   const source = sheet();
-  assert.ok(source.includes("shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue })"));
+  // Cartas: su formulario tal cual (letterForward); sobre grande: por su tipo y sin seguro.
+  assert.ok(source.includes("? { letterForward: true, trackingRequested, insuranceRequested, insuredValue }"));
+  assert.ok(source.includes("shippingOptionsProblem(currentOptionsInput())"));
+  assert.ok(source.includes("shippingOptions: buildShippingOptions(currentOptionsInput())"));
   assert.ok(/destinationVerified && !optionsProblem && !pending/.test(source), "sin opciones validas no se puede pedir");
   // Ni el aviso ni el texto de "Requires Add Tracking" de V1.
   assert.ok(!source.includes("{!trackingRequested && optionsProblem ? ("));
   assert.ok(!source.includes("Requires Add Tracking"));
   // El error del valor declarado se ve tambien sin Tracking.
   assert.ok(source.includes("const showValueProblem = insuranceRequested && String(insuredValue).trim() !== \"\" && insuredValueProblem(insuredValue);"));
-  assert.ok(source.includes("shippingOptions: buildShippingOptions({ letterForward: true, trackingRequested, insuranceRequested, insuredValue })"));
   // Empiezan apagadas y solo cambian al pulsarlas.
   assert.ok(source.includes("const [trackingRequested, setTrackingRequested] = useState(false);"));
   assert.ok(source.includes("const [insuranceRequested, setInsuranceRequested] = useState(false);"));

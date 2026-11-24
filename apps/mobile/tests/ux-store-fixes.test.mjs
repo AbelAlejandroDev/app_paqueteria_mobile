@@ -230,10 +230,68 @@ test("LETTER: se pide sin tarifa ni pago; el centro pesa y prepara ('Waiting for
   assert.equal(stage.action, null, "nada que pagar todavia");
 });
 
-test("PACKAGE y LARGE_ENVELOPE siguen con la cotizacion: el backend f7c677a exige quote fuera de cartas", () => {
+test("LARGE_ENVELOPE igual que LETTER: la hoja del centro, sin cotizar ni pagar; PACKAGE sigue cotizando", async () => {
+  const { isStaffPreparedForward, STAFF_PREPARED_FORWARD_TYPES } = await import("../src/lib/forward-form.js");
+  assert.deepEqual(STAFF_PREPARED_FORWARD_TYPES, ["LETTER", "LARGE_ENVELOPE"]);
+  assert.equal(isStaffPreparedForward("LETTER"), true);
+  assert.equal(isStaffPreparedForward("large_envelope"), true);
+  assert.equal(isStaffPreparedForward("PACKAGE"), false);
+
   const item = detail();
-  assert.match(item, /const openForward = \(\) => \{\s*if \(isLetter\) \{/);
+  assert.match(item, /const staffPrepared = isStaffPreparedForward\(item\?\.type\);/);
+  assert.match(item, /const openForward = \(\) => \{\s*if \(staffPrepared\) \{/);
+  assert.match(item, /\{isLetter \? "Forward Letter" : staffPrepared \? "Request Forwarding" : "Forward Item"\}/);
+  // PACKAGE: el modal de tarifas de siempre.
+  assert.match(item, /\} else \{\s*setForwardOpen\(true\);/);
   assert.match(item, /api\.post\("\/client\/forwarding\/quotes"/);
+
+  // La hoja: mismo endpoint que las cartas (POST /client/service-requests), sin quotes ni pagos.
+  const letter = sheet();
+  assert.match(letter, /\(mailItems \|\| \[\]\)\.filter\(\(item\) => isStaffPreparedForward\(item\?\.type\)\)/);
+  assert.match(letter, /api\.post\("\/client\/service-requests", \{/);
+  assert.match(letter, /"Your center will weigh, pack and ship this " \+ \(allLetters \? "letter" : "large envelope"\)/);
+});
+
+test("LARGE_ENVELOPE en la hoja: Tracking si, seguro no (V2); lo que viaja es exactamente lo elegido", async () => {
+  const { buildShippingOptions, shippingOptionsProblem } = await import("../src/lib/forwarding-options.js");
+  const input = { itemType: "LARGE_ENVELOPE", trackingRequested: true, insuranceRequested: false, insuredValue: "" };
+  assert.deepEqual(buildShippingOptions(input), { trackingRequested: true, insuranceRequested: false });
+  assert.equal(shippingOptionsProblem(input), null);
+  const letter = sheet();
+  assert.match(letter, /const insuranceAllowed = allLetters;/);
+  assert.match(letter, /: \{ itemType: items\[0\]\?\.type \|\| "LARGE_ENVELOPE", trackingRequested, insuranceRequested: false, insuredValue: "" \};/);
+  assert.match(letter, /insuranceUnavailableMessage\("LARGE_ENVELOPE"\)/);
+  // La seleccion multiple sigue siendo solo de cartas (backend MULTI_FORWARD_LETTERS_ONLY).
+  assert.match(read("src/lib/mail-selection.js"), /if \(action === "FORWARD"\) return item\?\.type === "LETTER" && actions\.canRequestForward;/);
+});
+
+test("backend que aun exige cotizacion (409 FORWARDING_QUOTE_REQUIRED): se pasa a tarifas sin perder lo escrito", async () => {
+  const { isQuoteRequiredError } = await import("../src/lib/forward-form.js");
+  // Respuesta real de f7c677a (createServiceRequest, conflict -> 409).
+  assert.equal(isQuoteRequiredError({ response: { status: 409, data: { error: "Conflict", reason: "Forwarding a package requires a persisted Pitney Bowes quote.", code: "FORWARDING_QUOTE_REQUIRED" } } }), true);
+  assert.equal(isQuoteRequiredError({ response: { status: 409, data: { code: "ACTIVE_FORWARD_REQUEST_EXISTS" } } }), false);
+  assert.equal(isQuoteRequiredError({}), false);
+
+  const letter = sheet();
+  assert.match(letter, /if \(isQuoteRequiredError\(error\) && onQuoteRequired\) \{/);
+  assert.match(letter, /\{ text: "Get rates", onPress: \(\) => onQuoteRequired\(quotePrefill\(\)\) \}/);
+  // Direccion (nueva o guardada), telefono y Tracking pasan; el seguro no (el sobre no lo admite).
+  const prefill = letter.match(/function quotePrefill\(\) \{[\s\S]*?\n  \}/)[0];
+  for (const field of ["recipient", "address1", "address2", "city", "state", "zip", "phone", "trackingRequested"]) assert.match(prefill, new RegExp(field), field);
+  assert.doesNotMatch(prefill, /insurance/i);
+  // El detalle abre las tarifas con ese prefill y sin cotizacion vieja.
+  assert.match(detail(), /onQuoteRequired=\{\(prefill\) => \{\s*setLetterForwardOpen\(false\);\s*clearRates\(\);\s*setForwardForm\(\(current\) => \(\{ \.\.\.current, \.\.\.prefill \}\)\);\s*setForwardOpen\(true\);/);
+});
+
+test("LARGE_ENVELOPE pedido: 'Waiting for staff preparation' hasta que el centro cotiza; luego el pago lo dice el backend", () => {
+  const fwd = (forwardDetails) => describeForwardStage({ type: "FORWARD", status: "OPEN", forwardDetails });
+  assert.equal(fwd({ paymentStatus: "NOT_STARTED" }).key, "staff-preparation");
+  // El centro cotizo y cobra con la tarjeta guardada: procesandose, sin boton de pagar.
+  assert.equal(fwd({ quotedAmountCents: 943, paymentStatus: "PAYMENT_PENDING" }).action, null);
+  // El cobro fallo: no hay etiqueta y se ofrece revisar el metodo de pago.
+  const failed = fwd({ quotedAmountCents: 943, paymentStatus: "FAILED", shipmentStatus: "NOT_CREATED" });
+  assert.equal(failed.key, "payment-declined");
+  assert.equal(failed.action, "update-payment");
 });
 
 test("estados del reenvio, con pago del cliente o iniciado por el centro (mismos campos)", () => {

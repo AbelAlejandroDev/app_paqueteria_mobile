@@ -12,6 +12,7 @@ import {
   describeForwardingOptionsError,
   INSURED_VALUE_MAX_USD,
   INSURED_VALUE_MIN_USD,
+  insuranceUnavailableMessage,
   insuredValueProblem,
   shippingOptionsProblem,
 } from "@/lib/forwarding-options";
@@ -25,7 +26,7 @@ import {
   serverVerifiesAddresses,
   verifyPayload,
 } from "@/lib/address-verification";
-import { hasForwardFormChanges } from "@/lib/forward-form";
+import { hasForwardFormChanges, isQuoteRequiredError, isStaffPreparedForward } from "@/lib/forward-form";
 import { MAIL_FORWARDING_FEE_LABEL, SHIPPING_AND_HANDLING_LABEL, TOTAL_LABEL } from "@/lib/price-display";
 import AddressVerificationBadge from "@/components/common/address-verification-badge";
 import { Button } from "@/components/ui/button";
@@ -168,9 +169,25 @@ function RequiredLabel({ children }) {
   );
 }
 
-export default function LetterForwardSheet({ visible, onClose, mailItems, onCompleted }) {
+export default function LetterForwardSheet({ visible, onClose, mailItems, onCompleted, onQuoteRequired }) {
   const queryClient = useQueryClient();
-  const items = (mailItems || []).filter((item) => item?.type === "LETTER");
+  // Cartas y sobres grandes: los prepara el centro (lib/forward-form). Un sobre
+  // grande va solo; varias piezas juntas son siempre cartas (el backend exige
+  // MULTI_FORWARD_LETTERS_ONLY y la seleccion multiple solo deja cartas).
+  const items = (mailItems || []).filter((item) => isStaffPreparedForward(item?.type));
+  const allLetters = items.length > 0 && items.every((item) => item.type === "LETTER");
+  // Seguro adicional: solo cartas (regla V2).
+  const insuranceAllowed = allLetters;
+
+  /**
+   * Lo que se valida y se manda como shippingOptions: cartas con su formulario
+   * (letterForward); un sobre grande por su tipo, sin seguro (lib/forwarding-options).
+   */
+  function currentOptionsInput() {
+    return allLetters
+      ? { letterForward: true, trackingRequested, insuranceRequested, insuredValue }
+      : { itemType: items[0]?.type || "LARGE_ENVELOPE", trackingRequested, insuranceRequested: false, insuredValue: "" };
+  }
 
   const [step, setStep] = useState("fee");
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -327,7 +344,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         ...forwardDestinationFields(destination),
         ...(selectedNeedsPhone ? { phone: destinationPhone.trim() } : {}),
         // Exactamente lo elegido; sin seguro no viaja insuredValueCents.
-        shippingOptions: buildShippingOptions({ letterForward: true, trackingRequested, insuranceRequested, insuredValue }),
+        shippingOptions: buildShippingOptions(currentOptionsInput()),
       });
       return response.data;
     },
@@ -345,15 +362,48 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
       // 422/409 de opciones (seguro sin seguimiento, sin servicio compatible...)
       // con su explicacion; los de direccion, como hasta ahora.
+      // Un backend que aun exige cotizacion para este tipo (f7c677a: solo cartas
+      // sin quote) responde FORWARDING_QUOTE_REQUIRED. No se pierde nada: se
+      // ofrece seguir con las tarifas, con la direccion y Tracking ya puestos.
+      if (isQuoteRequiredError(error) && onQuoteRequired) {
+        Alert.alert(
+          "Rates needed for this item",
+          "Your center needs you to choose a shipping rate for this item. Your address and options are kept.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Get rates", onPress: () => onQuoteRequired(quotePrefill()) },
+          ]
+        );
+        return;
+      }
       const outcome = describeForwardingOptionsError(error, formatErrorMessage(error, "The forward could not be requested."));
       Alert.alert("Could not request forward", addressErrorMessage(error, outcome.message));
     },
   });
 
+  /**
+   * Lo escrito, para el formulario de tarifas si el backend las exige: la
+   * direccion (guardada o nueva), el telefono y Tracking. El seguro no pasa: un
+   * sobre grande no lo admite.
+   */
+  function quotePrefill() {
+    const destination = addingNew ? draft : selectedAddress || {};
+    return {
+      recipient: destination.recipient || destination.name || "",
+      address1: destination.addressLine1 || "",
+      address2: destination.addressLine2 || "",
+      city: destination.city || "",
+      state: destination.state || "",
+      zip: destination.zip || "",
+      phone: (selectedNeedsPhone ? destinationPhone : destination.phone) || "",
+      trackingRequested,
+    };
+  }
+
   const pending = requestForward.isPending;
   // Con seguro, el valor va de $100 a $5,000: la peticion no sale hasta que se
   // corrija (lib/forwarding-options). Seguro sin Tracking es valido (V2).
-  const optionsProblem = shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue });
+  const optionsProblem = shippingOptionsProblem(currentOptionsInput());
   const showValueProblem = insuranceRequested && String(insuredValue).trim() !== "" && insuredValueProblem(insuredValue);
   const canSubmit =
     (addingNew ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && !optionsProblem && !pending;
@@ -418,8 +468,8 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       title="Where should we send it?"
       description={
         items.length === 1
-          ? "Your center will pack and ship this letter."
-          : "Your center will pack and ship these " + items.length + " letters."
+          ? "Your center will weigh, pack and ship this " + (allLetters ? "letter" : "large envelope") + "."
+          : "Your center will weigh, pack and ship these " + items.length + " letters."
       }
       footer={
         <SheetActions>
@@ -675,6 +725,19 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         description="Your center will ship it with a service that includes tracking."
       />
 
+      {/* Sobre grande: el seguro adicional no se contrata (regla V2 del backend,
+          422 INSURANCE_NOT_AVAILABLE_FOR_PACKAGES). Se ve, pero no se puede pedir. */}
+      {insuranceAllowed ? null : (
+        <View className="rounded-lg border border-border bg-muted p-4" accessibilityState={{ disabled: true }}>
+          <View className="flex-row items-center gap-2">
+            <ShieldCheck size={18} color="#64748b" />
+            <Text className="text-base font-semibold text-muted-foreground">Add insurance</Text>
+          </View>
+          <Text className="mt-0.5 text-xs text-muted-foreground">{insuranceUnavailableMessage("LARGE_ENVELOPE")}</Text>
+        </View>
+      )}
+
+      {insuranceAllowed ? (
       <CheckCard
         checked={insuranceRequested}
         onToggle={() => setInsuranceRequested((value) => !value)}
@@ -698,6 +761,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
           </>
         ) : null}
       </CheckCard>
+      ) : null}
 
       {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}
     </Modal>

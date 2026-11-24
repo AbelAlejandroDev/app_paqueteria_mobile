@@ -6,6 +6,27 @@
 const filled = (value) => String(value ?? "").trim() !== "";
 
 /**
+ * Piezas cuyo reenvio prepara el centro (HDG): el cliente pide el reenvio con
+ * direccion, Check Address y Tracking/Insurance, sin cotizar ni pagar; el
+ * personal pesa, cotiza con Pitney y confirma el precio. Mismo endpoint para las
+ * dos: POST /client/service-requests (type FORWARD). Los paquetes siguen
+ * cotizando el cliente (POST /client/forwarding/quotes).
+ */
+export const STAFF_PREPARED_FORWARD_TYPES = Object.freeze(["LETTER", "LARGE_ENVELOPE"]);
+
+export function isStaffPreparedForward(itemType) {
+  return STAFF_PREPARED_FORWARD_TYPES.includes(String(itemType || "").toUpperCase());
+}
+
+/**
+ * El backend aun exige una cotizacion para este tipo (f7c677a la exige fuera de
+ * cartas: 409 FORWARDING_QUOTE_REQUIRED). La app no la sortea: ofrece las tarifas.
+ */
+export function isQuoteRequiredError(error) {
+  return error?.response?.data?.code === "FORWARDING_QUOTE_REQUIRED";
+}
+
+/**
  * Si cerrar el formulario perderia algo que el cliente eligio o escribio. Lo
  * que viene por defecto (la direccion predeterminada ya elegida, las casillas
  * apagadas) no cuenta.
