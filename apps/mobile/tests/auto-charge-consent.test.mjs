@@ -303,9 +303,11 @@ test("maximo: igual entra; un centavo por encima, pago manual", () => {
   assert.deepEqual(over, { mode: "manual", reason: "LIMIT_EXCEEDED" });
 });
 
-test("recotizado: cuenta repricedAmount (o acceptedRepricedAmount) en vez del cotizado", () => {
+test("recotizado: repricedAmount ?? quotedAmountCents, como el backend (acceptedRepricedAmount no cuenta)", () => {
   assert.equal(estimatedForwardCharge(ready({ repricedAmount: 8000 }), 500).total, 8500);
-  assert.equal(estimatedForwardCharge(ready({ acceptedRepricedAmount: 1200 }), 500).total, 1700);
+  // forwardingPayments.amountForPayment: aceptar una subida no le gana a un precio vigente mas bajo.
+  assert.equal(estimatedForwardCharge(ready({ acceptedRepricedAmount: 1200 }), 500).total, 1443);
+  assert.equal(estimatedForwardCharge(ready({ repricedAmount: 900, acceptedRepricedAmount: 1200 }), 500).total, 1400);
   assert.equal(
     staffChargeDecision({ itemType: "LETTER", details: ready({ repricedAmount: 8000 }), consent: consentValid, feeCents: 500 }).reason,
     "LIMIT_EXCEEDED"
@@ -326,8 +328,17 @@ test("sin total (falta el fee o la tarifa): Review & Pay", () => {
   assert.equal(estimatedForwardCharge(ready({ quotedAmountCents: 0 }), 500).total, null, "0 no es un precio");
 });
 
-test("otra moneda u otro estado: pago manual", () => {
-  assert.equal(staffChargeDecision({ itemType: "LETTER", details: ready({ currency: "EUR" }), consent: consentValid, feeCents: 500 }).reason, "CURRENCY_MISMATCH");
+test("moneda: los campos reales de forwardDetails (no hay `currency`); sin ninguno no se compara", () => {
+  const decide = (details) => staffChargeDecision({ itemType: "LETTER", details: ready(details), consent: consentValid, feeCents: 500 });
+  assert.equal(decide({ quotedCurrency: "EUR" }).reason, "CURRENCY_MISMATCH");
+  assert.equal(decide({ quotedCurrency: "USD", repricedCurrency: "EUR" }).reason, "CURRENCY_MISMATCH", "la recotizada manda");
+  assert.equal(decide({ quotedCurrency: "EUR", acceptedRepricedCurrency: "USD" }).mode, "staff-charge", "la aceptada manda (currencyForPayment)");
+  assert.equal(decide({ quotedCurrency: "usd" }).mode, "staff-charge");
+  assert.equal(decide({ currency: "EUR" }).mode, "staff-charge", "un campo que el backend no manda no se lee");
+  assert.equal(decide({}).mode, "staff-charge", "sin moneda: el backend cobra en USD y vuelve a comprobarla");
+});
+
+test("otro estado: pago manual", () => {
   for (const paymentStatus of ["NOT_STARTED", "RECONFIRMATION_REQUIRED", "PAYMENT_PENDING", "FAILED", "PAID"]) {
     assert.equal(staffChargeDecision({ itemType: "LETTER", details: ready({ paymentStatus }), consent: consentValid, feeCents: 500 }).reason, "STATUS", paymentStatus);
   }
@@ -415,12 +426,32 @@ test("sin pagos duplicados: con cobro del centro no hay boton de pago; procesand
   assert.ok(detail.includes('declinedByCenter={staffPrepared && details.paymentStatus === "FAILED"}'));
 
   const zoho = read("src/components/common/zoho-forward-payment-card.jsx");
-  assert.ok(zoho.includes("const [collectPending, setCollectPending] = useState(Boolean(processing));"));
-  assert.ok(zoho.includes("quoteBlocked || collectPending ||"), "procesando bloquea Review/Pay");
+  // Solo el backend bloquea (collect vivo); PAYMENT_PENDING por si solo no.
+  assert.ok(zoho.includes("const [collectPending, setCollectPending] = useState(false);"));
+  assert.ok(zoho.includes("quoteBlocked || collectPending ||"), "un collect vivo bloquea Review/Pay");
+  assert.ok(!/const blocked = [^\n]*processing/.test(zoho), "PAYMENT_PENDING no bloquea por si solo");
+  assert.ok(zoho.includes("(collectPending || processing) && !status.waiting"), "en proceso, siempre se puede consultar");
   assert.ok(zoho.includes("Check payment status"));
   assert.ok(/if \(result\.kind === "collect-pending"\) \{\s*enterCollectPending\(\);/.test(zoho));
   // El candado contra la doble pulsacion sigue.
   assert.ok(zoho.includes("lock.run(() => (quoteBlocked ? Promise.resolve() : mutation.mutateAsync(variables).catch(() => {})));"));
+});
+
+test("pago manual en PAYMENT_PENDING: caducado/anulado se recupera, incierto queda bloqueado, siempre se consulta", async () => {
+  const { interpretPaymentStatus } = await import("../src/lib/forward-payment.js");
+  const { PAYABLE_PAYMENT_STATUSES } = await import("../src/lib/mail-item-detail.js");
+  // Pagina caducada: se ofrece pagar otra vez (ensureHostedPage rehace la pagina de la MISMA factura).
+  assert.equal(interpretPaymentStatus({ paymentStatus: "PAYMENT_PENDING", chargeStatus: "INVOICE_OPEN", paymentLinkExpired: true }).state, "link-expired");
+  // Factura anulada en Zoho: el backend deja FAILED ("Prepare the payment again"), que se puede pagar.
+  assert.equal(interpretPaymentStatus({ paymentStatus: "FAILED", chargeStatus: "VOIDED" }).state, "failed");
+  assert.ok(PAYABLE_PAYMENT_STATUSES.includes("FAILED"));
+  assert.ok(PAYABLE_PAYMENT_STATUSES.includes("PAYMENT_PENDING"), "en curso, la tarjeta sigue (consultar / revisar)");
+  // Pendiente sin confirmar: sigue consultando, no es final.
+  assert.equal(interpretPaymentStatus({ paymentStatus: "PAYMENT_PENDING", chargeStatus: "INVOICE_OPEN" }).terminal, false);
+  // Resultado incierto o en revision: bloqueado hasta conciliar.
+  assert.equal(forwardPaymentError(axiosError(503, { code: "ZOHO_OUTCOME_UNCERTAIN" })).retryable, false);
+  assert.equal(forwardPaymentError(axiosError(409, { code: "ZOHO_PAYMENT_UNDER_REVIEW" })).kind, "review");
+  assert.equal(interpretPaymentStatus({ paymentStatus: "PAYMENT_PENDING", chargeStatus: "REVIEW" }).state, "review");
 });
 
 test("pago rechazado en la tarjeta: Update your card y pagar en la app", () => {

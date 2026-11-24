@@ -54,9 +54,13 @@ function Line({ label, value, strong }) {
  *
  * Cobro iniciado por el centro (cartas y sobres grandes de HDG; quien la monta
  * decide, para PACKAGE no se pasa nada y todo sigue igual):
- *   - `processing`: PAYMENT_PENDING. Se ensena "Payment processing" y solo
- *     "Check status": ningun boton de pago hasta que payment-status diga que
- *     fallo o caduco. Asi no se presenta otro intento sobre un collect vivo.
+ *   - `processing`: PAYMENT_PENDING. Se ensena "Payment processing" y "Check
+ *     payment status", y Review payment sigue: el backend pone PAYMENT_PENDING
+ *     en cuanto emite la factura (reserveCharge, CREATE), tambien si el cliente
+ *     solo reviso o abrio la pagina sin pagar. Revisar otra vez reutiliza la
+ *     MISMA factura (REUSE) y Zoho no cobra dos veces una factura; si el centro
+ *     tiene un collect vivo, el backend responde sin pagina (collect-pending) o
+ *     con 409/503 y entonces si se bloquea.
  *   - `declinedByCenter`: FAILED. Se ofrecen las dos salidas: actualizar la
  *     tarjeta (el centro vuelve a cobrar la misma factura) o pagar en la app.
  *   - prepare-payment con `paymentUrl: null` y COLLECT_IN_PROGRESS /
@@ -74,7 +78,8 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
   const [noSavedCard, setNoSavedCard] = useState(false);
   const [declined, setDeclined] = useState(Boolean(declinedByCenter));
   // Un collect del centro en curso o sin confirmar: solo se consulta el estado.
-  const [collectPending, setCollectPending] = useState(Boolean(processing));
+  // Solo lo pone el backend (collect-pending o 409 COLLECT_*), nunca el estado.
+  const [collectPending, setCollectPending] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   // 409 de cotizacion invalida: se descarta la factura revisada y no se ofrece
   // pagar hasta que la solicitud traiga otra tarifa (lib/forward-payment).
@@ -314,11 +319,14 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
 
-      {/* Cobro del centro en curso: solo consultar. Nada de otro intento. */}
-      {collectPending && !status.waiting && reading?.state !== "pending" ? (
+      {/* Pago en curso: consultar siempre se puede. Con un collect del centro
+          vivo (collectPending) es lo UNICO que se ofrece. */}
+      {(collectPending || processing) && !status.waiting && reading?.state !== "pending" ? (
         <View className="gap-2">
-          {notice ? null : (
+          {notice ? null : collectPending ? (
             <Notice tone="amber">{"Payment processing. Your center's charge is being confirmed. Nothing new will be charged."}</Notice>
+          ) : (
+            <Notice tone="amber">Payment processing. If you already paid, check the status before paying again.</Notice>
           )}
           <Button variant="outline" disabled={busy} onPress={checkAgain}>
             Check payment status

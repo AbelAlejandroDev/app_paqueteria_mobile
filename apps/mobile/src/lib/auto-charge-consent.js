@@ -230,13 +230,16 @@ const centsOrNull = (value) => {
 /**
  * Total estimado de un reenvio preparado por el centro:
  * (repricedAmount ?? quotedAmountCents) + Mail Forwarding Fee, con el fee de
- * GET /client/forwarding/immediate-preview. `acceptedRepricedAmount` (el campo
- * que ya devuelve forwardDetails) cuenta como recotizado. null si falta algo.
+ * GET /client/forwarding/immediate-preview. null si falta algo.
+ *
+ * El mismo orden que el backend (forwardingPayments.amountForPayment):
+ * `acceptedRepricedAmount` NO cuenta, porque aceptar una subida no puede ganarle
+ * a un precio vigente mas bajo. Los dos campos viajan en forwardDetails
+ * (controllers/client/mailItems/shared/selects.js).
  */
 export function estimatedForwardCharge(details, feeCents) {
   const d = details || {};
-  const repriced = centsOrNull(d.repricedAmount) ?? centsOrNull(d.acceptedRepricedAmount);
-  const base = repriced ?? centsOrNull(d.quotedAmountCents);
+  const base = centsOrNull(d.repricedAmount) ?? centsOrNull(d.quotedAmountCents);
   const fee = typeof feeCents === "number" && Number.isInteger(feeCents) && feeCents >= 0 ? feeCents : null;
   if (base === null || base <= 0 || fee === null) {
     return { shippingAndHandling: base !== null && base > 0 ? base : null, mailForwardingFee: fee, total: null };
@@ -259,7 +262,11 @@ export function staffChargeDecision({ itemType, details, consent, feeCents }) {
   if (!isStaffPreparedForward(itemType)) return { mode: "manual", reason: "NOT_ELIGIBLE" };
   if (d.paymentStatus !== "READY_FOR_PAYMENT") return { mode: "manual", reason: "STATUS" };
   if (!consent?.valid || consent.effectiveMaxCents === null) return { mode: "manual", reason: "NOT_AUTHORIZED" };
-  const detailsCurrency = text(d.currency) || text(d.quotedCurrency);
+  // forwardDetails no trae `currency`: la del cobro es, como en el backend
+  // (currencyForPayment), la aceptada, la recotizada o la cotizada. Sin
+  // ninguna, el backend cobra en USD; aqui no se compara (y el backend vuelve
+  // a comprobar la moneda antes de cobrar: CURRENCY_MISMATCH).
+  const detailsCurrency = text(d.acceptedRepricedCurrency) || text(d.repricedCurrency) || text(d.quotedCurrency);
   if (detailsCurrency && detailsCurrency.toUpperCase() !== String(consent.currency).toUpperCase()) {
     return { mode: "manual", reason: "CURRENCY_MISMATCH" };
   }
