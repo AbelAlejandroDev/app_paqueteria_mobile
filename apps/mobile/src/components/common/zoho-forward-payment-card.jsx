@@ -109,16 +109,21 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
       if (!reading) return;
       if (reading.state === "paid") refreshAfterPayment();
       // La pagina caduco o el pago fallo: la proxima vez, factura/URL nuevas.
-      if (reading.state === "link-expired" || reading.state === "failed") {
-        setInvoice(null);
-        // El collect del centro termino sin pago: ya se puede pagar en la app.
+      if (reading.state === "link-expired" || reading.state === "failed") setInvoice(null);
+      // Solo un FAILED dice que el collect del centro termino sin pago. Una
+      // pagina caducada no: payment-status no trae autoCharge.reason, y el
+      // collect puede seguir vivo. Con link-expired se sigue bloqueado.
+      if (reading.state === "failed") {
         setCollectPending(false);
-        if (reading.state === "failed") setDeclined(true);
+        setDeclined(true);
       }
     },
   });
 
   const guarded = (mutation, variables) => lock.run(() => (quoteBlocked ? Promise.resolve() : mutation.mutateAsync(variables).catch(() => {})));
+  // Un intento de pago (no abrir la pagina de la tarjeta): con un collect del
+  // centro sin resolver no sale, aunque una pulsacion llegue antes del re-render.
+  const guardedPayment = (mutation, variables) => (collectPending ? null : guarded(mutation, variables));
 
   // ── prepare-payment ──
   const handlePrepareError = (error) => {
@@ -148,7 +153,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
         "The new total is " + formatMoneyFromCents(outcome.currentAmount) + ". Do you accept the new price?",
         [
           { text: "Not now", style: "cancel" },
-          { text: "Accept new price", onPress: () => guarded(confirmReprice) },
+          { text: "Accept new price", onPress: () => guardedPayment(confirmReprice) },
         ]
       );
       return;
@@ -336,7 +341,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
 
       {blocked ? null : !invoice ? (
         <>
-          <Button loading={review.isPending || confirmReprice.isPending} disabled={busy || status.waiting} onPress={() => guarded(review)}>
+          <Button loading={review.isPending || confirmReprice.isPending} disabled={busy || status.waiting} onPress={() => guardedPayment(review)}>
             {declinedByCenter ? "Pay in the app" : "Review payment"}
           </Button>
           <Text className="font-brand text-[12px] leading-4 text-ink/60">You will see the total before anything is charged.</Text>
@@ -366,7 +371,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
           </Text>
 
           {allowSavedCard ? (
-            <Button loading={payWithSavedCard.isPending} disabled={busy || status.waiting} onPress={() => guarded(payWithSavedCard)}>
+            <Button loading={payWithSavedCard.isPending} disabled={busy || status.waiting} onPress={() => guardedPayment(payWithSavedCard)}>
               {"Pay " + (totalLabel || "") + " with saved card" + (card?.last4 ? " •••• " + card.last4 : "")}
             </Button>
           ) : null}
@@ -374,7 +379,7 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
             variant={allowSavedCard ? "outline" : "default"}
             loading={openSecurePage.isPending}
             disabled={busy || status.waiting}
-            onPress={() => guarded(openSecurePage)}
+            onPress={() => guardedPayment(openSecurePage)}
           >
             Pay on the secure page
           </Button>

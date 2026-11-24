@@ -403,6 +403,63 @@ test("estado incierto: prepare-payment sin pagina y COLLECT_IN_PROGRESS/UNCONFIR
   assert.equal(interpretPrepareResponse({ paid: true }).kind, "paid");
 });
 
+test("respuesta real de Sandbox (103ddd7): GET del consentimiento sin autorizar", () => {
+  // Tal como la confirmo el VPS; el texto se abrevia, los campos son los reales.
+  const consent = describeConsent({
+    available: true,
+    enabled: false,
+    valid: false,
+    missing: "CLIENT_CONSENT",
+    maxOfferedCents: 7500,
+    maxAmountCents: null,
+    currency: "USD",
+    version: "HDG-FWD-AUTOCHARGE-2026-11-24.3",
+    text: "I authorize HDG Executive Suites to automatically charge … up to $75.00 USD per shipment …",
+    authorization: null,
+  });
+  assert.equal(consent.state, "not-authorized");
+  assert.equal(consent.canGrant, true);
+  assert.equal(consent.canRevoke, false);
+  assert.equal(consent.valid, false, "sin autorizar: nada lo cobra el centro");
+  assert.equal(consent.offer.amountLabel, "$75.00 USD");
+  assert.deepEqual(grantConsentBody(consent.offer), { enabled: true, acceptedVersion: "HDG-FWD-AUTOCHARGE-2026-11-24.3", maxAmountCents: 7500 });
+});
+
+test("respuesta real de prepare-payment (103ddd7): 200, PAYMENT_PENDING, paymentUrl null y autoCharge.reason COLLECT_*", () => {
+  for (const reason of ["COLLECT_IN_PROGRESS", "COLLECT_UNCONFIRMED"]) {
+    // Sin desglose, sin expiresAt, sin invoiceNumber: nada de eso se exige.
+    const body = { paymentStatus: "PAYMENT_PENDING", paymentUrl: null, autoCharge: { attempted: false, paid: false, reason } };
+    assert.deepEqual(interpretPrepareResponse(body), { kind: "collect-pending", reason }, reason);
+    // Tambien si paymentUrl ni viene.
+    assert.deepEqual(interpretPrepareResponse({ paymentStatus: "PAYMENT_PENDING", autoCharge: { reason } }), { kind: "collect-pending", reason });
+  }
+  // PAYMENT_PENDING no es "pagado".
+  assert.notEqual(interpretPrepareResponse({ paymentStatus: "PAYMENT_PENDING", paymentUrl: null, autoCharge: { reason: "COLLECT_IN_PROGRESS" } }).kind, "paid");
+  // Otro motivo sin pagina no se toma como cobro en curso.
+  assert.equal(interpretPrepareResponse({ paymentStatus: "PAYMENT_PENDING", paymentUrl: null, autoCharge: { reason: "DECLINED" } }).kind, "invalid");
+});
+
+test("payment-status sin autoCharge.reason: se sigue consultando y no se desbloquea el pago", async () => {
+  const { interpretPaymentStatus } = await import("../src/lib/forward-payment.js");
+  const reading = interpretPaymentStatus({ provider: "ZOHO", paymentStatus: "PAYMENT_PENDING", shipmentStatus: "NOT_CREATED", chargeStatus: "INVOICE_OPEN", paymentLinkExpired: false });
+  assert.equal(reading.state, "pending");
+  assert.equal(reading.terminal, false, "se sigue preguntando");
+
+  const zoho = read("src/components/common/zoho-forward-payment-card.jsx");
+  // Solo FAILED suelta el bloqueo; una pagina caducada no (el collect puede seguir vivo).
+  assert.ok(/if \(reading\.state === "failed"\) \{\s*setCollectPending\(false\);/.test(zoho));
+  assert.ok(!/link-expired"[^\n]*\n[^\n]*\n[^\n]*setCollectPending\(false\)/.test(zoho));
+  assert.equal((zoho.match(/setCollectPending\(false\)/g) || []).length, 1);
+  // Cada intento de pago pasa por el candado del collect; abrir la pagina de la tarjeta no.
+  for (const action of ["review", "confirmReprice", "payWithSavedCard", "openSecurePage"]) {
+    assert.ok(zoho.includes("guardedPayment(" + action + ")"), action);
+    assert.ok(!zoho.includes("guarded(" + action + ")"), action);
+  }
+  assert.ok(zoho.includes("const guardedPayment = (mutation, variables) => (collectPending ? null : guarded(mutation, variables));"));
+  // Consultar sigue disponible con el bloqueo puesto.
+  assert.ok(zoho.includes("Check payment status"));
+});
+
 test("409 COLLECT_IN_PROGRESS / COLLECT_UNCONFIRMED: no reintentable, consultar el estado", () => {
   for (const code of ["COLLECT_IN_PROGRESS", "COLLECT_UNCONFIRMED"]) {
     const outcome = forwardPaymentError(axiosError(409, { code }));
