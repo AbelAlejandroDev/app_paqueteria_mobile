@@ -35,12 +35,18 @@ test("el boton ya no lee el perfil del cliente", () => {
   assert.equal(/user\?\.clientProfile/.test(source), false);
   assert.equal(/defaultAddress\.fullName/.test(source), false);
   assert.ok(source.includes("findDefaultAddress(addressesQuery.data)"));
-  assert.ok(source.includes("forwardFieldsFromAddress(defaultAddress)"));
+  // La predeterminada (y cualquier guardada) rellena el formulario con forwardFieldsFromAddress.
+  assert.ok(source.includes("applySavedAddress(defaultAddress)"));
+  assert.ok(source.includes("...forwardFieldsFromAddress(address)"));
 });
 
-test("usar la predeterminada invalida las tarifas", () => {
-  const handler = detail().match(/const useDefaultAddress = [\s\S]*?\n  };/)[0];
+test("usar la predeterminada (u otra guardada) invalida las tarifas y el Check Address anterior", () => {
+  const handler = detail().match(/const applySavedAddress = [\s\S]*?\n  };/)[0];
   assert.ok(handler.includes("clearRates()"));
+  assert.ok(handler.includes("setAddressCheck(null)"));
+  // Las casillas y el valor declarado se quedan: solo se reemplaza la direccion.
+  assert.ok(handler.includes("setForwardForm((current) => ({ ...current, ...forwardFieldsFromAddress(address) }))"));
+  assert.ok(/const useDefaultAddress = \(\) => \{\s*if \(!hasDefaultAddress\) return;\s*applySavedAddress\(defaultAddress\);/.test(detail()));
 });
 
 test("una cotizacion que llega tarde no repone tarifas de otro destino", () => {
@@ -65,7 +71,7 @@ test("la cache se vacia al cambiar de usuario", () => {
 
 test("cartas: una guardada sin telefono lo pide y lo manda con la peticion", () => {
   const sheet = read("../src/components/common/letter-forward-sheet.jsx");
-  assert.ok(/selectedNeedsPhone = !addingAddress && Boolean\(selectedAddress\) && !String\(selectedAddress\.phone/.test(sheet));
+  assert.ok(/selectedNeedsPhone = !addingNew && Boolean\(selectedAddress\) && !String\(selectedAddress\.phone/.test(sheet));
   assert.ok(sheet.includes("(!selectedNeedsPhone || destinationPhone.trim())"));
   assert.ok(sheet.includes("...(selectedNeedsPhone ? { phone: destinationPhone.trim() } : {})"));
   assert.ok(!sheet.includes('api.patch'), "no toca la direccion guardada");

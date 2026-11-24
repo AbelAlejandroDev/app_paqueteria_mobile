@@ -22,6 +22,7 @@ import { BILLING_PAYMENT_QUERY_KEY, billingPaymentQueryOptions } from "@/lib/use
 import { usePaymentStatus } from "@/lib/use-payment-status";
 import { ZOHO_ADD_PAYMENT_METHOD_PATH, ZOHO_UPDATE_CARD_PATH, zohoBillingErrorMessage, zohoPageUrl } from "@/lib/zoho-billing";
 import { interpretPrepareResponse, isPaymentLinkExpired, REVIEW_BODY, SAVED_CARD_BODY } from "@/lib/zoho-forward-payment";
+import { chargeRows } from "@/lib/price-display";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/modal";
 
@@ -278,10 +279,16 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
         </>
       ) : (
         <View className="gap-2 rounded-lg border border-border bg-background p-3">
-          <Line label="Postage" value={breakdown.postage != null ? formatMoneyFromCents(breakdown.postage) : null} />
-          <Line label="Handling" value={breakdown.handling != null ? formatMoneyFromCents(breakdown.handling) : null} />
-          <Line label="Surcharge" value={breakdown.surcharge > 0 ? formatMoneyFromCents(breakdown.surcharge) : null} />
-          <Line label="Total" value={totalLabel} strong />
+          {/* Tres lineas (lib/price-display): la gestion interna va dentro de
+              Shipping & Handling y nunca se ensena sola. */}
+          {chargeRows(breakdown).map((row) => (
+            <Line
+              key={row.label}
+              label={row.label}
+              value={row.cents != null ? formatMoneyFromCents(row.cents) : "Pending"}
+              strong={row.strong}
+            />
+          ))}
           <Line label="Invoice" value={breakdown.invoiceNumber} />
 
           <Text className="font-brand text-[12px] leading-4 text-ink/60">

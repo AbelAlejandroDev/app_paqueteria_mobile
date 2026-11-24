@@ -294,5 +294,8 @@ test("un importe que falta es null, no $0.00: la recotizacion sin importe no se 
     const card = read(file);
     assert.ok(card.indexOf('outcome.kind === "reprice" && outcome.currentAmount === null') < card.indexOf('"Accept new price"'), file);
   }
-  assert.equal(zoho.paymentBreakdown({ amount: 1450 }).handling, null, "el desglose no inventa ceros");
+  const partial = zoho.paymentBreakdown({ amount: 1450 });
+  assert.equal(partial.shippingAndHandling, null, "el desglose no inventa ceros");
+  assert.equal(partial.mailForwardingFee, null, "el desglose no inventa ceros");
+  assert.equal("handling" in partial, false, "la gestion interna nunca es una linea");
 });

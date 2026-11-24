@@ -24,7 +24,22 @@ import {
 } from "@/lib/mail-item-detail";
 import { formatServiceNoticeMessage, normalizeBasicPlanServiceNotices } from "@/lib/service-notices";
 import { US_STATES } from "@/lib/us-states";
-import { describeAddressVerification, isAddressUsableForForwarding } from "@/lib/address-verification";
+import {
+  addressErrorMessage,
+  describeAddressVerification,
+  isAddressUsableForForwarding,
+  isVerifiedCheck,
+  sameAddress,
+  verifyPayload,
+} from "@/lib/address-verification";
+import {
+  applySuggestedToForwardForm,
+  hasForwardFormChanges,
+  invalidatesAddressCheck,
+  verifyDraftFromForwardForm,
+} from "@/lib/forward-form";
+import { chargeFromForwardDetails, chargeFromRate, chargeRows, SHIPPING_AND_HANDLING_LABEL } from "@/lib/price-display";
+import { describeForwardStage, labelStatusText, latestForwardRequest } from "@/lib/forward-stage";
 import {
   buildShippingOptions,
   describeForwardingOptionsError,
@@ -83,7 +98,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
-import { Modal, Notice } from "@/components/ui/modal";
+import { confirmDiscard, Modal, Notice } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -108,6 +123,49 @@ function SummaryLine({ label, value }) {
       <Text className="font-brand-semibold">{label}: </Text>
       {value}
     </Text>
+  );
+}
+
+/** Lo cobrado (paymentAmount del backend); sin el, nada: no se ensena el franqueo como si fuera el total. */
+function paidAmountLabel(details) {
+  const total = chargeFromForwardDetails(details).total;
+  return total != null ? formatMoneyFromCents(total) : null;
+}
+
+/**
+ * Resumen del reenvio de la pieza: en que punto esta y lo que la API dice de su
+ * precio, pago, etiqueta y seguimiento. Solo campos que el backend devuelve; el
+ * cargo de reenvio y la fecha de despacho no viajan en forwardDetails
+ * (f7c677a), asi que no se pintan. La gestion interna nunca va en una linea.
+ */
+function ForwardSummaryCard({ request }) {
+  const stage = describeForwardStage(request);
+  if (!stage) return null;
+  const details = request.forwardDetails || {};
+  const charge = chargeFromForwardDetails(details);
+  const label = labelStatusText(details);
+
+  return (
+    <DetailCard className="gap-1.5 p-5">
+      <CardHeading className="mb-1">Forwarding</CardHeading>
+      <Notice tone={stage.tone}>{stage.description ? stage.title + ". " + stage.description : stage.title}</Notice>
+      <View className="mt-2 gap-1">
+        <SummaryLine label="Requested" value={formatDate(request.createdAt)} />
+        <SummaryLine label="Carrier" value={[details.quotedCarrier, details.quotedService].filter(Boolean).join(" · ") || null} />
+        <SummaryLine label={"Quoted " + SHIPPING_AND_HANDLING_LABEL} value={charge.quoted != null ? formatMoneyFromCents(charge.quoted) : null} />
+        <SummaryLine label="Reconfirmed price" value={charge.reconfirmed != null ? formatMoneyFromCents(charge.reconfirmed) : null} />
+        <SummaryLine label="Total charged" value={charge.total != null ? formatMoneyFromCents(charge.total) : null} />
+        <SummaryLine label="Payment" value={details.paymentStatus ? formatStatusDisplay(details.paymentStatus) : null} />
+        <SummaryLine label="Paid at" value={details.paidAt ? formatDate(details.paidAt) : null} />
+        <SummaryLine label="Label" value={label} />
+        <SummaryLine label="Tracking" value={details.trackingNumber || null} />
+      </View>
+      {stage.action === "update-payment" ? (
+        <Button variant="outline" className="mt-2" onPress={() => router.push("/billing")}>
+          Review payment method
+        </Button>
+      ) : null}
+    </DetailCard>
   );
 }
 
@@ -224,7 +282,7 @@ function ForwardPaymentCard({ request, mailItemId, onRefresh }) {
     >
       <SummaryLine label="Carrier" value={details.quotedCarrier} />
       <SummaryLine label="Service" value={details.quotedService} />
-      <SummaryLine label="Accepted quote" value={formatMoneyFromCents(details.quotedAmountCents)} />
+      <SummaryLine label={SHIPPING_AND_HANDLING_LABEL} value={formatMoneyFromCents(details.quotedAmountCents)} />
       <SummaryLine label="Payment" value={formatStatusDisplay(details.paymentStatus)} />
 
       {needsAuthentication ? (
@@ -400,7 +458,54 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
    */
   const onQuoteField = (field, value) => {
     clearRates();
+    // Otra direccion: lo que dijo el transportista de la anterior ya no vale.
+    if (invalidatesAddressCheck(field)) setAddressCheck(null);
     setForwardForm((current) => ({ ...current, [field]: value }));
+  };
+
+  /**
+   * Check Address: la validacion del backend (Pitney), la misma que usa la hoja
+   * de cartas y Settings. No cambia nada del formulario salvo que el cliente
+   * elija la correccion sugerida.
+   */
+  const [addressCheck, setAddressCheck] = useState(null);
+  const checkAddress = useMutation({
+    mutationFn: async () => (await api.post("/client/forwarding-addresses/verify", verifyPayload(verifyDraftFromForwardForm(forwardForm)))).data,
+    onSuccess: (data) => setAddressCheck(data),
+    onError: (error) => {
+      setAddressCheck(null);
+      Alert.alert("Could not check the address", addressErrorMessage(error, "The address could not be checked right now."));
+    },
+  });
+  const addressValidated = isVerifiedCheck(addressCheck);
+  const suggestedAddress =
+    addressValidated && addressCheck?.suggested && !sameAddress(addressCheck.suggested, verifyDraftFromForwardForm(forwardForm))
+      ? addressCheck.suggested
+      : null;
+
+  const useSuggestedAddress = () => {
+    if (!suggestedAddress) return;
+    // Cambia la direccion: la cotizacion deja de valer, el resto se queda.
+    clearRates();
+    setForwardForm((current) => applySuggestedToForwardForm(current, suggestedAddress));
+    setAddressCheck({ ...addressCheck, suggested: null });
+  };
+
+  // Cerrar con algo escrito pregunta antes (components/ui/modal).
+  const forwardDirty = hasForwardFormChanges({
+    draft: forwardForm,
+    emptyDraft: EMPTY_FORWARD,
+    trackingRequested: forwardForm.trackingRequested,
+    insuranceRequested: forwardForm.insuranceRequested,
+    insuredValue: forwardForm.insuredValue,
+  });
+
+  /** Cerrar a conciencia: sin cotizacion ni formulario. */
+  const discardForward = () => {
+    clearRates();
+    setAddressCheck(null);
+    setForwardForm(EMPTY_FORWARD);
+    setForwardOpen(false);
   };
 
   /**
@@ -417,14 +522,23 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
   });
   const defaultAddress = findDefaultAddress(addressesQuery.data);
   const hasDefaultAddress = Boolean(defaultAddress?.addressLine1 && defaultAddress?.city);
+  // Las guardadas utilizables (con calle y ciudad), para "Select Another Address".
+  const savedAddresses = (addressesQuery.data || []).filter((address) => address?.addressLine1 && address?.city);
+
+  const applySavedAddress = (address) => {
+    if (!address) return;
+
+    clearRates();
+    setAddressCheck(null);
+    // El telefono se sustituye aunque falte: el escrito era de otro destino, y
+    // si no hay, lo pide la validacion del formulario. Casillas y valor
+    // declarado se quedan como estaban.
+    setForwardForm((current) => ({ ...current, ...forwardFieldsFromAddress(address) }));
+  };
 
   const useDefaultAddress = () => {
     if (!hasDefaultAddress) return;
-
-    clearRates();
-    // El telefono se sustituye aunque falte: el escrito era de otro destino, y
-    // si no hay, lo pide la validacion del formulario.
-    setForwardForm((current) => ({ ...current, ...forwardFieldsFromAddress(defaultAddress) }));
+    applySavedAddress(defaultAddress);
   };
 
   const createRequest = useMutation({
@@ -750,15 +864,35 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
 
         <Modal
           visible={forwardOpen}
-          onClose={() => setForwardOpen(false)}
-          title="Request Forward"
-          description="Enter the destination address and choose a rate."
+          // Cerrar sin querer no borra nada: el formulario se queda para la
+          // proxima vez. "Discard" (si hay cambios) es lo que lo vacia.
+          onClose={() => (forwardDirty ? discardForward() : setForwardOpen(false))}
+          dirty={forwardDirty}
+          busy={quoteRates.isPending || selectRate.isPending}
+          title="Request Forwarding"
+          description="Set the destination, choose tracking or insurance, and get the shipping rates."
           footer={
-            <Button variant="outline" onPress={() => setForwardOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={quoteRates.isPending || selectRate.isPending}
+              onPress={() => (forwardDirty ? confirmDiscard(discardForward) : setForwardOpen(false))}
+            >
               Cancel
             </Button>
           }
         >
+          {savedAddresses.length > 1 ? (
+            <Field label="Select Another Address">
+              <Select
+                value=""
+                onValueChange={(id) => applySavedAddress(savedAddresses.find((address) => address.id === id))}
+                options={savedAddresses.map((address) => [address.id, [address.name, address.addressLine1, address.city].filter(Boolean).join(" · ")])}
+                placeholder="Choose a saved address"
+                title="Saved addresses"
+              />
+            </Field>
+          ) : null}
+
           {hasDefaultAddress ? (
             <View className="gap-2 rounded-lg border border-border bg-card p-3">
               <Text className="font-brand-bold text-[12px] uppercase tracking-wider text-ink/60">Your default address</Text>
@@ -787,7 +921,9 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           ) : addressesQuery.isError ? (
             <Notice tone="amber">We could not load your saved addresses. You can enter the address below.</Notice>
           ) : addressesQuery.isSuccess ? (
-            <Notice tone="amber">You have no default forwarding address. Enter one below, or add it in Settings.</Notice>
+            <Notice tone="sky">Set Address: you have no saved forwarding address yet. Enter it below.</Notice>
+          ) : addressesQuery.isLoading ? (
+            <Skeleton className="h-24 w-full" />
           ) : null}
 
           <Field label="Recipient">
@@ -817,6 +953,45 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
           <Field label="Recipient phone">
             <Input value={forwardForm.phone} onChangeText={(value) => onQuoteField("phone", value)} keyboardType="phone-pad" />
           </Field>
+
+          {/* Check Address: validacion del backend. El formulario no se toca;
+              solo la correccion sugerida, si el cliente la elige. */}
+          <View className="gap-2 rounded-lg border border-border bg-card p-3">
+            <Button
+              variant="outline"
+              loading={checkAddress.isPending}
+              disabled={!forwardFieldsFilled || checkAddress.isPending || anyPending}
+              onPress={() => checkAddress.mutate()}
+            >
+              Check Address
+            </Button>
+            {checkAddress.isPending ? (
+              <Text className="text-sm leading-5 text-muted-foreground">Validating address…</Text>
+            ) : addressValidated ? (
+              <Notice tone="emerald">Address validated. The carrier recognises it.</Notice>
+            ) : addressCheck ? (
+              <Notice tone="rose">{addressCheck.reason || "The carrier does not recognise this address. Correct it before forwarding."}</Notice>
+            ) : (
+              <Text className="text-xs leading-4 text-muted-foreground">Fill in the address above, then check it with the carrier.</Text>
+            )}
+            {suggestedAddress ? (
+              <View className="gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
+                <Text className="text-sm font-semibold text-sky-900">The carrier suggests</Text>
+                <Text className="text-sm leading-5 text-sky-900">
+                  {[
+                    suggestedAddress.addressLine1,
+                    suggestedAddress.addressLine2,
+                    [suggestedAddress.city, [suggestedAddress.state, suggestedAddress.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                </Text>
+                <Button variant="outline" size="sm" disabled={anyPending} onPress={useSuggestedAddress}>
+                  Use suggested address
+                </Button>
+              </View>
+            ) : null}
+          </View>
 
           <View className="gap-3">
             {/* Las dos empiezan apagadas y solo las cambia el cliente: las
@@ -875,7 +1050,7 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-foreground">Shipping rates</Text>
-                <Text className="text-xs text-muted-foreground">Rates for the address and options above. Changing any of them clears the rates.</Text>
+                <Text className="text-xs text-muted-foreground">Each price is Shipping &amp; Handling for the address and options above. The total, with the Mail Forwarding Fee, is shown below. Changing any option clears the rates.</Text>
                 {ratesEnvironment === "sandbox" ? (
                   <Text className="mt-1 text-xs font-medium text-amber-900">
                     Test mode: these are sandbox rates. Any label created is a test label and will not ship.
@@ -926,27 +1101,29 @@ function ActionsCard({ item, mailItemId, availableActions, serviceNotices, suppo
                   );
                 })}
 
-                {/* El recargo no viene dentro de las tarifas pero se cobra
-                    igual, asi que se enseña el total antes de elegir: ver un
-                    precio y pagar otro es lo que no puede pasar. */}
-                {immediateFeeCents > 0 && selectedRate ? (
-                  <View className="gap-1 rounded-lg border border-border bg-card p-3">
-                    <View className="flex-row items-center justify-between gap-3">
-                      <Text className="text-sm text-muted-foreground">Shipping</Text>
-                      <Text className="text-sm text-foreground">
-                        {formatMoneyFromCents(selectedRate.totalAmount?.amount)}
-                      </Text>
-                    </View>
-                    <View className="flex-row items-center justify-between gap-3">
-                      <Text className="text-sm text-muted-foreground">Immediate forwarding fee</Text>
-                      <Text className="text-sm text-foreground">{formatMoneyFromCents(immediateFeeCents)}</Text>
-                    </View>
-                    <View className="mt-1 flex-row items-center justify-between gap-3 border-t border-border pt-2">
-                      <Text className="text-sm font-medium text-foreground">Total</Text>
-                      <Text className="text-base font-semibold text-foreground">
-                        {formatMoneyFromCents(Number(selectedRate.totalAmount?.amount || 0) + immediateFeeCents)}
-                      </Text>
-                    </View>
+                {/* El total de la tarifa elegida, siempre (no solo con recargo):
+                    Shipping & Handling (la tarifa, que ya trae la gestion
+                    dentro), Mail Forwarding Fee y Total. Ver un precio y pagar
+                    otro es lo que no puede pasar (lib/price-display). */}
+                {selectedRate ? (
+                  <View className="gap-1 rounded-lg border border-border bg-card p-3" accessibilityLabel="Price summary">
+                    {chargeRows(chargeFromRate(selectedRate, immediateFeeCents)).map((row) => (
+                      <View
+                        key={row.label}
+                        className={
+                          row.strong
+                            ? "mt-1 flex-row items-center justify-between gap-3 border-t border-border pt-2"
+                            : "flex-row items-center justify-between gap-3"
+                        }
+                      >
+                        <Text className={row.strong ? "text-sm font-medium text-foreground" : "text-sm text-muted-foreground"}>
+                          {row.label}
+                        </Text>
+                        <Text className={row.strong ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
+                          {row.cents != null ? formatMoneyFromCents(row.cents) : "Pending"}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 ) : null}
 
@@ -1152,6 +1329,7 @@ export default function MailItemDetailScreen() {
     [serviceRequests]
   );
   const paidForwardAwaitingLabel = useMemo(() => findPaidForwardAwaitingLabel(serviceRequests), [serviceRequests]);
+  const latestForward = useMemo(() => latestForwardRequest(serviceRequests), [serviceRequests]);
   const pickupGroup = useMemo(() => describePickupGroup(serviceRequests, item), [serviceRequests, item]);
   const readyToShipForwardRequest = useMemo(
     () => findRequest(serviceRequests, (r) => r?.type === "FORWARD" && r?.status === "READY_TO_SHIP"),
@@ -1401,7 +1579,7 @@ export default function MailItemDetailScreen() {
           <NoticeCard tone="amber" title="Forward Quote Ready">
             <SummaryLine label="Carrier" value={approvableForwardRequest.forwardDetails.quotedCarrier} />
             <SummaryLine label="Service" value={approvableForwardRequest.forwardDetails.quotedService} />
-            <SummaryLine label="Quote" value={formatMoneyFromCents(approvableForwardRequest.forwardDetails.quotedAmountCents)} />
+            <SummaryLine label={SHIPPING_AND_HANDLING_LABEL} value={formatMoneyFromCents(approvableForwardRequest.forwardDetails.quotedAmountCents)} />
             <SummaryLine label="Quoted At" value={formatDate(approvableForwardRequest.forwardDetails.quotedAt)} />
           </NoticeCard>
         ) : null}
@@ -1414,7 +1592,7 @@ export default function MailItemDetailScreen() {
           >
             <SummaryLine label="Carrier" value={paidForwardAwaitingLabel.forwardDetails.quotedCarrier} />
             <SummaryLine label="Service" value={paidForwardAwaitingLabel.forwardDetails.quotedService} />
-            <SummaryLine label="Paid" value={formatMoneyFromCents(paidForwardAwaitingLabel.forwardDetails.quotedAmountCents)} />
+            <SummaryLine label="Paid" value={paidAmountLabel(paidForwardAwaitingLabel.forwardDetails)} />
             <SummaryLine label="Paid At" value={formatDate(paidForwardAwaitingLabel.forwardDetails.paidAt)} />
           </NoticeCard>
         ) : null}
@@ -1423,7 +1601,7 @@ export default function MailItemDetailScreen() {
           <NoticeCard tone="emerald" title="Forward Approved" description="Paid. The center can ship it.">
             <SummaryLine label="Carrier" value={readyToShipForwardRequest.forwardDetails.quotedCarrier} />
             <SummaryLine label="Service" value={readyToShipForwardRequest.forwardDetails.quotedService} />
-            <SummaryLine label="Paid" value={formatMoneyFromCents(readyToShipForwardRequest.forwardDetails.quotedAmountCents)} />
+            <SummaryLine label="Paid" value={paidAmountLabel(readyToShipForwardRequest.forwardDetails)} />
             <SummaryLine label="Paid At" value={formatDate(readyToShipForwardRequest.forwardDetails.paidAt)} />
           </NoticeCard>
         ) : null}
@@ -1464,6 +1642,8 @@ export default function MailItemDetailScreen() {
           </DetailCard>
         ) : null}
 
+        {latestForward ? <ForwardSummaryCard request={latestForward} /> : null}
+
         <DetailCard className="p-5">
           <CardHeading className="mb-4">History</CardHeading>
           {history.length === 0 ? (
@@ -1498,7 +1678,7 @@ export default function MailItemDetailScreen() {
                         ) : null}
                         {event.sr.forwardDetails.quotedAmountCents != null ? (
                           <TimelineDetailLine>
-                            Quote: {formatMoneyFromCents(event.sr.forwardDetails.quotedAmountCents)}
+                            {SHIPPING_AND_HANDLING_LABEL}: {formatMoneyFromCents(event.sr.forwardDetails.quotedAmountCents)}
                           </TimelineDetailLine>
                         ) : null}
                         {hasDisplayValue(event.sr.forwardDetails.trackingNumber) ? (

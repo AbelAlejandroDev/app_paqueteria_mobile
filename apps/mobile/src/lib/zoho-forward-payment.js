@@ -21,7 +21,8 @@
  */
 
 import { isSecurePageUrl } from "./zoho-billing.js";
-import { centsOrNull, forwardPaymentError } from "./forward-payment.js";
+import { forwardPaymentError } from "./forward-payment.js";
+import { chargeFromZohoPayment } from "./price-display.js";
 
 // Lo comun a Stripe y Zoho (rutas, recotizacion, estado y sondeo) esta en
 // lib/forward-payment; se reexporta para quien importa desde aqui.
@@ -40,19 +41,18 @@ export const SAVED_CARD_BODY = Object.freeze({ useSavedCard: true });
 // ── Respuesta de prepare-payment ────────────────────────────────────────────
 
 /**
- * El desglose como lo pinta el portal web (ZohoForwardPaymentPanel):
- * franqueo = postageAmount - postageFeeAmount; gestion = postageFeeAmount;
- * recargo = adminFeeAmount; total = amount. Todo en centavos.
+ * El desglose para el cliente (lib/price-display), en centavos:
+ *   shippingAndHandling = postageAmount (franqueo + gestion; la gestion,
+ *     postageFeeAmount, nunca va en una linea propia);
+ *   mailForwardingFee   = adminFeeAmount;
+ *   total               = amount.
  */
 export function paymentBreakdown(data) {
-  const cents = centsOrNull;
-  const postageAmount = cents(data?.postageAmount);
-  const handling = cents(data?.postageFeeAmount);
+  const charge = chargeFromZohoPayment(data);
   return {
-    postage: postageAmount !== null && handling !== null ? postageAmount - handling : postageAmount,
-    handling,
-    surcharge: cents(data?.adminFeeAmount),
-    total: cents(data?.amount),
+    shippingAndHandling: charge.shippingAndHandling,
+    mailForwardingFee: charge.mailForwardingFee,
+    total: charge.total,
     currency: data?.currency || "USD",
     invoiceNumber: data?.invoiceNumber || null,
   };

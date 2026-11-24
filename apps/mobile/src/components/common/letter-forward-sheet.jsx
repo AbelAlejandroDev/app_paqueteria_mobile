@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, Mail, Plus, ShieldCheck, Truck } from "lucide-react-native";
+import { Check, Mail, Plus, Scale, ShieldCheck, Truck } from "lucide-react-native";
 
 import { api } from "@/lib/api";
 import { formatErrorMessage } from "@/lib/utils";
@@ -25,6 +25,8 @@ import {
   serverVerifiesAddresses,
   verifyPayload,
 } from "@/lib/address-verification";
+import { hasForwardFormChanges } from "@/lib/forward-form";
+import { MAIL_FORWARDING_FEE_LABEL, SHIPPING_AND_HANDLING_LABEL, TOTAL_LABEL } from "@/lib/price-display";
 import AddressVerificationBadge from "@/components/common/address-verification-badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -189,8 +191,13 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
   const preview = previewQuery.data;
   const addresses = preview?.addresses || [];
+  // El cargo de reenvio (Mail Forwarding Fee). La gestion interna del franqueo
+  // (postageHandlingFeeCents) no se ensena: va dentro de Shipping & Handling,
+  // que calcula el centro al pesar el sobre (lib/price-display).
   const feeCents = preview?.immediateForwardFeeCents ?? null;
-  const postageHandlingCents = preview?.postageHandlingFeeCents ?? 0;
+  // Sin direcciones guardadas no hay nada que elegir: el formulario va abierto.
+  const noSavedAddresses = previewQuery.isSuccess && addresses.length === 0;
+  const addingNew = addingAddress || noSavedAddresses;
 
   // La predeterminada viene elegida: es la que usa casi todo el mundo. Se deriva
   // en vez de copiarla al estado, asi no hace falta un efecto que la sincronice.
@@ -203,10 +210,23 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   // comprar la etiqueta la que no reconoce, con la solicitud ya creada.
   // El servidor vuelve a verificar al crear el reenvio; esto solo avisa antes.
   const draftVerified = isVerifiedCheck(addressCheck);
-  const destinationVerified = addingAddress ? draftVerified : isAddressUsableForForwarding(selectedAddress);
+  const destinationVerified = addingNew ? draftVerified : isAddressUsableForForwarding(selectedAddress);
   // Guardar una direccion sin telefono es valido; reenviar sin el, no: lo lleva la
   // etiqueta. Se pide aqui y viaja con esta peticion, sin tocar la guardada.
-  const selectedNeedsPhone = !addingAddress && Boolean(selectedAddress) && !String(selectedAddress.phone || "").trim();
+  const selectedNeedsPhone = !addingNew && Boolean(selectedAddress) && !String(selectedAddress.phone || "").trim();
+
+  // Hay algo que perder si la hoja se cierra sin querer (lib/forward-form).
+  const dirty =
+    step === "details" &&
+    hasForwardFormChanges({
+      draft,
+      emptyDraft: EMPTY_ADDRESS,
+      destinationPhone,
+      trackingRequested,
+      insuranceRequested,
+      insuredValue,
+      pickedAddress: Boolean(selectedAddressId) || addingAddress,
+    });
 
   const setDraftField = (field) => (value) => {
     // Cambiar la direccion invalida lo que dijo el transportista de la anterior.
@@ -278,7 +298,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       // Una direccion nueva se guarda antes de usarla, para que la proxima vez
       // este en la lista y no haya que volver a escribirla. El servidor la
       // verifica al guardarla y guarda la version normalizada.
-      if (addingAddress) {
+      if (addingNew) {
         if (saveForLater) {
           const saved = await api.post("/client/addresses", {
             label: optional(draft.label),
@@ -312,7 +332,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       return response.data;
     },
     onSuccess: async () => {
-      Alert.alert("Forward requested", "Your center will prepare it and confirm the cost.");
+      Alert.alert(
+        "Forward requested",
+        "Waiting for staff preparation. Your center will weigh and pack it, and you will see the total before anything is charged."
+      );
       onClose();
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
       await onCompleted?.();
@@ -333,14 +356,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const optionsProblem = shippingOptionsProblem({ letterForward: true, trackingRequested, insuranceRequested, insuredValue });
   const showValueProblem = insuranceRequested && String(insuredValue).trim() !== "" && insuredValueProblem(insuredValue);
   const canSubmit =
-    (addingAddress ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && !optionsProblem && !pending;
-
-  const feeHeadline =
-    feeCents === null
-      ? "Forwarding now adds a handling fee."
-      : feeCents > 0
-        ? "Forwarding now adds " + formatMoneyFromCents(feeCents) + " to your postage."
-        : "Forwarding now adds no handling fee.";
+    (addingNew ? draftIsComplete : Boolean(selectedAddress) && (!selectedNeedsPhone || destinationPhone.trim())) && destinationVerified && !optionsProblem && !pending;
 
   if (step === "fee") {
     return (
@@ -348,6 +364,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         visible={visible}
         onClose={onClose}
         title="Forward this mail now?"
+        description="Your center weighs and packs the envelope before shipping it."
         footer={
           <SheetActions>
             <Button variant="outline" className="flex-1" onPress={onClose}>
@@ -356,7 +373,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
             <Button
               className="flex-1"
               loading={previewQuery.isLoading}
-              disabled={previewQuery.isError}
+              disabled={previewQuery.isError || previewQuery.isLoading}
               onPress={() => setStep("details")}
             >
               Continue
@@ -364,21 +381,19 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
           </SheetActions>
         }
       >
-        <View className="flex-row items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <AlertTriangle size={18} color="#78350f" style={{ marginTop: 2 }} />
-          <View className="min-w-0 flex-1">
-            <Text className="text-sm font-semibold leading-5 text-amber-900">{feeHeadline}</Text>
-            <Text className="mt-1 text-sm leading-5 text-amber-900">
-              Postage is charged on top and depends on the weight of your envelope, so your center confirms the
-              total once the mail is packed.
-              {postageHandlingCents > 0
-                ? " Postage already includes a " + formatMoneyFromCents(postageHandlingCents) + " handling fee."
-                : ""}
-            </Text>
-          </View>
+        {previewQuery.isLoading ? <Skeleton className="h-36 w-full" /> : null}
+
+        {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}
+
+        <View className="flex-row items-start gap-3 rounded-xl border border-border bg-muted p-4">
+          <Scale size={18} color="#334155" style={{ marginTop: 2 }} />
+          <Text className="min-w-0 flex-1 font-brand text-sm leading-5 text-foreground">
+            The final price is calculated when staff weighs and prepares your shipment. Nothing is charged now: you
+            will see the complete total before you pay.
+          </Text>
         </View>
 
-        <Text className="text-sm leading-5 text-muted-foreground">
+        <Text className="font-brand text-sm leading-5 text-muted-foreground">
           If you would rather wait, your mail stays in your mailbox at no extra cost.
         </Text>
 
@@ -398,6 +413,8 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
     <Modal
       visible={visible}
       onClose={onClose}
+      dirty={dirty}
+      busy={pending}
       title="Where should we send it?"
       description={
         items.length === 1
@@ -425,7 +442,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       </View>
 
       {/* Las guardadas se quedan siempre a la vista, con la predeterminada
-          arriba. "Send to another address" es una opcion mas de la lista: al
+          arriba. "Change Address" ("Set Address" sin guardadas) es una opcion mas: al
           elegirla se abre el formulario debajo, y volver a una guardada es
           tocarla. Antes el formulario sustituia a la lista y, para volver a la
           Default, habia que cerrar la hoja. */}
@@ -433,7 +450,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         {previewQuery.isLoading ? <Skeleton className="h-32 w-full" /> : null}
 
         {addresses.map((address) => {
-          const checked = !addingAddress && effectiveAddressId === address.id;
+          const checked = !addingNew && effectiveAddressId === address.id;
           const verifies = serverVerifiesAddresses(address);
           const meta = describeAddressVerification(address.verification);
           const verifyingThis = verifySaved.isPending && verifySaved.variables?.id === address.id;
@@ -474,25 +491,39 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
                 </View>
               </Pressable>
 
-              {/* Como en el portal: una sin verificar no se puede elegir como
-                  destino, pero se puede verificar aqui mismo. */}
-              {checked && verifies && meta.status !== "VERIFIED" ? (
+              {/* Check Address tambien para la guardada elegida (validacion del
+                  backend: POST /client/addresses/:id/verify). Una sin verificar
+                  no se puede elegir como destino, pero se verifica aqui mismo. */}
+              {checked && verifies ? (
                 <View className="gap-2 border-t border-border pt-3">
-                  <Text
-                    className={
-                      meta.status === "INVALID"
-                        ? "text-sm font-semibold leading-5 text-rose-900"
-                        : "text-sm leading-5 text-amber-900"
-                    }
+                  {verifyingThis ? (
+                    <Text className="text-sm leading-5 text-muted-foreground">Validating address…</Text>
+                  ) : meta.status === "VERIFIED" ? (
+                    <Text className="text-sm font-semibold leading-5 text-emerald-800">Address validated.</Text>
+                  ) : (
+                    <>
+                      <Text
+                        className={
+                          meta.status === "INVALID"
+                            ? "text-sm font-semibold leading-5 text-rose-900"
+                            : "text-sm leading-5 text-amber-900"
+                        }
+                      >
+                        {meta.hint}
+                        {meta.message ? " (" + meta.message + ")" : ""}
+                      </Text>
+                      <Text className="text-sm leading-5 text-muted-foreground">
+                        Mail can only be forwarded to an address the carrier recognises.
+                      </Text>
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    loading={verifyingThis}
+                    disabled={verifySaved.isPending || pending}
+                    onPress={() => verifySaved.mutate(address)}
                   >
-                    {meta.hint}
-                    {meta.message ? " (" + meta.message + ")" : ""}
-                  </Text>
-                  <Text className="text-sm leading-5 text-muted-foreground">
-                    Mail can only be forwarded to an address the carrier recognises.
-                  </Text>
-                  <Button variant="outline" loading={verifyingThis} onPress={() => verifySaved.mutate(address)}>
-                    Verify this address
+                    Check Address
                   </Button>
                 </View>
               ) : null}
@@ -509,33 +540,36 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
           </Field>
         ) : null}
 
-        {addresses.length === 0 && !previewQuery.isLoading ? (
+        {noSavedAddresses ? (
           <View className="rounded-lg border border-border bg-muted p-4">
             <Text className="text-sm leading-5 text-muted-foreground">
-              You have no saved addresses yet. Add the one you want this mail sent to.
+              You have no saved addresses yet. Set the address you want this mail sent to.
             </Text>
           </View>
         ) : null}
 
         <View
           className={
-            addingAddress
+            addingNew
               ? "gap-4 rounded-lg border border-foreground bg-card p-4"
               : "gap-4 rounded-lg border border-border bg-card p-4"
           }
         >
           <Pressable
             onPress={() => setAddingAddress(true)}
+            disabled={noSavedAddresses}
             accessibilityRole="radio"
-            accessibilityState={{ checked: addingAddress }}
+            accessibilityState={{ checked: addingNew }}
             className="flex-row items-center gap-3"
           >
-            <Radio checked={addingAddress} />
+            <Radio checked={addingNew} />
             <Plus size={18} color="#0f172a" />
-            <Text className="min-w-0 flex-1 text-base font-semibold text-foreground">Send to another address</Text>
+            <Text className="min-w-0 flex-1 text-base font-semibold text-foreground">
+              {addressOptionLabel(addresses.length)}
+            </Text>
           </Pressable>
 
-          {addingAddress ? (
+          {addingNew ? (
             <View className="gap-3">
               <Field label="Name this address">
                 <Input value={draft.label} placeholder="Home, Office" onChangeText={setDraftField("label")} />
@@ -579,15 +613,17 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
                 <Button
                   variant="outline"
                   loading={verifyAddress.isPending}
-                  disabled={!draftIsComplete}
+                  disabled={!draftIsComplete || verifyAddress.isPending || pending}
                   onPress={() => verifyAddress.mutate()}
                 >
-                  Check address
+                  Check Address
                 </Button>
 
-                {draftVerified ? (
-                  <Notice tone="emerald">The carrier recognises this address.</Notice>
+                {verifyAddress.isPending ? (
+                  <Text className="text-sm leading-5 text-muted-foreground">Validating address…</Text>
                 ) : null}
+
+                {draftVerified ? <Notice tone="emerald">Address validated. The carrier recognises it.</Notice> : null}
 
                 {/* Lo que propone el transportista, si difiere: suele corregir el ZIP
                     o la abreviatura. Usarla evita el rechazo al comprar la etiqueta. */}
@@ -663,21 +699,39 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         ) : null}
       </CheckCard>
 
+      {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}
+    </Modal>
+  );
+}
+
+/** "Set Address" sin guardadas; con guardadas, la opcion de escribir otra. */
+export function addressOptionLabel(savedCount) {
+  return Number(savedCount) > 0 ? "Change Address" : "Set Address";
+}
+
+/**
+ * Lo que se sabe del precio antes de que el centro prepare el envio: el cargo de
+ * reenvio, y que Shipping & Handling (y por tanto el total) esta pendiente. Nunca
+ * un importe parcial con aspecto de precio final (lib/price-display).
+ */
+function PendingPriceSummary({ feeCents }) {
+  return (
+    <View className="gap-2 rounded-xl border border-border bg-card p-4">
+      <Text className="font-brand-semibold text-sm text-foreground">Price</Text>
+      <View className="flex-row justify-between gap-4">
+        <Text className="min-w-0 flex-1 font-brand text-sm text-muted-foreground">{SHIPPING_AND_HANDLING_LABEL}</Text>
+        <Text className="font-brand-medium text-sm text-foreground">Calculated by staff</Text>
+      </View>
       {feeCents > 0 ? (
-        <View className="gap-1.5 rounded-lg border border-border bg-muted p-4">
-          <View className="flex-row justify-between gap-4">
-            <Text className="text-xs text-muted-foreground">Immediate forward fee</Text>
-            <Text className="text-xs font-semibold text-foreground">{formatMoneyFromCents(feeCents)}</Text>
-          </View>
-          <View className="flex-row justify-between gap-4">
-            <Text className="flex-1 text-xs text-muted-foreground">
-              Postage
-              {postageHandlingCents > 0 ? " (includes " + formatMoneyFromCents(postageHandlingCents) + " handling)" : ""}
-            </Text>
-            <Text className="text-xs font-semibold text-foreground">Confirmed by your center</Text>
-          </View>
+        <View className="flex-row justify-between gap-4">
+          <Text className="min-w-0 flex-1 font-brand text-sm text-muted-foreground">{MAIL_FORWARDING_FEE_LABEL}</Text>
+          <Text className="font-brand-semibold text-sm text-foreground">{formatMoneyFromCents(feeCents)}</Text>
         </View>
       ) : null}
-    </Modal>
+      <View className="flex-row justify-between gap-4 border-t border-border pt-2">
+        <Text className="min-w-0 flex-1 font-brand-semibold text-sm text-foreground">{TOTAL_LABEL}</Text>
+        <Text className="font-brand-semibold text-sm text-foreground">Pending preparation</Text>
+      </View>
+    </View>
   );
 }

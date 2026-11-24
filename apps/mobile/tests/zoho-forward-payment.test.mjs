@@ -54,8 +54,12 @@ test("rutas y cuerpos: revision {} y tarjeta guardada { useSavedCard: true }, na
   assert.ok(Object.isFrozen(REVIEW_BODY) && Object.isFrozen(SAVED_CARD_BODY));
 });
 
-test("desglose como el portal web: franqueo = postage - gestion", () => {
-  assert.deepEqual(paymentBreakdown(REVIEW), { postage: 950, handling: 300, surcharge: 200, total: 1450, currency: "USD", invoiceNumber: "INV-000123" });
+test("desglose para el cliente: Shipping & Handling (con la gestion dentro), Mail Forwarding Fee y Total", () => {
+  // postageAmount 1250 ya incluye la gestion (postageFeeAmount 300), que nunca va sola.
+  assert.deepEqual(paymentBreakdown(REVIEW), { shippingAndHandling: 1250, mailForwardingFee: 200, total: 1450, currency: "USD", invoiceNumber: "INV-000123" });
+  const card = fs.readFileSync(path.join(root, "src/components/common/zoho-forward-payment-card.jsx"), "utf8");
+  assert.doesNotMatch(card, /label="Handling"|label="Postage"|label="Surcharge"/);
+  assert.match(card, /chargeRows\(breakdown\)/);
 });
 
 test("prepare-payment: factura abierta con su pagina, o pagado", () => {
