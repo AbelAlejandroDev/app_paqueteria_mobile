@@ -1,11 +1,13 @@
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import { ChevronRight, FileText, Mail, Phone, Receipt } from "lucide-react-native";
+import { ChevronRight, ExternalLink, FileText, Lock, Mail, Phone, Receipt } from "lucide-react-native";
+import * as WebBrowser from "expo-web-browser";
 import { getCurrentCenterName } from "@paqueteria/core";
 import { brand } from "@/lib/brand";
 import { overWhite } from "@/lib/colors";
 
 import { useAuth } from "@/context/AuthContext";
+import { usePrivacyPolicy } from "@/lib/use-privacy-policy";
 import PageTitle from "@/components/common/page-title";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -86,11 +88,11 @@ function ContactRow({ title, value, icon: Icon, url, actionLabel, last = false }
  * Un documento del centro: icono en el cuadro de marca, nombre y flecha, igual
  * que las filas de Settings. Abre la pantalla dentro del Stack de Help.
  */
-function DocumentRow({ label, description, href, icon: Icon, last = false }) {
+function DocumentRow({ label, description, href, onPress, icon: Icon, external = false, last = false }) {
   return (
     <Pressable
-      onPress={() => router.push(href)}
-      accessibilityRole="button"
+      onPress={onPress || (() => router.push(href))}
+      accessibilityRole={external ? "link" : "button"}
       className={
         last
           ? "flex-row items-center gap-3.5 px-4 py-3.5 active:bg-tint/20"
@@ -107,7 +109,7 @@ function DocumentRow({ label, description, href, icon: Icon, last = false }) {
         <Text className="font-brand-bold text-[16px] text-ink">{label}</Text>
         <Text className="font-brand text-[13px] leading-5 text-ink/60">{description}</Text>
       </View>
-      <ChevronRight size={20} color={brand.palette.ink} />
+      {external ? <ExternalLink size={17} color={brand.palette.ink} /> : <ChevronRight size={20} color={brand.palette.ink} />}
     </Pressable>
   );
 }
@@ -115,6 +117,7 @@ function DocumentRow({ label, description, href, icon: Icon, last = false }) {
 export default function HelpScreen() {
   const { user } = useAuth();
   const contact = getCenterContact(user);
+  const privacyPolicy = usePrivacyPolicy();
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 p-4 pb-24">
@@ -162,8 +165,20 @@ export default function HelpScreen() {
             description="Your center's fees for services."
             href="/help/fee-schedule"
             icon={Receipt}
-            last
+            last={!privacyPolicy}
           />
+          {/* La misma politica que Settings → Legal (lib/use-privacy-policy):
+              ni una URL repetida aqui ni la de otra organizacion. */}
+          {privacyPolicy ? (
+            <DocumentRow
+              label="Privacy Policy"
+              description="How your information is collected, used and protected."
+              onPress={() => WebBrowser.openBrowserAsync(privacyPolicy.url)}
+              icon={Lock}
+              external
+              last
+            />
+          ) : null}
         </CardContent>
       </Card>
     </ScrollView>

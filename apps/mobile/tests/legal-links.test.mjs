@@ -61,8 +61,10 @@ test("cada build lleva solo la politica de su marca (extra.brand)", () => {
 test("Settings tiene Legal con Privacy Policy, por la organizacion del usuario y la marca de la app", () => {
   const settings = read("src/app/(client)/settings/index.jsx");
   assert.match(settings, />Legal</);
-  assert.match(settings, /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
-  assert.match(settings, /\{privacyPolicy \? \(/, "sin politica no hay seccion");
+  // Una sola fuente para Settings y Help: el hook, por la organizacion del usuario y la marca de la app.
+  assert.match(settings, /const privacyPolicy = usePrivacyPolicy\(\);/);
+  assert.match(read("src/lib/use-privacy-policy.js"), /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
+  assert.match(settings, /\{privacyPolicy \? \(/, "sin politica no hay fila");
   assert.match(settings, /label="Privacy Policy"/);
 });
 
@@ -125,8 +127,9 @@ test("capabilities.legal: ausente = no se sabe (null); presente con null = no ha
 });
 
 test("Settings usa capabilities.legal y Login enseña la politica antes de iniciar sesion", () => {
-  const settings = read("src/app/(client)/settings/index.jsx");
-  assert.match(settings, /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
+  const hook = read("src/lib/use-privacy-policy.js");
+  assert.match(hook, /privacyPolicyFor\(user\?\.tenant\?\.slug, brand, capabilities\.legal\)/);
+  assert.match(hook, /if \(capabilities\.isLoading\) return null;/, "mientras carga no se ensena un enlace que puede cambiar");
   const login = read("src/app/login.jsx");
   assert.match(login, /queryFn: async \(\) => \(await api\.get\(publicLegalPath\(brand\.tenantSlug\)\)\)\.data/);
   assert.match(login, /parsePublicLegal\(query\.data, brand\.tenantSlug\)/);

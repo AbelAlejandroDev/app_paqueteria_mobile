@@ -7,14 +7,21 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
-test("Settings: Terms & Conditions y Fee Schedule van justo debajo de Security", () => {
+test("Settings → Legal: Privacy Policy, Terms & Conditions y Fee Schedule, juntos", () => {
   const settings = read("src/app/(client)/settings/index.jsx");
-  const labels = [...settings.matchAll(/\{ label: "([^"]+)", (?:href|action)/g)].map((m) => m[1]);
-  const security = labels.indexOf("Security");
-  assert.ok(security >= 0);
-  assert.deepEqual(labels.slice(security, security + 3), ["Security", "Terms & Conditions", "Fee Schedule"]);
-  assert.match(settings, /href: "\/settings\/terms"/);
-  assert.match(settings, /href: "\/settings\/fee-schedule"/);
+  const legal = settings.match(/const LEGAL_SECTIONS = \[[\s\S]*?\];/)[0];
+  const labels = [...legal.matchAll(/\{ label: "([^"]+)", href/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ["Terms & Conditions", "Fee Schedule"]);
+  assert.match(legal, /href: "\/settings\/terms"/);
+  assert.match(legal, /href: "\/settings\/fee-schedule"/);
+  // Ya no van en la lista general (no se repiten).
+  const general = settings.match(/const SECTIONS = \[[\s\S]*?\];/)[0];
+  assert.doesNotMatch(general, /Terms & Conditions|Fee Schedule/);
+  // En la seccion Legal, Privacy Policy arriba y los dos documentos debajo.
+  const section = settings.slice(settings.indexOf(">Legal<"));
+  assert.ok(section.indexOf('label="Privacy Policy"') < section.indexOf("LEGAL_SECTIONS.map"));
+  // Sin URLs inventadas: Terms y Fee Schedule son pantallas de la app con los documentos del centro.
+  assert.doesNotMatch(legal, /https?:\/\//);
 });
 
 test("las dos rutas existen y tienen titulo en el Stack de Settings", () => {

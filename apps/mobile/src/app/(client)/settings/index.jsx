@@ -10,8 +10,7 @@ import { overWhite } from "@/lib/colors";
 import * as Updates from "expo-updates";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { describeRunningUpdate } from "@/lib/update-info";
-import { privacyPolicyFor } from "@/lib/legal-links";
-import { useCapabilities } from "@/lib/use-capabilities";
+import { usePrivacyPolicy } from "@/lib/use-privacy-policy";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
@@ -28,10 +27,20 @@ const SECTIONS = [
   { label: "Authorized Individuals", href: "/settings/authorized-individuals", icon: UsersRound },
   { label: "USPS Verification", href: "/usps-verification", icon: ShieldCheck },
   { label: "Security", href: "/settings/security", icon: LockKeyhole },
-  { label: "Terms & Conditions", href: "/settings/terms", icon: FileText },
-  { label: "Fee Schedule", href: "/settings/fee-schedule", icon: Receipt },
   // No es una ruta: vuelve a abrir la bienvenida y el recorrido.
   { label: "App Tutorial", action: "replayTutorial", icon: GraduationCap },
+];
+
+/**
+ * Legal: los tres documentos juntos. Terms & Conditions y Fee Schedule son los
+ * del centro del cliente, que da el backend (GET /auth/terms/current y
+ * /client/fee-schedule) y se leen dentro de la app: no hay URL publica que
+ * enlazar, y no se inventa ninguna. Privacy Policy se abre en el navegador
+ * (lib/use-privacy-policy).
+ */
+const LEGAL_SECTIONS = [
+  { label: "Terms & Conditions", href: "/settings/terms", icon: FileText },
+  { label: "Fee Schedule", href: "/settings/fee-schedule", icon: Receipt },
 ];
 
 /**
@@ -76,11 +85,9 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { replay } = useOnboarding();
   const timeZone = useMemo(() => formatTimeZone(), []);
-  // De la organizacion del usuario: HDG no hereda la de The Worx.
-  // El enlace lo decide el backend (capabilities.legal); mientras carga no se
-  // enseña, y sin respuesta se usa el de la marca (lib/legal-links).
-  const capabilities = useCapabilities();
-  const privacyPolicy = capabilities.isLoading ? null : privacyPolicyFor(user?.tenant?.slug, brand, capabilities.legal);
+  // De la organizacion del usuario: HDG no hereda la de The Worx. La misma que
+  // en Help (lib/use-privacy-policy).
+  const privacyPolicy = usePrivacyPolicy();
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [
@@ -161,21 +168,30 @@ export default function SettingsScreen() {
         </View>
 
         {/* Legal: la Privacy Policy se publica y se mantiene en la web de la
-            organizacion; aqui solo se abre, en el navegador del sistema. */}
-        {privacyPolicy ? (
-          <View className="gap-2">
-            <Text className="px-1 font-brand-bold text-[13px] uppercase tracking-[0.12em] text-ink/60">Legal</Text>
-            <DetailCard>
+            organizacion (se abre en el navegador del sistema); Terms y Fee
+            Schedule son los del centro, dentro de la app. */}
+        <View className="gap-2">
+          <Text className="px-1 font-brand-bold text-[13px] uppercase tracking-[0.12em] text-ink/60">Legal</Text>
+          <DetailCard>
+            {privacyPolicy ? (
               <SectionRow
                 label="Privacy Policy"
                 icon={Lock}
                 external
                 onPress={() => WebBrowser.openBrowserAsync(privacyPolicy.url)}
-                last
               />
-            </DetailCard>
-          </View>
-        ) : null}
+            ) : null}
+            {LEGAL_SECTIONS.map((section, index) => (
+              <SectionRow
+                key={section.href}
+                label={section.label}
+                href={section.href}
+                icon={section.icon}
+                last={index === LEGAL_SECTIONS.length - 1}
+              />
+            ))}
+          </DetailCard>
+        </View>
 
         {/* Cerrar sesion vivia en Security, que ahora solo guarda ajustes.
             Va aparte porque es una accion, no una preferencia. */}
