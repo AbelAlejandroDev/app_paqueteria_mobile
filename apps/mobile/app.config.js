@@ -241,6 +241,9 @@ module.exports = {
         privacyPolicy: brand.privacyPolicy || null,
         // Delete Account; solo la de esta organizacion (lib/legal-links).
         accountDeletion: brand.accountDeletion || null,
+        // Autorizacion de cobro automatico de reenvios (lib/auto-charge-consent).
+        // Solo HDG; en The Worx false y la app no llama al endpoint.
+        forwardingAutoCharge: brand.forwardingAutoCharge === true,
       },
     },
   },

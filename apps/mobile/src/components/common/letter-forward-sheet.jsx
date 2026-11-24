@@ -28,7 +28,10 @@ import {
 } from "@/lib/address-verification";
 import { hasForwardFormChanges, isQuoteRequiredError, isStaffPreparedForward } from "@/lib/forward-form";
 import { MAIL_FORWARDING_FEE_LABEL, SHIPPING_AND_HANDLING_LABEL, TOTAL_LABEL } from "@/lib/price-display";
+import { consentErrorOutcome, describeConsent, isOfferAccepted } from "@/lib/auto-charge-consent";
+import { useAutoChargeConsent } from "@/lib/use-auto-charge-consent";
 import AddressVerificationBadge from "@/components/common/address-verification-badge";
+import AutoChargeConsentOffer from "@/components/common/auto-charge-consent-offer";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Modal, Notice } from "@/components/ui/modal";
@@ -199,6 +202,13 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const [insuranceRequested, setInsuranceRequested] = useState(false);
   const [insuredValue, setInsuredValue] = useState("");
   const [addressCheck, setAddressCheck] = useState(null);
+  // Autorizacion opcional de cobro automatico (HDG, lib/auto-charge-consent):
+  // la clave de la oferta que el cliente marco; si la oferta cambia, se desmarca.
+  const [consentAcceptedKey, setConsentAcceptedKey] = useState(null);
+  const autoCharge = useAutoChargeConsent({ enabled: visible });
+  const consent = autoCharge.consent;
+  const consentOffer = autoCharge.enabled && autoCharge.query.isSuccess ? consent.offer : null;
+  const consentChecked = isOfferAccepted(consentAcceptedKey, consentOffer);
 
   const previewQuery = useQuery({
     queryKey: ["client-forward-immediate-preview"],
@@ -310,6 +320,19 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
 
   const requestForward = useMutation({
     mutationFn: async () => {
+      // Primero la autorizacion (si el cliente la marco y no estaba vigente),
+      // despues el reenvio. Si la API no la confirma, el reenvio no sale: el
+      // cliente decide si sigue sin ella.
+      if (consentChecked && consentOffer && !consent.valid) {
+        let granted;
+        try {
+          granted = describeConsent(await autoCharge.grant.mutateAsync(consentOffer));
+        } catch (error) {
+          throw Object.assign(new Error("AUTO_CHARGE_CONSENT_FAILED"), { consentError: error });
+        }
+        if (!granted.valid) throw Object.assign(new Error("AUTO_CHARGE_CONSENT_FAILED"), { consentError: null });
+      }
+
       let destination = selectedAddress;
 
       // Una direccion nueva se guarda antes de usarla, para que la proxima vez
@@ -358,6 +381,19 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       await onCompleted?.();
     },
     onError: (error) => {
+      // La autorizacion no se guardo: el reenvio no se pidio. Se desmarca la
+      // casilla y se relee la oferta (pudo cambiar texto, version o importe).
+      if (error?.message === "AUTO_CHARGE_CONSENT_FAILED") {
+        setConsentAcceptedKey(null);
+        Alert.alert(
+          "Authorization not saved",
+          (error.consentError
+            ? consentErrorOutcome(error.consentError).message
+            : "Your center didn't confirm the authorization.") +
+            " Your forward has not been requested yet. You can request it without the authorization."
+        );
+        return;
+      }
       // Si la direccion se guardo pero la peticion fallo, la lista ya la trae.
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
       // 422/409 de opciones (seguro sin seguimiento, sin servicio compatible...)
@@ -761,6 +797,30 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
           </>
         ) : null}
       </CheckCard>
+      ) : null}
+
+      {/* Cobro automatico (opcional): vigente, se dice con su maximo; si no,
+          la oferta de la API con su texto completo y la casilla desmarcada. */}
+      {autoCharge.enabled && consent.valid ? (
+        <Notice tone="sky">
+          {"Automatic charges are authorized up to " +
+            consent.effectiveMaxLabel +
+            " per shipment. If the total is within it, your center charges your saved card and notifies you. You can withdraw it in Settings."}
+        </Notice>
+      ) : consentOffer ? (
+        <AutoChargeConsentOffer
+          offer={consentOffer}
+          checked={consentChecked}
+          disabled={pending}
+          notice={
+            consent.state === "outdated"
+              ? "The authorization text was updated. Accept the new text to keep automatic charges."
+              : consent.state === "center-changed"
+                ? "Your previous authorization was for another center."
+                : "Optional. Without it, you approve and pay each shipment in the app."
+          }
+          onToggle={() => setConsentAcceptedKey(consentChecked ? null : consentOffer.key)}
+        />
       ) : null}
 
       {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}

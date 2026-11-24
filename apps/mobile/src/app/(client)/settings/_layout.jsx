@@ -12,6 +12,7 @@ export default function SettingsLayout() {
     <Stack screenOptions={canvasHeaderOptions}>
       <Stack.Screen name="index" options={{ title: "Settings" }} />
       <Stack.Screen name="forwarding-addresses" options={{ title: "Forwarding Addresses" }} />
+      <Stack.Screen name="forwarding-charges" options={{ title: "Automatic Charges" }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
       <Stack.Screen name="authorized-individuals" options={{ title: "Authorized Individuals" }} />
       <Stack.Screen name="security" options={{ title: "Security" }} />

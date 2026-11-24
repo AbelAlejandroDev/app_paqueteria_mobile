@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { Bell, CalendarX, ChevronRight, ExternalLink, FileText, GraduationCap, Lock, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, Trash2, UsersRound } from "lucide-react-native";
+import { Bell, CalendarX, CreditCard, ChevronRight, ExternalLink, FileText, GraduationCap, Lock, LockKeyhole, LogOut, MapPin, Receipt, ShieldCheck, Trash2, UsersRound } from "lucide-react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { brand } from "@/lib/brand";
@@ -11,6 +11,7 @@ import * as Updates from "expo-updates";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { describeRunningUpdate } from "@/lib/update-info";
 import { usePrivacyPolicy } from "@/lib/use-privacy-policy";
+import { autoChargeConsentEnabled } from "@/lib/auto-charge-consent";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
@@ -30,6 +31,12 @@ const SECTIONS = [
   // No es una ruta: vuelve a abrir la bienvenida y el recorrido.
   { label: "App Tutorial", action: "replayTutorial", icon: GraduationCap },
 ];
+
+/**
+ * Ajustes de reenvio: autorizacion de cobro automatico. Solo en la marca que la
+ * tiene y para su organizacion (lib/auto-charge-consent); en The Worx no sale.
+ */
+const AUTO_CHARGE_SECTION = { label: "Automatic Forwarding Charges", href: "/settings/forwarding-charges", icon: CreditCard };
 
 /**
  * Legal: los tres documentos juntos. Terms & Conditions y Fee Schedule son los
@@ -88,6 +95,11 @@ export default function SettingsScreen() {
   // De la organizacion del usuario: HDG no hereda la de The Worx. La misma que
   // en Help (lib/use-privacy-policy).
   const privacyPolicy = usePrivacyPolicy();
+  // Va justo despues de Forwarding Addresses: son los dos ajustes de reenvio.
+  const sections = useMemo(() => {
+    if (!autoChargeConsentEnabled(user?.tenant?.slug, brand)) return SECTIONS;
+    return [SECTIONS[0], AUTO_CHARGE_SECTION, ...SECTIONS.slice(1)];
+  }, [user?.tenant?.slug]);
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [
@@ -139,14 +151,14 @@ export default function SettingsScreen() {
 
       <ScrollView className="flex-1 bg-canvas" contentContainerClassName="gap-5 p-4 pb-24">
         <DetailCard>
-          {SECTIONS.map((section, index) => (
+          {sections.map((section, index) => (
             <SectionRow
               key={section.href || section.action}
               label={section.label}
               href={section.href}
               icon={section.icon}
               onPress={section.action === "replayTutorial" ? replay : undefined}
-              last={index === SECTIONS.length - 1}
+              last={index === sections.length - 1}
             />
           ))}
         </DetailCard>

@@ -152,6 +152,11 @@ const BRANDS = {
     // Pagina web para pedir el borrado sin la app (Google Play). Comprobada el
     // 2026-11-23 (200). Si el backend da `accountDeletionUrl`, manda esa.
     accountDeletion: { name: "Request account deletion on the web", url: "https://members.hdgexecutivesuites.com/account-deletion" },
+    // Autorizacion de cobro automatico de reenvios de cartas y sobres grandes
+    // (backend 103ddd7, docs/hdg-cartas-cobro-automatico.md). Solo enciende la
+    // pantalla y la consulta: el maximo, el texto y si se ofrece los da la API.
+    // The Worx no lo tiene y no llama al endpoint.
+    forwardingAutoCharge: true,
     // Dominios de HDG (backend feat/hdg-production-supabase, 3078f4e,
     // docs/HDG_MOBILE_PRODUCTION_HANDOFF.md §2): Sandbox en `sandbox-core`,
     // Production en `core`. Son APIs y bases distintas. Hasta que se promueva
