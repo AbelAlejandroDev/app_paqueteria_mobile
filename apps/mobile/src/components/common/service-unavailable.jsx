@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { probeApi } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import {
+  confirmServiceDown,
   getServiceStatus,
   reportServiceRecovered,
   SERVICE_OK,
@@ -41,6 +42,10 @@ const COPY = {
  * Va por encima de todo sin desmontar nada: lo que el cliente estaba
  * escribiendo sigue ahi al volver. No cierra la sesion ni borra los tokens.
  *
+ * Solo se ensena si la caida esta CONFIRMADA (lib/service-status,
+ * confirmServiceDown): un fallo suelto al abrir la app no basta. Con la app en
+ * segundo plano no se confirma nada (iOS corta la red alli); se hace al volver.
+ *
  * Mientras esta, sondea la API (sin sesion) con espera creciente y al volver a
  * primer plano. Al recuperarse vuelve a leer las consultas activas (GET) y, si
  * la sesion no se pudo comprobar al arrancar, la comprueba. Las operaciones que
@@ -52,8 +57,42 @@ export default function ServiceUnavailable() {
   const { sessionUnavailable, reload } = useAuth();
   const [service, setService] = useState(getServiceStatus);
   const [checking, setChecking] = useState(false);
+  // La caida (identificada por desde cuando dura, `since`) se ha comprobado con
+  // una sonda propia, no solo con un fallo suelto. Una caida nueva tiene otro
+  // `since`, asi que vuelve a necesitar su confirmacion.
+  const [confirmedSince, setConfirmedSince] = useState(null);
 
-  const down = service.status !== SERVICE_OK;
+  const failing = service.status !== SERVICE_OK;
+  const confirmed = failing && confirmedSince !== null && confirmedSince === service.since;
+  const down = failing && confirmed;
+  const episode = failing ? service.since : null;
+
+  useEffect(() => {
+    if (episode === null) return undefined;
+    let cancelled = false;
+    const confirm = () =>
+      confirmServiceDown({ probe: probeApi }).then((result) => {
+        if (!cancelled && result === "down") setConfirmedSince(episode);
+      });
+
+    if (AppState.currentState === "active") {
+      confirm();
+      return () => {
+        cancelled = true;
+      };
+    }
+    // En segundo plano no: se confirma al volver a primer plano.
+    const subscription = AppState.addEventListener("change", (appState) => {
+      if (appState === "active") {
+        subscription.remove();
+        confirm();
+      }
+    });
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, [episode]);
 
   const onRecovered = useCallback(() => {
     queryClient.invalidateQueries({ type: "active" });

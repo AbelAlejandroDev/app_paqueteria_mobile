@@ -81,6 +81,31 @@ export function resetServiceStatusForTests() {
 }
 
 /**
+ * Un fallo de una peticion no prueba que no haya conexion: al abrir la app (o al
+ * volver de segundo plano) iOS puede tirar la primera peticion con "Network
+ * Error" teniendo red. Antes de ensenar "No internet connection" se comprueba
+ * con una sonda inmediata (GET /health, sin sesion):
+ *   - la sonda responde -> era pasajero: el servicio vuelve a ok sin pantalla;
+ *   - la sonda falla    -> confirmado: se ensena la pantalla y empieza el bucle.
+ * No hay esperas artificiales: la sonda sale en el momento.
+ *
+ * @returns {Promise<"recovered"|"down">}
+ */
+export async function confirmServiceDown({ probe, onRecovered = reportServiceRecovered }) {
+  let ok = false;
+  try {
+    ok = Boolean(await probe());
+  } catch {
+    ok = false;
+  }
+  if (ok) {
+    onRecovered();
+    return "recovered";
+  }
+  return "down";
+}
+
+/**
  * Comprueba la API con `probe` hasta que responda, con la espera de
  * nextProbeDelay, y entonces llama a `onRecovered`. Devuelve `{ stop, checkNow }`.
  *

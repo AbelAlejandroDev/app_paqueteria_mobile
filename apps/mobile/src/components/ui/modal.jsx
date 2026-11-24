@@ -1,8 +1,9 @@
-import { KeyboardAvoidingView, Modal as RNModal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal as RNModal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/utils";
+import { sheetMaxHeight } from "@/lib/sheet-layout";
 
 /**
  * Sustituto nativo del Dialog de Radix que usa la web. Se presenta como hoja
@@ -22,56 +23,104 @@ function SheetWrapper({ children }) {
 /** El padding que ya tenia el pie, sobre el que se suma la zona segura. */
 const SHEET_PADDING = 20;
 
-export function Modal({ visible, onClose, title, description, children, footer }) {
+/**
+ * Pregunta antes de cerrar un formulario con cambios. "Keep editing" es la
+ * opcion por defecto: cerrar sin querer no puede costar lo escrito.
+ */
+export function confirmDiscard(onDiscard, { title = "Discard changes?", message = "What you entered in this form will be lost." } = {}) {
+  Alert.alert(title, message, [
+    { text: "Keep editing", style: "cancel" },
+    { text: "Discard", style: "destructive", onPress: onDiscard },
+  ]);
+}
+
+/**
+ * @param {object} props
+ * @param {boolean} [props.dirty] - hay cambios sin enviar: cerrar (fondo, X, atras de Android) pide confirmacion.
+ * @param {boolean} [props.busy] - hay una operacion en curso: no se cierra hasta que termine.
+ */
+export function Modal({ visible, onClose, title, description, children, footer, dirty = false, busy = false }) {
   // La hoja llega hasta el borde inferior de la pantalla, detras de la barra de
   // navegacion de Android y del indicador de inicio del iPhone. Sin reservar esa
   // zona, los botones del pie quedaban debajo de los botones del sistema en los
   // telefonos con navegacion de tres botones. El valor lo da el sistema, asi que
   // vale igual para gestos, tres botones, tablets e iPhone.
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const bottomPadding = SHEET_PADDING + insets.bottom;
+  // En pixeles y no en %: dentro de KeyboardAvoidingView (que no tiene altura
+  // propia) un max-height en porcentaje no limita nada, y la hoja crecia por
+  // encima de la pantalla: la cabecera quedaba cortada bajo la isla dinamica.
+  const maxHeight = sheetMaxHeight({ windowHeight, topInset: insets.top });
+
+  const requestClose = () => {
+    if (busy) return;
+    if (dirty) confirmDiscard(onClose);
+    else onClose?.();
+  };
 
   return (
     <RNModal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
       statusBarTranslucent
       // Explicito y no por defecto: la hoja pinta su fondo hasta abajo y se
       // separa del sistema con el padding, en vez de dejar una franja vacia.
       navigationBarTranslucent
     >
       <View className="flex-1 justify-end bg-black/50">
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={requestClose}
+          accessibilityLabel="Close"
+          accessibilityRole="button"
+        />
 
         <SheetWrapper>
-          <View className="max-h-[80%] rounded-t-2xl border-t border-border bg-card">
-            <View className="flex-row items-start gap-3 border-b border-border p-5">
+          <View className="rounded-t-2xl border-t border-border bg-card" style={{ maxHeight }}>
+            <View className="items-center pt-2">
+              <View className="h-1 w-10 rounded-full bg-ink/15" />
+            </View>
+            <View className="flex-row items-start gap-3 border-b border-border px-5 pb-4 pt-3">
               <View className="min-w-0 flex-1">
-                <Text className="font-brand-bold text-lg text-foreground">{title}</Text>
+                <Text className="font-brand-bold text-lg leading-6 text-foreground" accessibilityRole="header">
+                  {title}
+                </Text>
                 {description ? (
                   <Text className="mt-1 font-brand text-sm leading-5 text-muted-foreground">{description}</Text>
                 ) : null}
               </View>
-              <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Close">
-                <X size={22} color="#2D2A26" />
+              <Pressable
+                onPress={requestClose}
+                disabled={busy}
+                hitSlop={12}
+                accessibilityLabel="Close"
+                accessibilityRole="button"
+                className="h-9 w-9 items-center justify-center rounded-full bg-muted"
+              >
+                <X size={20} color="#2D2A26" />
               </Pressable>
             </View>
 
             <ScrollView
+              // Encoge para que el pie quede siempre a la vista: lo que no cabe
+              // se desplaza, los botones no.
+              style={{ flexGrow: 0, flexShrink: 1 }}
               contentContainerClassName="gap-3 px-5 pt-5"
               // Sin pie, el ultimo elemento es el contenido: es el que necesita la
               // zona segura.
               contentContainerStyle={{ paddingBottom: footer ? SHEET_PADDING : bottomPadding }}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
             >
               {children}
             </ScrollView>
 
             {footer ? (
               <View
-                className="gap-2 border-t border-border px-5 pt-5"
+                className="gap-2 border-t border-border px-5 pt-4"
                 style={{ paddingBottom: bottomPadding }}
               >
                 {footer}
