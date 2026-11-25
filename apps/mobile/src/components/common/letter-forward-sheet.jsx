@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Mail, Plus, Scale, ShieldCheck, Truck } from "lucide-react-native";
 
@@ -28,13 +29,13 @@ import {
 } from "@/lib/address-verification";
 import { hasForwardFormChanges, isQuoteRequiredError, isStaffPreparedForward } from "@/lib/forward-form";
 import { MAIL_FORWARDING_FEE_LABEL, SHIPPING_AND_HANDLING_LABEL, TOTAL_LABEL } from "@/lib/price-display";
-import { consentErrorOutcome, describeConsent, isOfferAccepted } from "@/lib/auto-charge-consent";
 import { useAutoChargeConsent } from "@/lib/use-auto-charge-consent";
+import { classifyForwardSubmitError, verifyForwardCreated } from "@/lib/forward-submit";
+import { createSingleFlight } from "@/lib/forward-payment";
 import AddressVerificationBadge from "@/components/common/address-verification-badge";
-import AutoChargeConsentOffer from "@/components/common/auto-charge-consent-offer";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
-import { Modal, Notice } from "@/components/ui/modal";
+import { confirmDiscard, Modal, Notice } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -202,13 +203,20 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
   const [insuranceRequested, setInsuranceRequested] = useState(false);
   const [insuredValue, setInsuredValue] = useState("");
   const [addressCheck, setAddressCheck] = useState(null);
-  // Autorizacion opcional de cobro automatico (HDG, lib/auto-charge-consent):
-  // la clave de la oferta que el cliente marco; si la oferta cambia, se desmarca.
-  const [consentAcceptedKey, setConsentAcceptedKey] = useState(null);
+  // Cobro automatico (HDG): aqui solo se lee para una linea de contexto. Se
+  // acepta, se lee entero y se retira en Settings → Automatic Forwarding
+  // Charges; este formulario no tiene casillas de consentimiento.
   const autoCharge = useAutoChargeConsent({ enabled: visible });
   const consent = autoCharge.consent;
-  const consentOffer = autoCharge.enabled && autoCharge.query.isSuccess ? consent.offer : null;
-  const consentChecked = isOfferAccepted(consentAcceptedKey, consentOffer);
+  // Lo que paso con el envio si no llego un 201 (lib/forward-submit):
+  //   { kind: "error", message, reference }   no se creo; se puede corregir.
+  //   { kind: "uncertain" | "checking" }      no se sabe; no se deja pedir otra vez.
+  const [submitIssue, setSubmitIssue] = useState(null);
+  // La direccion nueva ya guardada en un intento anterior: reintentar no la
+  // guarda dos veces.
+  const [savedDestination, setSavedDestination] = useState(null);
+  // Contra la doble pulsacion: dos toques en el mismo fotograma mandarian dos POST.
+  const [submitLock] = useState(createSingleFlight);
 
   const previewQuery = useQuery({
     queryKey: ["client-forward-immediate-preview"],
@@ -256,8 +264,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
     });
 
   const setDraftField = (field) => (value) => {
-    // Cambiar la direccion invalida lo que dijo el transportista de la anterior.
+    // Cambiar la direccion invalida lo que dijo el transportista de la anterior,
+    // y la que se guardo en un intento anterior ya no es esta.
     setAddressCheck(null);
+    setSavedDestination(null);
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
@@ -316,30 +326,21 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       zip: suggested.zip || current.zip,
     }));
     setAddressCheck({ ...addressCheck, suggested: null });
+    setSavedDestination(null);
   };
 
   const requestForward = useMutation({
     mutationFn: async () => {
-      // Primero la autorizacion (si el cliente la marco y no estaba vigente),
-      // despues el reenvio. Si la API no la confirma, el reenvio no sale: el
-      // cliente decide si sigue sin ella.
-      if (consentChecked && consentOffer && !consent.valid) {
-        let granted;
-        try {
-          granted = describeConsent(await autoCharge.grant.mutateAsync(consentOffer));
-        } catch (error) {
-          throw Object.assign(new Error("AUTO_CHARGE_CONSENT_FAILED"), { consentError: error });
-        }
-        if (!granted.valid) throw Object.assign(new Error("AUTO_CHARGE_CONSENT_FAILED"), { consentError: null });
-      }
-
       let destination = selectedAddress;
 
       // Una direccion nueva se guarda antes de usarla, para que la proxima vez
       // este en la lista y no haya que volver a escribirla. El servidor la
-      // verifica al guardarla y guarda la version normalizada.
+      // verifica al guardarla y guarda la version normalizada. Si un intento
+      // anterior ya la guardo, se reutiliza.
       if (addingNew) {
-        if (saveForLater) {
+        if (saveForLater && savedDestination) {
+          destination = savedDestination;
+        } else if (saveForLater) {
           const saved = await api.post("/client/addresses", {
             label: optional(draft.label),
             recipient: draft.recipient.trim(),
@@ -352,6 +353,7 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
             phone: optional(draft.phone),
           });
           destination = saved.data?.address;
+          if (destination?.id) setSavedDestination(destination);
         } else {
           destination = { ...draft };
         }
@@ -371,31 +373,31 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       });
       return response.data;
     },
-    onSuccess: async () => {
-      Alert.alert(
-        "Forward requested",
-        "Waiting for staff preparation. Your center will weigh and pack it, and you will see the total before anything is charged."
-      );
-      onClose();
-      queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
-      await onCompleted?.();
-    },
+    onSuccess: () => finishCreated(),
     onError: (error) => {
-      // La autorizacion no se guardo: el reenvio no se pidio. Se desmarca la
-      // casilla y se relee la oferta (pudo cambiar texto, version o importe).
-      if (error?.message === "AUTO_CHARGE_CONSENT_FAILED") {
-        setConsentAcceptedKey(null);
-        Alert.alert(
-          "Authorization not saved",
-          (error.consentError
-            ? consentErrorOutcome(error.consentError).message
-            : "Your center didn't confirm the authorization.") +
-            " Your forward has not been requested yet. You can request it without the authorization."
-        );
-        return;
-      }
       // Si la direccion se guardo pero la peticion fallo, la lista ya la trae.
       queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
+
+      // Lo que dijo (o no dijo) el servidor (lib/forward-submit).
+      const result = classifyForwardSubmitError(error);
+      if (result.outcome === "already-requested") {
+        // Ya hay un reenvio activo de la pieza: no es un fallo, es lo que el
+        // cliente queria. Se ensena su estado, sin ofrecer pedirlo otra vez.
+        finishCreated({
+          title: "Forward already requested",
+          message: result.message
+            ? result.message + ". Your center is preparing it."
+            : "This mail already has a forwarding request. Your center is preparing it.",
+        });
+        return;
+      }
+      if (result.outcome === "uncertain") {
+        // Sin respuesta (timeout, sin red) o un 502/503/504: el servidor pudo
+        // crearlo. Se comprueba antes de dejar pedirlo otra vez.
+        checkIfCreated();
+        return;
+      }
+
       // 422/409 de opciones (seguro sin seguimiento, sin servicio compatible...)
       // con su explicacion; los de direccion, como hasta ahora.
       // Un backend que aun exige cotizacion para este tipo (f7c677a: solo cartas
@@ -412,10 +414,74 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
         );
         return;
       }
+      // El servidor respondio que no: no se creo. Se dice dentro del formulario,
+      // con lo que respondio (HTTP y codigo), y todo lo escrito se conserva.
       const outcome = describeForwardingOptionsError(error, formatErrorMessage(error, "The forward could not be requested."));
-      Alert.alert("Could not request forward", addressErrorMessage(error, outcome.message));
+      setSubmitIssue({
+        kind: "error",
+        message: addressErrorMessage(error, outcome.message),
+        reference: result.reference,
+      });
     },
   });
+
+  /** Creado (201, o ya habia uno activo): se cierra y se ensena su estado. */
+  async function finishCreated({
+    title = "Forward requested",
+    message = "Waiting for staff preparation. Your center will weigh and pack it, and you will see the total before anything is charged.",
+  } = {}) {
+    setSubmitIssue(null);
+    onClose();
+    queryClient.invalidateQueries({ queryKey: ["client-forward-immediate-preview"] });
+    queryClient.invalidateQueries({ queryKey: ["client-mail-items"] });
+    await onCompleted?.();
+    // Despues de cerrar la hoja: en iOS una alerta abierta sobre un Modal que
+    // se esta cerrando puede perderse.
+    setTimeout(() => Alert.alert(title, message), 350);
+  }
+
+  /**
+   * Resultado desconocido: se lee la pieza (solo GET). Si ya tiene un reenvio
+   * activo, se creo. Si no, se deja pedirlo otra vez. Si tampoco se puede leer,
+   * se sigue sin dejar pedirlo y se ofrece volver a comprobar.
+   */
+  async function checkIfCreated() {
+    setSubmitIssue({ kind: "checking" });
+    try {
+      const { created } = await verifyForwardCreated({
+        fetchMailItem: async (id) => (await api.get("/client/mail-items/" + encodeURIComponent(String(id)))).data,
+        mailItemIds: items.map((item) => item.id),
+      });
+      if (created) {
+        finishCreated();
+        return;
+      }
+      setSubmitIssue({
+        kind: "error",
+        message: "We couldn't reach the server and your forward was not created. Your address and options are kept: you can try again.",
+        reference: null,
+      });
+    } catch {
+      setSubmitIssue({ kind: "uncertain" });
+    }
+  }
+
+  /** Settings → Automatic Forwarding Charges. Cierra la hoja (avisa si hay cambios). */
+  const openChargeSettings = () => {
+    const go = () => {
+      onClose();
+      router.push("/settings/forwarding-charges");
+    };
+    if (dirty) confirmDiscard(go, { title: "Leave this form?", message: "What you entered for this forward will be lost." });
+    else go();
+  };
+
+  const submit = () =>
+    submitLock.run(() => {
+      if (submitIssue?.kind === "uncertain" || submitIssue?.kind === "checking") return null;
+      setSubmitIssue(null);
+      return requestForward.mutateAsync().catch(() => {});
+    });
 
   /**
    * Lo escrito, para el formulario de tarifas si el backend las exige: la
@@ -436,7 +502,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
     };
   }
 
-  const pending = requestForward.isPending;
+  // Enviando, comprobando o sin saber si se creo: nada se puede volver a mandar
+  // ni cerrar a medias.
+  const unresolved = submitIssue?.kind === "uncertain" || submitIssue?.kind === "checking";
+  const pending = requestForward.isPending || submitIssue?.kind === "checking";
   // Con seguro, el valor va de $100 a $5,000: la peticion no sale hasta que se
   // corrija (lib/forwarding-options). Seguro sin Tracking es valido (V2).
   const optionsProblem = shippingOptionsProblem(currentOptionsInput());
@@ -509,10 +578,10 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       }
       footer={
         <SheetActions>
-          <Button variant="outline" className="flex-1" disabled={pending} onPress={() => setStep("fee")}>
+          <Button variant="outline" className="flex-1" disabled={pending || unresolved} onPress={() => setStep("fee")}>
             Back
           </Button>
-          <Button className="flex-1" loading={pending} disabled={!canSubmit} onPress={() => requestForward.mutate()}>
+          <Button className="flex-1" loading={pending} disabled={!canSubmit || unresolved} onPress={submit}>
             Request forward
           </Button>
         </SheetActions>
@@ -799,32 +868,73 @@ export default function LetterForwardSheet({ visible, onClose, mailItems, onComp
       </CheckCard>
       ) : null}
 
-      {/* Cobro automatico (opcional): vigente, se dice con su maximo; si no,
-          la oferta de la API con su texto completo y la casilla desmarcada. */}
-      {autoCharge.enabled && consent.valid ? (
-        <Notice tone="sky">
-          {"Automatic charges are authorized up to " +
-            consent.effectiveMaxLabel +
-            " per shipment. If the total is within it, your center charges your saved card and notifies you. You can withdraw it in Settings."}
-        </Notice>
-      ) : consentOffer ? (
-        <AutoChargeConsentOffer
-          offer={consentOffer}
-          checked={consentChecked}
-          disabled={pending}
-          notice={
-            consent.state === "outdated"
-              ? "The authorization text was updated. Accept the new text to keep automatic charges."
-              : consent.state === "center-changed"
-                ? "Your previous authorization was for another center."
-                : "Optional. Without it, you approve and pay each shipment in the app."
-          }
-          onToggle={() => setConsentAcceptedKey(consentChecked ? null : consentOffer.key)}
-        />
+      {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}
+
+      {/* Cobro automatico: una linea y el enlace a Settings, donde se acepta,
+          se lee entero y se retira. Aqui no se acepta nada. */}
+      {autoCharge.enabled && autoCharge.query.isSuccess ? (
+        <AutoChargeHint consent={consent} disabled={pending} onOpenSettings={openChargeSettings} />
       ) : null}
 
-      {previewQuery.isSuccess ? <PendingPriceSummary feeCents={feeCents} /> : null}
+      {/* Lo que paso con el envio, junto al boton y dentro del formulario. */}
+      <SubmitIssue issue={submitIssue} onCheckAgain={checkIfCreated} />
     </Modal>
+  );
+}
+
+/**
+ * Contexto del cobro automatico en una linea (HDG). Con autorizacion valida, su
+ * maximo; sin ella, que el cliente aprobara y pagara el total. Y el enlace a
+ * Settings. Ni casilla ni texto legal: eso vive en Settings.
+ */
+function AutoChargeHint({ consent, disabled, onOpenSettings }) {
+  const text = consent.valid
+    ? "Automatic charges are on, up to " + consent.effectiveMaxLabel + " per shipment."
+    : "You'll approve and pay the total once your center prepares it.";
+  return (
+    <View className="flex-row flex-wrap items-center gap-x-1 px-1">
+      <Text className="font-brand text-xs leading-5 text-muted-foreground">{text}</Text>
+      <Pressable
+        onPress={onOpenSettings}
+        disabled={disabled}
+        accessibilityRole="link"
+        hitSlop={8}
+      >
+        <Text className="font-brand-semibold text-xs leading-5 text-foreground underline">Automatic charges in Settings</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * El resultado del envio cuando no es un 201, dentro del formulario:
+ *   error      no se creo: el motivo y lo que respondio el servidor (HTTP y codigo).
+ *   checking   comprobando si se creo.
+ *   uncertain  no se pudo comprobar: no se deja pedirlo otra vez; "Check again".
+ */
+function SubmitIssue({ issue, onCheckAgain }) {
+  if (!issue) return null;
+  if (issue.kind === "checking") {
+    return <Notice tone="amber">{"We didn't get an answer from the server. Checking whether your forward was created…"}</Notice>;
+  }
+  if (issue.kind === "uncertain") {
+    return (
+      <View className="gap-2">
+        <Notice tone="amber">
+          {"We couldn't confirm whether your forward was created. To avoid a duplicate request, it can't be sent again until we check."}
+        </Notice>
+        <Button variant="outline" onPress={onCheckAgain}>
+          Check again
+        </Button>
+      </View>
+    );
+  }
+  return (
+    <View className="gap-1 rounded-lg border border-rose-200 bg-rose-50 p-3" accessibilityLiveRegion="polite">
+      <Text className="font-brand-semibold text-sm leading-5 text-rose-900">Your forward was not requested</Text>
+      <Text className="font-brand text-sm leading-5 text-rose-900">{issue.message}</Text>
+      {issue.reference ? <Text className="font-brand text-xs leading-4 text-rose-900/70">{issue.reference}</Text> : null}
+    </View>
   );
 }
 

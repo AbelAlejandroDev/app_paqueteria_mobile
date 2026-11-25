@@ -10,9 +10,18 @@
 export const SHEET_TOP_GAP = 24;
 export const SHEET_MIN_HEIGHT = 320;
 
-export function sheetMaxHeight({ windowHeight, topInset = 0 } = {}) {
+/**
+ * `keyboardHeight` (iOS): el KeyboardAvoidingView de la hoja suma esa altura
+ * como padding debajo. Si la hoja no la resta, hoja + teclado miden mas que la
+ * pantalla y la cabecera queda cortada bajo la isla dinamica. Con el teclado
+ * abierto el minimo baja: lo que no cabe se desplaza dentro de la hoja.
+ */
+export const SHEET_MIN_HEIGHT_WITH_KEYBOARD = 160;
+
+export function sheetMaxHeight({ windowHeight, topInset = 0, keyboardHeight = 0 } = {}) {
   const height = Number(windowHeight);
   if (!Number.isFinite(height) || height <= 0) return SHEET_MIN_HEIGHT;
-  const available = height - Math.max(0, Number(topInset) || 0) - SHEET_TOP_GAP;
-  return Math.max(SHEET_MIN_HEIGHT, Math.round(available));
+  const keyboard = Math.max(0, Number(keyboardHeight) || 0);
+  const available = height - Math.max(0, Number(topInset) || 0) - SHEET_TOP_GAP - keyboard;
+  return Math.max(keyboard > 0 ? SHEET_MIN_HEIGHT_WITH_KEYBOARD : SHEET_MIN_HEIGHT, Math.round(available));
 }

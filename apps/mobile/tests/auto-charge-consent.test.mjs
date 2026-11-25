@@ -268,18 +268,8 @@ test("Settings: revocar pide confirmacion y confirma al terminar", () => {
   assert.ok(screen.includes('<Redirect href="/settings" />'), "otra marca no entra");
 });
 
-// ── Hoja de reenvio: PUT antes del POST ─────────────────────────────────────
-
-test("hoja de cartas: si se marca la casilla, primero el PUT y despues el POST; si falla, no sale el reenvio", () => {
-  const sheet = read("src/components/common/letter-forward-sheet.jsx");
-  const put = sheet.indexOf("autoCharge.grant.mutateAsync(consentOffer)");
-  const post = sheet.indexOf('api.post("/client/service-requests"');
-  assert.ok(put > 0 && post > 0 && put < post, "PUT antes del POST");
-  assert.ok(sheet.includes("if (consentChecked && consentOffer && !consent.valid)"), "solo si estaba sin autorizar");
-  assert.ok(sheet.includes("if (!granted.valid) throw"), "sin valid de la API no se sigue");
-  assert.ok(sheet.includes("Your forward has not been requested yet."));
-  assert.ok(sheet.includes("const [consentAcceptedKey, setConsentAcceptedKey] = useState(null);"), "desmarcada");
-});
+// La hoja de reenvio ya no acepta nada (tests/forward-submit.test.mjs): el alta
+// vive solo en Settings → Automatic Forwarding Charges.
 
 // ── Cobro iniciado por el centro ────────────────────────────────────────────
 

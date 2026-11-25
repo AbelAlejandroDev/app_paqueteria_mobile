@@ -1,4 +1,5 @@
-import { Alert, KeyboardAvoidingView, Modal as RNModal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Keyboard, KeyboardAvoidingView, Modal as RNModal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -18,6 +19,22 @@ function SheetWrapper({ children }) {
   if (Platform.OS !== "ios") return children;
 
   return <KeyboardAvoidingView behavior="padding">{children}</KeyboardAvoidingView>;
+}
+
+/** Alto del teclado en iOS mientras la hoja esta abierta; 0 en Android o cerrado. */
+function useIosKeyboardHeight(active) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== "ios" || !active) return undefined;
+    const show = Keyboard.addListener("keyboardWillShow", (event) => setHeight(event?.endCoordinates?.height || 0));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+      setHeight(0);
+    };
+  }, [active]);
+  return height;
 }
 
 /** El padding que ya tenia el pie, sobre el que se suma la zona segura. */
@@ -51,7 +68,10 @@ export function Modal({ visible, onClose, title, description, children, footer, 
   // En pixeles y no en %: dentro de KeyboardAvoidingView (que no tiene altura
   // propia) un max-height en porcentaje no limita nada, y la hoja crecia por
   // encima de la pantalla: la cabecera quedaba cortada bajo la isla dinamica.
-  const maxHeight = sheetMaxHeight({ windowHeight, topInset: insets.top });
+  // iOS: el teclado entra como padding del KeyboardAvoidingView, asi que la
+  // hoja encoge lo mismo (lib/sheet-layout). Android reajusta la ventana solo.
+  const keyboardHeight = useIosKeyboardHeight(visible);
+  const maxHeight = sheetMaxHeight({ windowHeight, topInset: insets.top, keyboardHeight });
 
   const requestClose = () => {
     if (busy) return;
