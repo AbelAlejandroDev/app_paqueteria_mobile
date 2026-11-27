@@ -18,6 +18,9 @@ import { secureHttpsUrlOrNull } from "@/lib/secure-url";
 import EmptyState from "@/components/common/empty-state";
 import { DetailCard } from "@/components/common/mail-item-detail-ui";
 import AccountAlerts from "@/components/common/account-alerts";
+import { Notice } from "@/components/ui/modal";
+import { demoNotice } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { TourAnchor } from "@/components/onboarding/tour-anchor";
 
 // La sala de reuniones de ESTA marca (brands/index.js -> extra.brand). Sin una
@@ -204,6 +207,7 @@ function WelcomeCard({ clientName, location, mailboxCode, hero }) {
 export default function DashboardScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const capabilities = useCapabilities();
 
   const query = useQuery({
     queryKey: ["client-mail-items"],
@@ -236,6 +240,7 @@ export default function DashboardScreen() {
   const openMail = () => router.push({ pathname: "/mail-items", params: { folder: "", filter: "" } });
 
   const refresh = () => Promise.all([query.refetch(), unreadQuery.refetch()]);
+  const demo = demoNotice(capabilities);
 
   return (
     <ScrollView
@@ -257,6 +262,10 @@ export default function DashboardScreen() {
           hero={homeHeroFor(user)}
         />
       </TourAnchor>
+
+      {/* Solo la cuenta de App Review: el servidor dice que sus pagos y
+          etiquetas son simulados (capabilities.demo). Nadie mas lo recibe. */}
+      {demo ? <Notice tone="sky">{demo}</Notice> : null}
 
       <AccountAlerts />
 

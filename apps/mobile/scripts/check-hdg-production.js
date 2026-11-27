@@ -68,7 +68,38 @@ async function checkProduction({ fetchImpl = fetch } = {}) {
   }
 }
 
+/**
+ * En el builder remoto: que el perfil hdg-production haya recibido de verdad
+ * sus variables (eas.json `env`). EAS pone EAS_BUILD_PROFILE en el builder. Si
+ * el perfil es hdg-production y falta o cambia una variable, la build para
+ * aqui: sin APP_BRAND, app.config.js caeria en otra marca. Devuelve
+ * `{ ok, message }`; fuera de hdg-production, null.
+ */
+function builderEnvVerdict(env = process.env) {
+  if (String(env.EAS_BUILD_PROFILE || "").trim() !== "hdg-production") return null;
+  const expected = { APP_BRAND: "hdg", APP_ENV: "production", EXPO_PUBLIC_API_URL: BRANDS.hdg.api.production };
+  const wrong = Object.entries(expected).filter(([key, value]) => String(env[key] || "").trim() !== value);
+  if (wrong.length) {
+    return {
+      ok: false,
+      message: `el perfil hdg-production llego al builder sin sus variables (${wrong.map(([k]) => `${k}=${env[k] ?? "(vacia)"}`).join(", ")}).`,
+    };
+  }
+  // Sin secretos: los tres valores son publicos (eas.json).
+  return { ok: true, message: `variables del builder: APP_BRAND=hdg APP_ENV=production EXPO_PUBLIC_API_URL=${expected.EXPO_PUBLIC_API_URL}.` };
+}
+
 async function main() {
+  if (process.env.EAS_BUILD) {
+    const builder = builderEnvVerdict();
+    if (builder) {
+      process.stdout.write((builder.ok ? "OK: " : "FRENADO: ") + builder.message + "\n");
+      if (!builder.ok) {
+        process.exitCode = 1;
+        return;
+      }
+    }
+  }
   // Como hook de EAS corre en TODAS las builds: solo frena las de HDG Production.
   if (process.env.EAS_BUILD && !appliesTo()) return;
   const verdict = await checkProduction();
@@ -80,4 +111,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { appliesTo, checkProduction, productionVerdict };
+module.exports = { appliesTo, builderEnvVerdict, checkProduction, productionVerdict };

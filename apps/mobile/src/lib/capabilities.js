@@ -123,6 +123,30 @@ function pickLegal(legal) {
   };
 }
 
+/**
+ * `demo` (backend bc38c9b/45569af, docs/mobile/app-review-demo.md): solo la
+ * cuenta de App Review lo recibe, `{ active: true, payments: "SIMULATED",
+ * labels: "SAMPLE_PDF", notice }`. La app no decide quien es demo ni cambia
+ * ningun flujo por ello: solo enseña el aviso del servidor. Sin `active: true`
+ * o sin texto, null (cualquier otro cliente).
+ */
+export function pickDemo(demo) {
+  if (!demo || typeof demo !== "object" || demo.active !== true) return null;
+  const notice = typeof demo.notice === "string" ? demo.notice.trim() : "";
+  if (!notice) return null;
+  return {
+    active: true,
+    payments: typeof demo.payments === "string" ? demo.payments : null,
+    labels: typeof demo.labels === "string" ? demo.labels : null,
+    notice,
+  };
+}
+
+/** El aviso de la cuenta demo de App Review, o null. */
+export function demoNotice(capabilities) {
+  return capabilities?.demo?.notice || null;
+}
+
 const UNKNOWN = Object.freeze({
   known: false,
   reason: "NOT_LOADED",
@@ -139,6 +163,7 @@ const UNKNOWN = Object.freeze({
   services: null,
   legal: null,
   restrictions: null,
+  demo: null,
 });
 
 /**
@@ -180,6 +205,7 @@ export function deriveCapabilities({ capabilities = null, expectedTenantSlug } =
     services: pickServices(capabilities.services),
     legal: pickLegal(capabilities.legal),
     restrictions: pickRestrictions(capabilities.restrictions),
+    demo: pickDemo(capabilities.demo),
   };
 }
 

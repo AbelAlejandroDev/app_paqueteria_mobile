@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { notifyCapabilitiesStale } from "@/lib/capabilities-events";
-import { paymentStatusMinPollMs, savedCardAllowed, zohoBillingActions } from "@/lib/capabilities";
+import { demoNotice, paymentStatusMinPollMs, savedCardAllowed, zohoBillingActions } from "@/lib/capabilities";
 import {
   confirmRepricedRatePath,
   createSingleFlight,
@@ -320,6 +320,8 @@ export default function ZohoForwardPaymentCard({ request, capabilities, onRefres
 
   return (
     <View className="mt-2 gap-2">
+      {/* Cuenta de App Review: el servidor avisa de que el pago es simulado. */}
+      {demoNotice(capabilities) ? <Notice tone="sky">{demoNotice(capabilities)}</Notice> : null}
       {quoteBlocked ? <Notice tone="amber">{QUOTE_INVALID_PAYMENT_MESSAGE}</Notice> : null}
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {reading && reading.state !== "pending" ? <Notice tone="amber">{reading.message}</Notice> : null}
