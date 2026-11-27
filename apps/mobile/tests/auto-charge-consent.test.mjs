@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   AUTO_CHARGE_CONSENT_PATH,
   autoChargeConsentEnabled,
+  autoChargeSettingsVisible,
   collectPendingReason,
   consentErrorOutcome,
   consentPlatformHeaders,
@@ -548,7 +549,11 @@ test("HDG lo tiene; The Worx no, y su app no llama al endpoint", () => {
   assert.ok(hook.includes("autoChargeConsentEnabled(user?.tenant?.slug, brand)"));
   assert.ok(hook.includes("enabled: enabled && wanted"), "sin la marca, el GET no sale");
   const settings = read("src/app/(client)/settings/index.jsx");
-  assert.ok(settings.includes("if (!autoChargeConsentEnabled(user?.tenant?.slug, brand)) return SECTIONS;"));
+  // La regla de Settings (autoChargeSettingsVisible) empieza por la marca; el
+  // detalle esta en hdg-production-release.test.mjs.
+  assert.ok(settings.includes("autoChargeSettingsVisible({"));
+  assert.ok(settings.includes("if (!visible) return SECTIONS;"));
+  assert.equal(autoChargeSettingsVisible({ tenantSlug: "the_worx", brand: { tenantSlug: "the_worx" }, forwardingAllowed: true }), false);
 });
 
 test("los identificadores de las apps no cambian", () => {

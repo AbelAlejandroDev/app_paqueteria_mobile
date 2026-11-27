@@ -64,6 +64,25 @@ export function autoChargeConsentEnabled(tenantSlug, appBrand) {
   return Boolean(slug) && slug === normalizeSlug(appBrand?.tenantSlug);
 }
 
+/**
+ * Si Settings enseña "Automatic Forwarding Charges".
+ *
+ * Ademas de la marca, el centro tiene que ofrecer reenvios: con
+ * `services.forwarding === false` (HDG Production en su lanzamiento) la
+ * pantalla solo diria "Not available", y una opcion de cobros de algo que no
+ * existe parece una funcion rota (Apple 2.1). Solo un `false` explicito la
+ * quita: si las capacidades fallan o no lo dicen, se sigue viendo, para que
+ * quien ya autorizo pueda retirarlo siempre. Mientras cargan no sale, para que
+ * no aparezca y desaparezca.
+ *
+ * @param {{ tenantSlug?: string, brand?: object, forwardingAllowed?: boolean|null, loading?: boolean }} input
+ */
+export function autoChargeSettingsVisible({ tenantSlug, brand: appBrand, forwardingAllowed = null, loading = false } = {}) {
+  if (!autoChargeConsentEnabled(tenantSlug, appBrand)) return false;
+  if (loading) return false;
+  return forwardingAllowed !== false;
+}
+
 /** "$75.00 USD": el importe con el codigo de moneda, como pide el contrato. */
 export function formatConsentAmount(cents, currency) {
   const value = positiveCents(cents);

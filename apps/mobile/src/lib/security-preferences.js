@@ -99,7 +99,10 @@ export async function getBiometricSupport() {
  * un fallo del lector o una huella que no se reconoce dejarian al cliente fuera
  * de su propia app sin otra salida que desinstalarla.
  */
-export async function authenticate(promptMessage = "Unlock The Worx") {
+// El texto por defecto no nombra ninguna marca: la misma build sirve a HDG y a
+// The Worx, y el nombre de otra marca en el aviso del sistema seria un fallo
+// visible en la revision.
+export async function authenticate(promptMessage = "Unlock your mailbox") {
   try {
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage,

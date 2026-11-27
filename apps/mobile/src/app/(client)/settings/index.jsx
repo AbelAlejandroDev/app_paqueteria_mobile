@@ -11,7 +11,9 @@ import * as Updates from "expo-updates";
 import { formatAppVersion, formatTimeZone } from "@/lib/app-info";
 import { describeRunningUpdate } from "@/lib/update-info";
 import { usePrivacyPolicy } from "@/lib/use-privacy-policy";
-import { autoChargeConsentEnabled } from "@/lib/auto-charge-consent";
+import { autoChargeSettingsVisible } from "@/lib/auto-charge-consent";
+import { serviceAllowed } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { formatStatusDisplay } from "@/lib/mail-item-display";
 import { CardHeading, DetailCard, DetailRow, MailboxChip } from "@/components/common/mail-item-detail-ui";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
@@ -95,11 +97,21 @@ export default function SettingsScreen() {
   // De la organizacion del usuario: HDG no hereda la de The Worx. La misma que
   // en Help (lib/use-privacy-policy).
   const privacyPolicy = usePrivacyPolicy();
+  // Las capacidades ya estan en cache (las usa toda la app): no es una consulta
+  // nueva al abrir Settings. Solo deciden si sale la opcion de cobro automatico.
+  const capabilities = useCapabilities();
+  const forwardingAllowed = serviceAllowed(capabilities, "forwarding");
   // Va justo despues de Forwarding Addresses: son los dos ajustes de reenvio.
   const sections = useMemo(() => {
-    if (!autoChargeConsentEnabled(user?.tenant?.slug, brand)) return SECTIONS;
+    const visible = autoChargeSettingsVisible({
+      tenantSlug: user?.tenant?.slug,
+      brand,
+      forwardingAllowed,
+      loading: capabilities.isLoading,
+    });
+    if (!visible) return SECTIONS;
     return [SECTIONS[0], AUTO_CHARGE_SECTION, ...SECTIONS.slice(1)];
-  }, [user?.tenant?.slug]);
+  }, [user?.tenant?.slug, forwardingAllowed, capabilities.isLoading]);
 
   const confirmLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to leave your account?", [
